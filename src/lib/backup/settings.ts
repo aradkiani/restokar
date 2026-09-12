@@ -57,27 +57,45 @@ export async function setBackupEmail(email: string | null): Promise<PlatformSett
  * console shows the current state and not the most recent bad news. A failure
  * that has since been resolved must stop being reported, or the indicator gets
  * ignored — which is the failure mode that makes silent backup loss possible.
+ *
+ * `archived` says whether an archive actually reached the disk, and it is what
+ * decides whether `lastBackupAt` moves. The two fields answer different
+ * questions: the status is how the most recent *run* ended, while the timestamp
+ * and size describe the newest archive that exists. A run that fell over before
+ * writing anything must not advance the timestamp, or the row claims a backup
+ * was taken at a moment when none was — which is the row contradicting the
+ * filesystem, and the filesystem is the one telling the truth.
+ *
+ * Delivery failing is not the same thing. The archive is on disk either way, so
+ * those paths pass `archived: true` and the timestamp moves: the backup did
+ * happen, only the email did not.
  */
 export async function recordBackupOutcome(outcome: {
   status: "ok" | "failed" | "not_configured" | "too_large";
+  /** True when an archive was written. Only then do the timestamp and size move. */
+  archived: boolean;
   error?: string | null;
   bytes?: number | null;
 }): Promise<void> {
+  // Kept together deliberately: both describe the same archive, so leaving one
+  // behind while the other advances would trade one inconsistency for another.
+  const archiveFields = outcome.archived
+    ? { lastBackupAt: new Date(), lastBackupBytes: outcome.bytes ?? null }
+    : {};
+
   await prisma.platformSetting
     .upsert({
       where: { id: SETTINGS_ID },
       create: {
         id: SETTINGS_ID,
-        lastBackupAt: new Date(),
         lastBackupStatus: outcome.status,
         lastBackupError: outcome.error ?? null,
-        lastBackupBytes: outcome.bytes ?? null,
+        ...archiveFields,
       },
       update: {
-        lastBackupAt: new Date(),
         lastBackupStatus: outcome.status,
         lastBackupError: outcome.error ?? null,
-        lastBackupBytes: outcome.bytes ?? null,
+        ...archiveFields,
       },
     })
     .catch((error) => {

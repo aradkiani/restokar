@@ -168,7 +168,13 @@ export async function runBackup(): Promise<BackupRunOutcome> {
   } catch (error) {
     const message = (error as Error)?.message ?? String(error);
     console.error("[backup] archive failed", error);
-    await recordBackupOutcome({ status: "failed", error: message.slice(0, 500) });
+    // The only path here that produced nothing. `lastBackupAt` must stay where
+    // it is, pointing at the newest archive that does exist.
+    await recordBackupOutcome({
+      status: "failed",
+      archived: false,
+      error: message.slice(0, 500),
+    });
     return {
       status: "failed",
       backup: null,
@@ -196,6 +202,7 @@ export async function runBackup(): Promise<BackupRunOutcome> {
     console.warn(`[backup] ${message}`);
     await recordBackupOutcome({
       status: "not_configured",
+      archived: true,
       error: message,
       bytes: backup.bytes,
     });
@@ -210,6 +217,7 @@ export async function runBackup(): Promise<BackupRunOutcome> {
     console.error(`[backup] ${message}`);
     await recordBackupOutcome({
       status: "failed",
+      archived: true,
       error: message,
       bytes: backup.bytes,
     });
@@ -237,6 +245,7 @@ export async function runBackup(): Promise<BackupRunOutcome> {
 
     await recordBackupOutcome({
       status: "too_large",
+      archived: true,
       error: message,
       bytes: backup.bytes,
     });
@@ -262,7 +271,12 @@ export async function runBackup(): Promise<BackupRunOutcome> {
 
     const message = `Backup emailed to ${to} (${formatBytes(backup.bytes)}).`;
     log(`[backup] ${message} messageId=${messageId}`);
-    await recordBackupOutcome({ status: "ok", error: null, bytes: backup.bytes });
+    await recordBackupOutcome({
+      status: "ok",
+      archived: true,
+      error: null,
+      bytes: backup.bytes,
+    });
     return { status: "ok", backup, message };
   } catch (error) {
     const detail = (error as Error)?.message ?? String(error);
@@ -273,6 +287,7 @@ export async function runBackup(): Promise<BackupRunOutcome> {
     console.error(`[backup] ${message}`);
     await recordBackupOutcome({
       status: "failed",
+      archived: true,
       error: message.slice(0, 500),
       bytes: backup.bytes,
     });
