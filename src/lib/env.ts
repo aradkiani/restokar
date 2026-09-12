@@ -54,6 +54,19 @@ const EnvSchema = z.object({
   // outside Iran. The destination address is NOT here: it is edited from the
   // admin console and stored in PlatformSetting, so it can change without a
   // redeploy.
+  /**
+   * How old the newest backup archive may be before /api/health reports
+   * degraded, in hours.
+   *
+   * Default 48: the schedule runs twice a day, so two missed runs is the first
+   * point at which something is clearly wrong rather than merely late. Lower it
+   * on a busier venue where losing half a day of orders matters more.
+   *
+   * This exists because the backup schedule failed for eight days in September
+   * 2026 and reported it only to a log file nobody was reading.
+   */
+  BACKUP_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(8760).default(48),
+
   SMTP_HOST: z.string().default(""),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
   SMTP_USER: z.string().default(""),

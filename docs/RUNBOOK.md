@@ -45,6 +45,12 @@ That returns the version, whether the database answered, whether the uploads
 directory is writable, and the free bytes on the data volume. It needs no login
 and returns nothing sensitive, so it is safe to call from anywhere.
 
+**Backup age is in there too** — `checks.backup` gives `lastSuccessAt`,
+`ageHours` and `succeeded`, and the endpoint returns 503 when the newest backup
+is older than `BACKUP_MAX_AGE_HOURS` (default 48) or when there has never been
+one, so a schedule that has quietly stopped shows up here instead of only in
+`backup.log`.
+
 ### 2. Is the process running?
 
 ```bash
