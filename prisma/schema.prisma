@@ -1,0 +1,1659 @@
+// ---------------------------------------------------------------------------
+// Menuland — multi-tenant digital menu SaaS
+//
+// Tenancy model: shared database, shared schema, discriminator column.
+// Every tenant-owned row carries `restaurantId`. Isolation is enforced by the
+// guards in src/lib/auth/guards.ts — requireTenant() / requireOwner() /
+// requireAdmin() — which resolve the tenant scope from the session and never
+// from a request body, query string or route param.
+//
+// Money: stored as whole Toman in Int columns. Iranian prices have no minor
+// unit in practice, and Int (±2.1e9) comfortably covers restaurant pricing.
+// Derived totals are bounded against MAX_INT4 before insert (src/lib/orders.ts):
+// a 50-line basket at quantity 99 can multiply past the ceiling using prices
+// that are each individually valid.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7 takes the connection URL from prisma.config.ts (for the CLI) and
+// from the driver adapter passed to PrismaClient (for the app) — not from here.
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------- enums -------------------------------------
+
+enum Role {
+  SUPER_ADMIN // platform staff — no restaurantId, sees the admin dashboard
+  OWNER // restaurant owner — full access to their own tenant
+  STAFF // kitchen / waiter — order board only
+  /// Runs one branch of a chain: its orders, its tables, its expenses and its
+  /// own revenue. Deliberately *not* an OWNER — a branch does not own the menu
+  /// it serves, so menu, design and pricing screens stay closed to it. The
+  /// chain's owner edits the menu once and every branch serves it.
+  BRANCH_MANAGER
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum OrderStatus {
+  RECEIVED // ثبت شد
+  PREPARING // در حال آماده‌سازی
+  READY // آماده
+  DELIVERED // تحویل شد
+  CANCELED // لغو شد
+}
+
+enum PaymentMethod {
+  CASH_ON_SITE // پرداخت در محل
+  ONLINE // پرداخت آنلاین
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentPurpose {
+  ORDER
+  SUBSCRIPTION
+}
+
+/// Events worth reconstructing after the fact — money, access, or destruction.
+/// Deliberately narrow: an audit log nobody reads because it logs everything
+/// has no forensic value.
+enum AuditAction {
+  LOGIN
+  PASSWORD_CHANGED
+  PRICE_CHANGED
+  PRODUCT_DELETED
+  CATEGORY_DELETED
+  STAFF_CREATED
+  STAFF_REMOVED
+  ROLE_CHANGED
+  ORDER_CANCELED
+  /// Owner confirmed a refund on a cancelled order the customer had paid for.
+  ORDER_REFUNDED
+  /// Owner raised every price on the menu at once.
+  PRICES_BULK_ADJUSTED
+  SETTINGS_CHANGED
+  /// Platform staff granted subscription time by hand.
+  SUBSCRIPTION_EXTENDED
+  /// Platform staff created a customer account, choosing its first password.
+  ACCOUNT_CREATED
+  /// Opening hours changed on a product or a category. Recorded because it
+  /// decides when a dish can be sold at all, which is a revenue question and
+  /// the first thing to check when an owner reports "it vanished from my menu".
+  SCHEDULE_CHANGED
+  /// A dish was promoted, unpromoted, relabelled, reordered among the featured
+  /// ones, or had its promotion window moved. Distinct from SCHEDULE_CHANGED:
+  /// one decides when a dish can be *sold*, the other what a venue is *pushing*.
+  FEATURED_CHANGED
+  /// A marketing campaign was planned.
+  CAMPAIGN_CREATED
+  /// Its configuration — name, audience, product context or window — changed.
+  CAMPAIGN_UPDATED
+  /// It moved between states: scheduled, activated, paused, completed or
+  /// cancelled. One action rather than five, with the old and new status in
+  /// `metadata`, for the same reason PRICE_CHANGED carries a before/after
+  /// instead of splitting into PRICE_RAISED and PRICE_LOWERED — the enum stays
+  /// narrow enough to be worth reading.
+  CAMPAIGN_STATUS_CHANGED
+}
+
+/// Where a campaign is in its life.
+///
+/// The transitions between these live in one table, `CAMPAIGN_TRANSITIONS` in
+/// src/lib/campaigns.ts, and the server refuses any move not in it. Nothing in
+/// any state sends a message: there is no delivery system in this codebase.
+enum CampaignStatus {
+  /// Being written. The only state in which configuration may change, along
+  /// with SCHEDULED.
+  DRAFT
+  /// Committed to, with a start time in the future.
+  SCHEDULED
+  /// Logically running. Still sends nothing.
+  ACTIVE
+  /// Temporarily halted; may resume.
+  PAUSED
+  /// Finished. Terminal.
+  COMPLETED
+  /// Abandoned. Terminal. Spelled with one L to match OrderStatus.CANCELED and
+  /// SubscriptionStatus.CANCELED rather than introducing a second spelling.
+  CANCELED
+}
+
+// ------------------------------- identity ----------------------------------
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role    @default(OWNER)
+  isActive     Boolean @default(true)
+
+  // Null for SUPER_ADMIN. For OWNER/STAFF this is the tenant boundary.
+  restaurantId String?
+  restaurant   Restaurant? @relation("RestaurantMembers", fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// Which dashboard sections a STAFF account may open.
+  ///
+  /// Meaningful only for STAFF: an OWNER sees everything and a BRANCH_MANAGER's
+  /// access is decided by its role, so neither reads this. Stored as keys from
+  /// STAFF_TABS in src/lib/staff-tabs.ts rather than as an enum, because the
+  /// set of dashboard sections is a property of the UI and changes with it —
+  /// an unknown key is ignored, never an error.
+  ///
+  /// Read fresh from this row on every request by getSessionUser(), so removing
+  /// a tab takes effect on the staff member's next page load rather than when
+  /// their token happens to expire.
+  staffTabs String[] @default([])
+
+  ownedRestaurants Restaurant[] @relation("RestaurantOwner")
+  sessions         Session[]
+  auditLogs        AuditLog[]
+  grantedExtensions SubscriptionExtension[] @relation("ExtensionAdmin")
+  createdCampaigns  Campaign[]             @relation("CampaignCreator")
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([restaurantId])
+}
+
+/// Server-side session records. The cookie holds a signed JWT whose `sid`
+/// points here, so sessions can be revoked without waiting for token expiry.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ------------------------------- tenant ------------------------------------
+
+model Restaurant {
+  id     String @id @default(cuid())
+  /// Public URL segment: /menu/<slug>
+  slug   String @unique
+  name   String
+  nameEn String?
+
+  // ------------------------------ chains ------------------------------------
+  /// The venue whose menu this one serves, for a branch of a chain.
+  ///
+  /// A branch is a full tenant in every respect that matters operationally —
+  /// its own slug and QR codes, its own tables, its own orders, its own
+  /// expenses and therefore its own revenue — but it does not own a menu. It
+  /// renders the parent's categories and products, so the chain edits a dish
+  /// once and every branch serves the change on its next request.
+  ///
+  /// Null for the overwhelming majority of venues, which are single sites and
+  /// their own menu owner. `menuOwnerId()` in src/lib/menu.ts is the one place
+  /// that resolves the distinction; nothing else should test this column.
+  ///
+  /// `Restrict` on delete: removing a parent that still has branches would
+  /// leave them serving a menu that no longer exists.
+  parentRestaurantId String?
+  parentRestaurant   Restaurant?  @relation("RestaurantBranches", fields: [parentRestaurantId], references: [id], onDelete: Restrict)
+  branches           Restaurant[] @relation("RestaurantBranches")
+
+  tagline     String?
+  description String?
+  /// English counterparts, shown when the menu renders in English. Null falls
+  /// back to the Persian value — a half-translated menu stays readable rather
+  /// than going blank.
+  taglineEn     String?
+  descriptionEn String?
+  logoUrl     String?
+  coverUrl    String?
+  phone       String?
+  /// A second number for the menu footer. Venues routinely publish two — a
+  /// landline for reservations and a mobile for orders — and cramming both into
+  /// `phone` produced one unusable `tel:` link containing two numbers.
+  phoneSecondary String?
+  address     String?
+  instagram   String?
+
+  /// Up to three social links shown as icon buttons in the menu footer.
+  ///
+  /// Stored as JSON rather than one column per platform because the set of
+  /// platforms an Iranian venue uses changes faster than the schema should:
+  /// Telegram and WhatsApp matter today, and a column named `whatsapp` would
+  /// outlive its usefulness while still being migrated forever. Shape is
+  /// `[{ platform, url }]`, validated by SocialLinksSchema in
+  /// src/lib/validation.ts — the same guard the theme's image URL gets, because
+  /// this string ends up in an `href`.
+  socialLinks Json @default("[]")
+  latitude    Float?
+  longitude   Float?
+
+  /// Template identifier resolved against src/templates/registry.ts at render
+  /// time. Restaurants reference templates — they never copy them — so a
+  /// platform-side template update reaches every tenant on next request.
+  templateId String @default("aurora")
+
+  /// Per-tenant design overrides (colors, fonts, background). Shape validated
+  /// by ThemeSchema in src/lib/theme.ts.
+  theme Json @default("{}")
+
+  /// Feature switches the owner controls from the dashboard.
+  onlineOrderingEnabled Boolean @default(true)
+  onlinePaymentEnabled  Boolean @default(false)
+  showPrices            Boolean @default(true)
+  defaultLocale         String  @default("fa")
+
+  /// Whether the product detail sheet shows a photo.
+  ///
+  /// Several templates (Atlas, Linen, Qalam) are designed to read well with no
+  /// photography at all, but the detail sheet always rendered a hero image —
+  /// falling back to a generated gradient when a product had none. For a venue
+  /// that deliberately runs a text-only menu, that placeholder was the one
+  /// place a missing photo still looked like an omission.
+  ///
+  /// Defaults to true, so every restaurant that existed before this column
+  /// behaves exactly as it did. When false the sheet omits the image entirely
+  /// and the dashboard stops counting products without photos as a gap —
+  /// a menu with no photos is then a finished menu, not an incomplete one.
+  showProductPhotos Boolean @default(true)
+
+  /// Offers the menu in English as well as Persian. Off by default, so an
+  /// untouched restaurant behaves exactly as it did before this existed.
+  ///
+  /// Gates the guest-facing language toggle: a venue with no English content
+  /// would otherwise advertise a switch that yields a mostly-Persian menu,
+  /// which reads as broken rather than as untranslated.
+  bilingualEnabled Boolean @default(false)
+
+  // --------------------------- pricing options ------------------------------
+  // The "more options" screen. Every field defaults to the behaviour that was
+  // in place before these existed, so an untouched restaurant prices exactly
+  // as it did before the column was added.
+
+  /// VAT added on top of the basket. Whole percent — Iran's rate is 9.
+  taxEnabled Boolean @default(false)
+  taxPercent Int     @default(9)
+
+  /// Service charge added before tax, the way a cover charge works.
+  serviceChargeEnabled Boolean @default(false)
+  serviceChargePercent Int     @default(10)
+
+  /// Lets a guest add a voluntary tip while ordering.
+  tipEnabled  Boolean @default(false)
+  /// Offered percentages, e.g. [5, 10, 15]. A guest may still choose none.
+  tipPercents Int[]   @default([5, 10, 15])
+
+  /// Rounds the payable total to a whole increment of Toman. 0 disables it.
+  /// Iranian venues round away small change that no longer circulates.
+  roundingIncrement Int    @default(0)
+  /// "up" | "down" | "nearest"
+  roundingDirection String @default("nearest")
+
+  /// Rejects baskets below this subtotal. 0 means no minimum.
+  minimumOrderAmount Int @default(0)
+
+  /// Shows the discount-code field at checkout.
+  ///
+  /// Off by default, and deliberately separate from whether any codes exist: a
+  /// venue that is between promotions should not be asking every guest for a
+  /// code they do not have. Turning it off hides the field without deleting
+  /// the codes behind it.
+  discountCodesEnabled Boolean @default(false)
+
+  // ---------------------------- staff call ----------------------------------
+  /// Shows a "call the waiter" button at the foot of every template.
+  staffCallEnabled Boolean @default(false)
+  /// What that button is called — venues say گارسون, پیشخدمت, or a name.
+  staffCallLabel String @default("صدا زدن گارسون")
+  /// English label for the same button. Null falls back to the platform's own
+  /// English string rather than to the Persian one, which a tourist could not
+  /// read anyway.
+  staffCallLabelEn String?
+
+  staffCalls StaffCall[]
+
+  // ------------------------- guest contact details --------------------------
+  /// Whether checkout asks the guest for a phone number.
+  ///
+  /// Off by default, and deliberately so: no guest-facing phone field existed
+  /// before this, and switching one on for every venue at once would change
+  /// what their customers are asked for without anyone deciding to. A venue
+  /// that wants to recognise regulars turns it on; the field is optional even
+  /// then, because a guest who declines must still be able to order dinner.
+  ///
+  /// The server does not merely hide the field when this is false — it drops
+  /// any number that arrives anyway, so a crafted request cannot start building
+  /// a customer book the owner never asked for. See `createOrder`.
+  phoneCollectionEnabled Boolean @default(false)
+
+  isActive    Boolean @default(true)
+  isPublished Boolean @default(true)
+
+  /// Platform-owned showcase venue, not a paying subscriber.
+  ///
+  /// The marketing site renders ONLY these. Real customer menus are private
+  /// business data and must never be advertised on the homepage just because
+  /// someone signed up — filtering on this flag makes that structurally
+  /// impossible rather than a rule someone has to remember.
+  isDemo Boolean @default(false)
+
+  ownerId String
+  owner   User   @relation("RestaurantOwner", fields: [ownerId], references: [id])
+
+  members       User[]        @relation("RestaurantMembers")
+  categories    Category[]
+  products      Product[]
+  orders        Order[]
+  tables        RestaurantTable[]
+  expenses      Expense[]
+  subscription  Subscription?
+  payments      Payment[]
+  auditLogs     AuditLog[]
+  discountCodes DiscountCode[]
+  inventoryItems InventoryItem[]
+  supportTickets SupportTicket[]
+  availabilityWindows AvailabilityWindow[]
+  recommendations      ProductRecommendation[]
+  recommendationEvents RecommendationEvent[]
+  featuredEvents       FeaturedProductEvent[]
+  customers            Customer[]
+  campaigns            Campaign[]
+
+  /// Whether the menu shows a featured strip at all.
+  ///
+  /// Off by default, which is what makes this optional in the way the brief
+  /// asks. Existing venues already have dishes flagged `isFeatured` — the
+  /// templates that read that flag keep behaving exactly as they did — and none
+  /// of them gains a promotional surface it never asked for until an owner
+  /// turns this on.
+  featuredSectionEnabled Boolean @default(false)
+
+  /// Monotonic per-tenant order counter; see nextOrderNumber() in src/lib/orders.ts.
+  orderSequence Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+// ---------------------------- subscriptions --------------------------------
+
+model Plan {
+  id             String  @id @default(cuid())
+  code           String  @unique // "starter" | "pro" | "enterprise"
+  name           String
+  nameEn         String
+  description    String?
+  monthlyPrice   Int // Toman
+  yearlyPrice    Int
+  maxProducts    Int // -1 = unlimited
+  maxCategories  Int
+  maxTables      Int
+
+  /// Menu views a venue may serve in a day, -1 for unlimited.
+  ///
+  /// Packaging is priced on the two things that actually drive cost: how many
+  /// tables a venue seats, and how often its menu is opened. Product and
+  /// category counts are deliberately unlimited on every tier — capping how
+  /// many dishes a restaurant may list punishes exactly the venues that get
+  /// the most out of the product.
+  ///
+  /// NOT YET ENFORCED. Nothing counts views today, so this reads as a stated
+  /// fair-use ceiling rather than a hard limit. Enforcing it needs a per-day
+  /// counter on the menu route and a decision about what happens at the cap,
+  /// neither of which should be invented silently.
+  maxDailyViews  Int     @default(-1)
+
+  /// Permits creating branch venues that serve this venue's menu.
+  allowsBranches Boolean @default(false)
+
+  /// The listed price is a floor, not the price. A chain's cost depends on how
+  /// many sites it runs, so the card shows "from X" and the figure is settled
+  /// by contract rather than by self-service checkout.
+  isContractPriced Boolean @default(false)
+
+  allowsOnlinePay Boolean @default(false)
+  allowsAnalytics Boolean @default(true)
+  allowsCustomDomain Boolean @default(false)
+  isPublic       Boolean @default(true)
+  sortOrder      Int     @default(0)
+
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subscription {
+  id           String             @id @default(cuid())
+  restaurantId String             @unique
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  planId       String
+  plan         Plan               @relation(fields: [planId], references: [id])
+  status       SubscriptionStatus @default(TRIALING)
+  /// "monthly" | "yearly"
+  interval     String             @default("monthly")
+  startedAt    DateTime           @default(now())
+  currentPeriodEnd DateTime
+  canceledAt   DateTime?
+
+  payments   Payment[]
+  extensions SubscriptionExtension[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+enum ExtensionType {
+  /// Paid extension recorded manually by platform staff (bank transfer, cash).
+  MANUAL
+  /// Free extension — goodwill, compensation, onboarding. Never counted as revenue.
+  GIFT
+}
+
+/// Audit trail for subscription periods granted by platform staff.
+///
+/// Separate from Payment on purpose: a gifted month must never appear in
+/// platform revenue, and a manual entry needs the operator, the reason and the
+/// before/after dates attached for accountability. Payment records money;
+/// this records the decision.
+model SubscriptionExtension {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  /// The SUPER_ADMIN who performed it. Kept even if they later leave.
+  adminId    String
+  admin      User          @relation("ExtensionAdmin", fields: [adminId], references: [id])
+  adminEmail String
+
+  extensionType      ExtensionType
+  previousExpiration DateTime
+  newExpiration      DateTime
+  durationDays       Int
+  reason             String
+
+  createdAt DateTime @default(now())
+
+  @@index([subscriptionId, createdAt])
+  @@index([createdAt])
+}
+
+// ------------------------------- menu --------------------------------------
+
+model Category {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name      String
+  nameEn    String?
+
+  /// Whether this category's opening hours apply.
+  ///
+  /// True by default, which changes nothing for a category with no windows —
+  /// an empty schedule never constrains anything. Switching it off suspends the
+  /// hours without deleting them, so a venue can drop its schedule for Nowruz
+  /// and put it back afterwards rather than retyping a week of setup.
+  scheduleEnabled Boolean @default(true)
+  availabilityWindows AvailabilityWindow[]
+
+  /// lucide-react icon name, rendered by src/components/icon.tsx
+  icon      String?
+  /// An uploaded icon, which wins over `icon` when set. Lets a venue use its
+  /// own artwork where the built-in lucide set has nothing suitable.
+  iconUrl   String?
+  imageUrl  String?
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  products Product[]
+  /// Campaigns using this category as their optional context.
+  campaigns Campaign[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, sortOrder])
+}
+
+model Product {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId   String
+  category     Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  name             String
+  nameEn           String?
+  shortDescription String?
+  fullDescription  String?
+  /// English descriptions. `nameEn` already existed; these complete the pair so
+  /// an English menu is not a Persian menu with English headings.
+  shortDescriptionEn String?
+  fullDescriptionEn  String?
+  imageUrl         String?
+
+  price         Int // Toman
+  /// Optional strike-through "was" price for promotions.
+  compareAtPrice Int?
+  /// Ingredient + production cost, drives profit reporting. Owner-only.
+  costPrice     Int  @default(0)
+
+  isAvailable Boolean @default(true)
+
+  /// Whether this product's opening hours apply. See Category.scheduleEnabled.
+  ///
+  /// A schedule is an *additional* constraint, never a replacement: a dish is
+  /// orderable only when `isAvailable` and its own hours and its category's
+  /// hours all allow it. `hideWhenUnavailable` then decides what a guest sees,
+  /// exactly as it already did — a dish outside its hours is the same kind of
+  /// unavailable as one the owner switched off by hand.
+  scheduleEnabled Boolean @default(true)
+  availabilityWindows AvailabilityWindow[]
+
+  /// What an unavailable product does on the public menu. False (the default,
+  /// and the behaviour before this column existed) keeps it listed with an
+  /// "unavailable" badge; true removes it from the menu until it is back.
+  hideWhenUnavailable Boolean @default(false)
+  /// Merchandising: the owner has picked this dish out for attention.
+  ///
+  /// Predates the rest of these columns and is deliberately still the switch —
+  /// four templates already read it. What changed is that the *public* value is
+  /// now the effective one: `menu.ts` reports a dish as featured only while its
+  /// promotion window is open **and** it is actually orderable, so a template
+  /// cannot promote something a guest cannot buy. See `isFeaturedNow` in
+  /// src/lib/featured.ts.
+  isFeatured  Boolean @default(false)
+
+  /// Where this dish sits among the featured ones, lowest first.
+  ///
+  /// Separate from `sortOrder`, which is its position inside its category. A
+  /// venue's third-best seller can be the first thing it wants to show off, and
+  /// one column cannot express both without one of the two orders being wrong.
+  featuredOrder Int @default(0)
+
+  /// Which badge to print, as a key from FEATURED_LABELS in src/lib/featured.ts.
+  ///
+  /// A key rather than free text so the built-in labels translate — «پیشنهاد
+  /// سرآشپز» and "Chef's choice" are the same badge. Null means featured with
+  /// no badge, which is a legitimate choice.
+  featuredLabel String?
+
+  /// The owner's own wording, used only when `featuredLabel` is "custom".
+  ///
+  /// Untranslatable by nature, which is why it is a separate column rather than
+  /// free text smuggled into the key: the render can tell at a glance whether it
+  /// is looking at something to translate or something to print verbatim.
+  featuredLabelText String?
+
+  /// Optional promotion window — a weekend special, a seasonal dish.
+  ///
+  /// Absolute instants, not the weekly recurrence `AvailabilityWindow` stores,
+  /// because "this Friday to Sunday" and "every Friday" are different questions
+  /// and one shape cannot answer both. Evaluation still goes through the single
+  /// availability module, so this is a second *kind of window*, not a second
+  /// engine. Null at either end means open-ended in that direction.
+  featuredFrom  DateTime?
+  featuredUntil DateTime?
+
+  sortOrder   Int     @default(0)
+
+  /// The owner's own words introducing this dish's pairings.
+  ///
+  /// Shown above the suggested dishes when a guest opens *this* product, so a
+  /// cold drink can say «کمی خنکت می‌کند» where a burger says «با اینها عالی
+  /// می‌شود». Null falls back to the platform's generic line, which is what
+  /// every venue gets until they write their own — an empty box on the menu
+  /// would be worse than a sensible default.
+  ///
+  /// Belongs to the *source* product rather than to each edge: the guest sees
+  /// one heading followed by a list, so one sentence per dish is what the
+  /// screen actually has room for.
+  pairingNote   String?
+  /// The same line in English, resolved by `localizeMenuData` exactly like
+  /// `nameEn` and `shortDescriptionEn`. Null falls back to the Persian one.
+  pairingNoteEn String?
+
+  /// Preparation time in minutes, shown on the menu card.
+  prepMinutes Int?
+
+  infoSections ProductInfoSection[]
+  optionGroups ProductOptionGroup[]
+  orderItems   OrderItem[]
+  /// What one of this dish takes off the shelves. Empty for most dishes.
+  ingredients  ProductIngredient[]
+
+  /// Suggestions made *when this dish is ordered*…
+  recommendations     ProductRecommendation[] @relation("RecommendationSource")
+  /// …and the dishes that suggest *this* one.
+  recommendedBy       ProductRecommendation[] @relation("RecommendationTarget")
+  /// Order lines this dish was suggested onto, for revenue attribution.
+  recommendedOrderItems OrderItem[]           @relation("OrderItemRecommendedFrom")
+  /// Campaigns using this dish as their optional context.
+  campaigns             Campaign[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, categoryId])
+  @@index([categoryId, sortOrder])
+}
+
+/// A decision the guest makes about a dish: «انتخاب گوشت» → مرغ / گوشت.
+///
+/// Modelled per product rather than as a reusable library shared across the
+/// menu. A venue's "choice of meat" means different things on a burger and on a
+/// pizza — different prices, different options — and the shared-library version
+/// of this feature ends up with every group named "meat (burgers)". Duplicating
+/// a group onto two products is a cheap copy; untangling a wrongly shared one
+/// after it is on live orders is not.
+model ProductOptionGroup {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  name   String
+  nameEn String?
+
+  /// The guest cannot add the product to their cart without answering.
+  /// A "choice of meat" is required; "extra toppings" is not.
+  isRequired Boolean @default(false)
+
+  /// How many choices may be selected. maxSelect = 1 renders as radio buttons,
+  /// anything higher as checkboxes. minSelect is only enforced when required.
+  minSelect Int @default(1)
+  maxSelect Int @default(1)
+
+  sortOrder Int @default(0)
+
+  choices ProductOptionChoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, sortOrder])
+}
+
+/// One answer within a group, optionally changing the price.
+model ProductOptionChoice {
+  id      String             @id @default(cuid())
+  groupId String
+  group   ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  name   String
+  nameEn String?
+
+  /// Added to the product's unit price. Signed on purpose: a smaller portion
+  /// can legitimately cost less, so this is not constrained to be positive.
+  priceDelta Int @default(0)
+  /// The matching change in cost of goods, so profit reporting stays honest
+  /// when the expensive option is the one that sells.
+  costDelta Int @default(0)
+
+  isAvailable Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([groupId, sortOrder])
+}
+
+/// The three owner-defined information blocks per product (ingredients, chef's
+/// note, nutrition, origin — whatever the owner chooses). Modelled as rows
+/// rather than JSON so titles stay queryable and orderable.
+model ProductInfoSection {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  title     String
+  content   String
+  /// English counterparts; null falls back to the Persian text.
+  titleEn   String?
+  contentEn String?
+  icon      String?
+  sortOrder Int     @default(0)
+
+  @@index([productId, sortOrder])
+}
+
+/// A guest pressing "call the waiter" from the public menu.
+///
+/// Kept as a row rather than a fire-and-forget event so a call survives a
+/// dashboard reload and staff can see it was already answered. Delivery is the
+/// existing in-process SSE stream — no SMS gateway, no external service.
+model StaffCall {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  tableNumber String
+  note        String?
+
+  acknowledgedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([restaurantId, createdAt])
+}
+
+model RestaurantTable {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  number String // "12", "A3", "تراس ۲"
+  label  String?
+  seats  Int?
+
+  createdAt DateTime @default(now())
+
+  @@unique([restaurantId, number])
+  @@index([restaurantId])
+}
+
+// ------------------------------ customers ----------------------------------
+
+/// A guest a restaurant has served before.
+///
+/// The identity is the **phone number**, normalised by `normalisePhone` in
+/// src/lib/phone.ts before it is ever written — that normalisation is what
+/// makes «۰۹۱۲۱۲۳۴۵۶۷», `0912 123 4567` and `+98 912 123 4567` one regular
+/// rather than three strangers. A guest who gives no number simply has no
+/// record; ordering never requires one.
+///
+/// **Scoped to the menu owner, not the branch.** Someone who eats at two
+/// branches of the same chain is one customer of that chain, and the tenancy
+/// model already puts everything the chain owns — menu, pricing, discount
+/// codes, suggestions — on the parent. Orders still belong to the branch that
+/// served them, which is what keeps each site's revenue its own.
+///
+/// Deliberately thin. It holds identity and consent, and nothing else: every
+/// number an owner sees — order count, revenue, recency, segment — is derived
+/// from the orders themselves, so no stored figure can drift out of step with
+/// the history it claims to describe.
+model Customer {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// Canonical form, e.g. `09121234567`. The identity of this record.
+  phone String
+
+  /// The name given on the most recent order. Kept so a list reads as people
+  /// rather than as numbers; overwritten rather than accumulated, because a
+  /// history of every spelling a guest typed is not information anyone wants.
+  name String?
+
+  /// Permission to contact this guest about anything other than their order.
+  ///
+  /// Off unless it was explicitly given. No provider exists and nothing is
+  /// sent — this is here so that the day a gateway is added, the consent it
+  /// needs is already being recorded rather than being backfilled from
+  /// nothing. Order confirmations are not marketing and never depended on it.
+  marketingConsent  Boolean   @default(false)
+  consentUpdatedAt  DateTime?
+
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One record per number per venue. Also the lookup the order path uses to
+  /// find a returning guest, so it is both the constraint and the index.
+  @@unique([restaurantId, phone])
+  @@index([restaurantId])
+}
+
+// -------------------------------- campaigns --------------------------------
+
+/// A plan to reach a group of a venue's customers.
+///
+/// **Nothing here sends anything.** There is no SMS provider, no mail sender
+/// and no push service in this codebase; a campaign is a saved intention plus
+/// the audience arithmetic behind it. The states, the transitions between them,
+/// and the audience rules are in src/lib/campaigns.ts.
+///
+/// Scoped to the menu owner, exactly like Customer: a guest who eats at two
+/// branches of one chain is one customer of that chain, so the audience a
+/// campaign targets belongs to the chain rather than to a branch.
+model Campaign {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name String
+
+  status CampaignStatus @default(DRAFT)
+
+  /// Which customers this is aimed at.
+  ///
+  /// A key from `CUSTOMER_SEGMENTS` in src/lib/customers.ts, stored as text
+  /// rather than as a second Prisma enum so the segment catalogue has exactly
+  /// one definition. What *makes* somebody loyal or at risk is `resolveSegment`
+  /// there, and a campaign never restates it. A CHECK constraint appended to
+  /// the migration keeps the column honest about which keys exist.
+  targetSegment String
+
+  /// Optional context: "customers who ordered burgers", "inactive guests of the
+  /// dessert section". Narrows the audience to people who actually bought the
+  /// thing, and is otherwise inert.
+  ///
+  /// `SetNull` on both: deleting a dish must not delete the campaign that
+  /// mentioned it, and a campaign whose context vanished still describes a real
+  /// audience — it simply stops being narrowed. A featured dish needs no third
+  /// field; `Product.isFeatured` already says so.
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  /// Optional window. Instants, converted from the venue's wall clock by
+  /// `instantFromZonedWallClock`, the same way promotion windows are.
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  /// How big the audience was when the owner committed to this campaign.
+  ///
+  /// **A count, not a recipient list.** The audience itself is evaluated
+  /// dynamically — segments are a function of recency, so any stored list is
+  /// wrong by the next morning — and materialising one row per targeted guest
+  /// would buy nothing while nothing can be sent. Two integers record what the
+  /// owner was looking at when they pressed the button, which is the part that
+  /// would otherwise be unrecoverable.
+  audienceSnapshotSize     Int?
+  audienceSnapshotEligible Int?
+  audienceSnapshotAt       DateTime?
+
+  /// Null once the acting user is deleted; the campaign outlives the account.
+  createdByUserId String?
+  createdBy       User?   @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  /// Orders attributed to this campaign. Empty until something can drive one.
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The dashboard's list: a venue's campaigns, newest first, filterable by
+  /// state. Leading with the tenant keeps a venue's rows together and means no
+  /// query can be tempted to read across restaurants.
+  @@index([restaurantId, status])
+  @@index([restaurantId, createdAt])
+  /// "Is this dish referenced by a campaign?" — asked when one is deleted.
+  @@index([productId])
+  @@index([categoryId])
+}
+
+// -------------------------- recommendations --------------------------------
+
+/// "When someone orders this, suggest that."
+///
+/// Configured by the owner, one edge at a time. Not inferred from sales, not
+/// generated: a chef knows which chips go with which burger, and a venue with
+/// thirty covers a day will never have the data for anything cleverer.
+///
+/// Both ends are products of the same tenant. `restaurantId` is carried for the
+/// same reasons as on AvailabilityWindow — it is the tenant column every table
+/// here has, and it lets the public menu read a venue's whole recommendation
+/// graph in one indexed query instead of one per dish.
+///
+/// Cascades from either product. A recommendation whose source or target has
+/// been deleted describes nothing, and removing the edge is not destructive:
+/// the products, the orders and the order history are all untouched.
+model ProductRecommendation {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// The dish being ordered.
+  sourceProductId String
+  sourceProduct   Product @relation("RecommendationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
+
+  /// The dish suggested alongside it.
+  recommendedProductId String
+  recommendedProduct   Product @relation("RecommendationTarget", fields: [recommendedProductId], references: [id], onDelete: Cascade)
+
+  /// The owner's ordering, lowest first. The public list is capped, so this
+  /// decides which suggestions actually get shown.
+  sortOrder Int @default(0)
+
+  /// Suspends a suggestion without losing it — the same switch-not-delete
+  /// treatment discount codes and schedules already get.
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One edge per pair. Enforced here rather than in the route because a
+  /// double-submitted form must not be able to produce two identical
+  /// suggestions, and the database is the only place that holds under a race.
+  @@unique([sourceProductId, recommendedProductId])
+  /// The public read: a dish's suggestions, already in display order.
+  @@index([sourceProductId, sortOrder])
+  @@index([restaurantId])
+  /// Backs the cascade above, so deleting a product does not scan the table.
+  @@index([recommendedProductId])
+}
+
+/// What a guest did with a featured dish, short of buying it.
+///
+/// A separate table from RecommendationEvent rather than a `surface` column on
+/// it, for one concrete reason: that table's uniqueness depends on
+/// `sourceProductId`, and a featured dish has no source. Making the column
+/// nullable would break the deduplication outright, because Postgres treats
+/// NULLs as distinct in a unique index — every refresh would count again. The
+/// two tables therefore share their discipline and their metric arithmetic
+/// (src/lib/merchandising.ts) while keeping the constraint that makes each
+/// honest.
+enum FeaturedEventType {
+  /// The featured badge or rail was rendered where the guest could see it.
+  IMPRESSION
+  /// The guest opened the dish from a featured surface.
+  VIEW
+  /// It reached the cart from a featured surface.
+  ADD_TO_CART
+}
+
+model FeaturedProductEvent {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  productId String
+
+  type FeaturedEventType
+
+  /// The same per-guest-session id the suggestion events use, and for the same
+  /// reason: it is what separates "shown to one guest four times" from "shown
+  /// to four guests", and what makes a refresh cost nothing.
+  sessionKey String
+
+  createdAt DateTime @default(now())
+
+  @@unique([sessionKey, productId, type])
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, productId])
+}
+
+/// What a guest did with a suggestion, short of buying it.
+///
+/// Purchases are deliberately *not* here: an event a browser reports is
+/// evidence of display and intent, while a sale is a fact the server already
+/// records. Attribution therefore lives on `OrderItem.recommendedFromProductId`,
+/// written during order creation after the edge has been verified — see
+/// src/lib/recommendations.ts for the full definition of each metric.
+enum RecommendationEventType {
+  /// Rendered where the guest could see it.
+  IMPRESSION
+  /// Tapped — which for a dish with required choices opens its sheet rather
+  /// than adding anything, so this is distinct from ADD_TO_CART.
+  INTERACTION
+  /// Reached the cart from the suggestion.
+  ADD_TO_CART
+}
+
+/// One guest session's interaction with one suggestion.
+///
+/// Deliberately thin — no user, no order, no device fingerprint. It answers
+/// "did this suggestion work?" and nothing else, and it is written from the
+/// public menu where the cheapest correct thing is the right thing.
+model RecommendationEvent {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  sourceProductId      String
+  recommendedProductId String
+
+  type RecommendationEventType
+
+  /// A random id the browser keeps beside its cart. Not a person, not a login,
+  /// and never sent anywhere: it exists only so the unique index below can tell
+  /// "shown to one guest four times" from "shown to four guests".
+  ///
+  /// That distinction is the whole reliability story for this table. A refresh,
+  /// a React remount, a retried request and a double tap all repeat the same
+  /// key, and the constraint collapses them into the one event that actually
+  /// happened.
+  sessionKey String
+
+  createdAt DateTime @default(now())
+
+  /// Idempotency, at the only layer that can guarantee it.
+  @@unique([sessionKey, sourceProductId, recommendedProductId, type])
+  /// The dashboard reads one venue's events for a window, grouped by pair.
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, sourceProductId, recommendedProductId])
+}
+
+// --------------------------- opening hours ---------------------------------
+
+/// One period during which a product or a category is offered.
+///
+/// Rows rather than a JSON column on the parent: "which dishes are on at 9pm
+/// on a Friday" is a question the menu asks on every render and that reporting
+/// will want later, and a blob has to be read and parsed in full before it can
+/// answer. Rows are also individually validated, indexed and — the practical
+/// benefit — editable one line at a time in the dashboard.
+///
+/// Exactly one of `productId` / `categoryId` is set. Prisma cannot express that
+/// constraint, so migration 21 adds a CHECK for it: a row targeting both or
+/// neither has no meaning, and the database is the only place that can refuse
+/// it regardless of which code path wrote it.
+///
+/// `restaurantId` is carried even though it is reachable through either parent.
+/// It is the tenant column every other table in this schema has, it lets a
+/// venue's whole schedule be read or deleted in one indexed query, and it means
+/// a tenant-scoped write never has to join to prove ownership.
+model AvailabilityWindow {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  /// 0 = Sunday … 6 = Saturday, matching `Date.prototype.getDay`.
+  ///
+  /// Stored in the JavaScript convention rather than the Iranian one so that
+  /// deriving a weekday from an instant is an identity step with nothing to get
+  /// wrong. The week is *displayed* starting on Saturday; that reordering lives
+  /// in `WEEK_ORDER` in src/lib/availability.ts.
+  dayOfWeek Int
+
+  /// Minutes from local midnight, 0–1439.
+  startMinute Int
+  /// Minutes from local midnight, 1–1440 — 1440 being midnight at the end of
+  /// the day, so "18:00 until midnight" stays a same-day window. A window whose
+  /// end is not after its start runs past midnight into the following day.
+  endMinute Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The menu loads a venue's windows by parent, one query per level.
+  @@index([productId])
+  @@index([categoryId])
+  @@index([restaurantId])
+}
+
+// ------------------------------ inventory ----------------------------------
+
+/// An ingredient or supply the kitchen keeps on a shelf.
+///
+/// Quantities are thousandths of `unit`, in an Int column — see
+/// src/lib/inventory.ts for why this is not a float. `unit` is free text
+/// because a venue counting saffron in grams and dough in pieces should not
+/// have to pick from a list we invented.
+model InventoryItem {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  name String
+  /// "کیلوگرم" | "گرم" | "لیتر" | "عدد" | anything the venue actually uses.
+  unit String
+
+  /// Thousandths of `unit` currently on the shelf.
+  quantityMilli Int @default(0)
+  /// Warn at or below this. 0 means "do not watch this item".
+  lowStockMilli Int @default(0)
+
+  isActive Boolean @default(true)
+
+  ingredients ProductIngredient[]
+  movements   StockMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One row per ingredient per venue; two "آرد" would be two shelves.
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+}
+
+/// How much of an item one unit of a dish consumes. The recipe, in other words.
+///
+/// Optional per dish: a venue can track only the ingredients that matter to it
+/// rather than having to describe its whole menu before stock does anything.
+model ProductIngredient {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  /// Thousandths of the item's unit consumed per one of this dish.
+  perUnitMilli Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, itemId])
+  @@index([productId])
+  @@index([itemId])
+}
+
+/// Every change to a shelf, and why.
+///
+/// The ledger exists so a cancelled order can give back exactly what it took.
+/// Recomputing the amount from the recipe at cancellation time would be wrong
+/// whenever the recipe has been edited since — it would invent stock that was
+/// never consumed. Recording the delta at the moment it happens makes the
+/// reversal exact, and gives the owner an answer to "why did this change?".
+model StockMovement {
+  id           String        @id @default(cuid())
+  itemId       String
+  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  /// Negative when consumed, positive when restocked or restored.
+  deltaMilli Int
+  reason     StockMovementReason
+
+  /// The order that caused it, where there was one. Nulled rather than
+  /// cascaded if that order is ever removed: the shelf still moved.
+  orderId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([itemId, createdAt])
+  @@index([orderId])
+}
+
+enum StockMovementReason {
+  ORDER_PLACED
+  ORDER_CANCELED
+  MANUAL_ADJUSTMENT
+}
+
+// ------------------------------- support -----------------------------------
+
+enum SupportTicketStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+}
+
+/// A question from a venue to platform staff.
+///
+/// One message and one reply rather than a threaded conversation. A venue
+/// asking "how do I change my QR codes?" needs an answer, not a chat client,
+/// and a thread that nobody is staffed to watch is worse than a form that
+/// plainly states someone will get back to you. Reopening is a new ticket.
+model SupportTicket {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  subject String
+  message String
+
+  status  SupportTicketStatus @default(OPEN)
+  /// Written by platform staff from the admin console.
+  reply     String?
+  repliedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, createdAt])
+  /// The admin inbox reads across tenants, oldest open first.
+  @@index([status, createdAt])
+}
+
+// --------------------------- discount codes --------------------------------
+
+/// Percentage of the basket, or a flat number of Toman off it.
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+/// A code a guest types at checkout.
+///
+/// The amount comes off the **subtotal**, which is already the sum of the
+/// prices actually charged — so a code stacks on top of a product that is
+/// already sold below its compare-at price rather than replacing that reduction.
+///
+/// Deliberately not carrying usage limits or an expiry date. Both are real
+/// features, but each needs a decision about what a guest sees when they are
+/// hit, and a half-enforced limit is worse than an absent one: the owner
+/// believes the code is capped when it is not. `isActive` is the honest
+/// version of "stop accepting this", and it is enforced at order time.
+model DiscountCode {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// Stored normalised (trimmed, spaces removed, upper-cased) by
+  /// normaliseCode() in src/lib/discounts.ts, which is also what the lookup
+  /// normalises — that is what makes the unique index below mean what it looks
+  /// like it means.
+  code  String
+  type  DiscountType
+  /// Whole percent for PERCENT, whole Toman for FIXED.
+  value Int
+
+  /// Ceiling in Toman for a PERCENT code: "15% off, but never more than this".
+  ///
+  /// Null means no ceiling, which is also what an empty field in the editor
+  /// means. Applied to the computed percentage rather than replacing it, so a
+  /// small basket still gets the full percentage and only one large enough to
+  /// pass the ceiling is trimmed. Meaningless on a FIXED code — that is already
+  /// a flat number — and the input schema refuses the combination.
+  maxDiscount Int?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Scoped to the tenant, never global: two restaurants may both run "NOWRUZ".
+  @@unique([restaurantId, code])
+  @@index([restaurantId])
+}
+
+// ------------------------------- orders ------------------------------------
+
+model Order {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// Per-tenant sequential number shown to staff and customers.
+  orderNumber Int
+  /// Unguessable token in the customer's status URL — the order id is never
+  /// exposed, so status pages cannot be enumerated.
+  publicToken String @unique
+
+  tableNumber  String?
+  customerName String
+  /// As given, already normalised by `normalisePhone`. Kept on the order as
+  /// well as on the customer record: an order is a receipt, and it must still
+  /// say who placed it even if the customer record is later removed.
+  customerPhone String?
+
+  /// The returning guest this order belongs to, when a number was given.
+  ///
+  /// `SetNull`, like `productId` on OrderItem and for the same reason: removing
+  /// a customer record must never rewrite what an order was. The order keeps
+  /// its own `customerName` and `customerPhone` snapshot regardless.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  note         String?
+
+  status        OrderStatus   @default(RECEIVED)
+  paymentMethod PaymentMethod @default(CASH_ON_SITE)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  /// Written by staff on the venue's behalf rather than scanned by a guest —
+  /// a phone order, or someone at the counter who cannot use the menu.
+  ///
+  /// Worth distinguishing because it changes what the number means: a venue
+  /// reading "40% of orders came through the QR code" needs the other 60% not
+  /// to be counted as scans that never happened.
+  isManual Boolean @default(false)
+
+  subtotal Int
+  discount Int @default(0)
+
+  /// The code that produced `discount`, snapshotted as text.
+  ///
+  /// Text and not a foreign key, for the same reason line prices are copied
+  /// rather than referenced: an owner who deletes a finished promotion must not
+  /// erase what a guest was actually charged under it, and must not be blocked
+  /// from deleting it either.
+  discountCode String?
+
+  // Snapshotted the same way line prices are: the owner can change the tax
+  // rate or switch rounding off tomorrow, and this order must still add up to
+  // what the guest actually paid.
+  serviceCharge Int @default(0)
+  tax           Int @default(0)
+  tip           Int @default(0)
+  /// Signed correction applied by rounding; kept so total is reproducible.
+  roundingAdjustment Int @default(0)
+
+  total    Int
+  /// Sum of item costSnapshot — frozen COGS for profit reporting.
+  costTotal Int @default(0)
+
+  /// Which campaign brought this order in, once anything can.
+  ///
+  /// **Nothing writes this column today.** There is no delivery system, so
+  /// there is no campaign-driven journey for an order to arrive from; it exists
+  /// because adding a nullable reference now costs one migration, while adding
+  /// it after a year of orders means backfilling attribution nobody recorded.
+  /// The same pattern `OrderItem.recommendedFromProductId` and
+  /// `OrderItem.fromFeatured` already follow.
+  ///
+  /// Attribution only ever *describes* an order. It is not read by
+  /// `priceOrderLines`, by any total, or by payment validation — a campaign
+  /// must never be able to change what a guest is charged.
+  ///
+  /// `SetNull` rather than `Cascade`: deleting a campaign must not delete the
+  /// revenue it brought in.
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  items    OrderItem[]
+  events   OrderEvent[]
+  payments Payment[]
+
+  placedAt    DateTime  @default(now())
+  preparingAt DateTime?
+  readyAt     DateTime?
+  deliveredAt DateTime?
+  canceledAt  DateTime?
+
+  /// When the owner confirmed the money was returned for a cancelled order the
+  /// customer had already paid for.
+  ///
+  /// Null while a refund is still owed, which is what puts the order in the
+  /// refund queue at the top of the kitchen board. Set — never cleared — once
+  /// the owner clears it, so the board forgets it but the record does not: an
+  /// order that took money and gave it back is exactly the history a dispute
+  /// needs months later.
+  refundedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, orderNumber])
+  @@index([restaurantId, status])
+  @@index([restaurantId, placedAt])
+
+  /// Backs the customer aggregation: every per-customer figure groups on this
+  /// column, filtered by status, so the pair is what the report actually reads.
+  @@index([customerId, status])
+
+  /// Every question asked about a *customer* rather than about an order.
+  ///
+  /// There is no Customer table: a guest scans a QR code, types a name and a
+  /// phone number, and leaves. `customerPhone` is therefore the only handle on
+  /// a returning guest, and "how many came back", "what does this person
+  /// usually order" and "who has not been in for a month" are all a lookup on
+  /// this pair. Without the index each of them sequentially scans the tenant's
+  /// entire order history — 12,500 rows on a demo venue after one season, and
+  /// growing for the life of the account.
+  ///
+  /// Leading with `restaurantId` rather than the phone alone keeps the index
+  /// tenant-ordered, so a venue's rows sit together and no query can be tempted
+  /// to read across restaurants. Numbers are stored in one canonical form by
+  /// `normalisePhone` in src/lib/phone.ts, which is what makes equality on this
+  /// column mean "the same person".
+  @@index([restaurantId, customerPhone])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Nullable so deleting a product never destroys order history.
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  /// Snapshots — an order must never change when the menu changes.
+  ///
+  /// `priceSnapshot` and `costSnapshot` are the *effective* per-unit figures,
+  /// already including every chosen option. The line total is therefore still
+  /// priceSnapshot × quantity, and every existing reader — analytics, finance,
+  /// the reports — keeps working without knowing options exist.
+  nameSnapshot  String
+  priceSnapshot Int
+  costSnapshot  Int    @default(0)
+
+  quantity Int
+  note     String?
+
+  /**
+   * The dish whose suggestion put this line in the basket.
+   *
+   * The whole of purchase attribution, and the reason there is no PURCHASE
+   * event: a sale is something the server already knows about, so counting it
+   * from a browser's report would be counting the least trustworthy copy of a
+   * fact we hold first-hand.
+   *
+   * Written only after `createOrder` has confirmed an active recommendation
+   * edge actually exists from that source to this product, so a client cannot
+   * credit a suggestion that was never made. Null for every line a guest found
+   * on their own — which is what stops someone browsing to the chips
+   * themselves from being counted as an upsell.
+   *
+   * `SetNull` rather than cascade, exactly like `productId` above: deleting a
+   * product must never rewrite what an order was.
+   */
+  recommendedFromProductId String?
+  recommendedFrom          Product? @relation("OrderItemRecommendedFrom", fields: [recommendedFromProductId], references: [id], onDelete: SetNull)
+
+  /**
+   * The guest reached this dish through a featured surface.
+   *
+   * A boolean rather than a product id, because unlike a suggestion a featured
+   * dish has no source dish — the surface itself is the origin. Verified the
+   * same way: `createOrder` confirms the dish really was featured and inside
+   * its promotion window before setting it, so a client cannot manufacture
+   * merchandising credit.
+   *
+   * Independent of `recommendedFromProductId`: a dish can legitimately be both
+   * featured and suggested, and the two attributions answer different
+   * questions.
+   */
+  fromFeatured Boolean @default(false)
+
+  options OrderItemOption[]
+
+  @@index([orderId])
+  /// Backs the `SetNull` above, and the dashboard's attributed-revenue read.
+  @@index([recommendedFromProductId])
+  /// Backs the `onDelete: SetNull` above: without it, deleting one product
+  /// sequentially scans every order line the venue has ever recorded.
+  @@index([productId])
+}
+
+/// What the guest actually chose, frozen at the moment they ordered.
+///
+/// Kept as rows rather than a JSON blob for the same reason line prices are
+/// snapshotted: the kitchen has to read "with chicken, no onion" off the order
+/// months later, and a venue that renames «مرغ» to «مرغ گریل» tomorrow must not
+/// silently rewrite what a guest asked for last week. Nothing here references a
+/// live choice row, so deleting an option never damages order history.
+model OrderItemOption {
+  id          String    @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  groupNameSnapshot  String
+  choiceNameSnapshot String
+  /// Per-unit deltas, already folded into the parent line's priceSnapshot.
+  /// Recorded separately so a receipt can show why a burger cost 30,000 more.
+  priceDeltaSnapshot Int @default(0)
+  costDeltaSnapshot  Int @default(0)
+
+  sortOrder Int @default(0)
+
+  @@index([orderItemId])
+}
+
+/// Append-only status timeline, powering the customer's live tracking view.
+model OrderEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// ------------------------------ finance ------------------------------------
+
+model Expense {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  title      String
+  /// "rent" | "salary" | "utilities" | "supplies" | "marketing" | "other"
+  category   String
+  amount     Int
+  note       String?
+  occurredAt DateTime
+  /// True for rent/salary style recurring costs, used to project run-rate.
+  isRecurring Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, occurredAt])
+}
+
+// ------------------------------ payments -----------------------------------
+
+model Payment {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  purpose PaymentPurpose
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  provider String // "zarinpal" | "mock"
+  amount   Int
+  status   PaymentStatus @default(PENDING)
+
+  /// Gateway handle for the started transaction (Zarinpal "Authority").
+  authority String? @unique
+  /// Gateway reference for the settled transaction (Zarinpal "RefID").
+  refId     String?
+  cardPan   String?
+  failureReason String?
+
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([restaurantId, createdAt])
+  @@index([orderId])
+  /// Same reason as OrderItem.productId — the subscription FK is SetNull.
+  @@index([subscriptionId])
+}
+
+// ------------------------------- audit -------------------------------------
+
+/// Append-only record of security- and money-relevant actions.
+///
+/// Two deliberate choices make this useful months later:
+///   * `actorEmail` is a snapshot, so deleting a user does not erase who did
+///     what — the whole point of an audit trail.
+///   * `restaurantId` is nullable, because platform-admin actions belong to no
+///     tenant. Tenant-scoped reads still filter on it like every other table.
+///
+/// Nothing here is ever updated or deleted by application code.
+model AuditLog {
+  id String @id @default(cuid())
+
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// Null once the acting user is deleted; actorEmail still identifies them.
+  actorUserId String?
+  actor       User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorEmail  String
+  actorRole   Role
+
+  action     AuditAction
+  /// e.g. "Product" | "Category" | "User" | "Restaurant"
+  entityType String?
+  entityId   String?
+  /// Short human-readable line, already localized for the dashboard.
+  summary    String
+  /// Before/after values where a diff is meaningful (price changes).
+  metadata   Json?
+  ip         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([restaurantId, createdAt])
+  @@index([actorUserId])
+  @@index([action, createdAt])
+}
+
+// ------------------------------ platform -----------------------------------
+
+/// Shared counters for the request limiter.
+///
+/// In Postgres rather than process memory because the app is deployed as
+/// several Node instances behind one proxy — a per-process counter would give
+/// an attacker N times the intended allowance, and which instance they hit is
+/// not something they have to guess at. One row per bucket, incremented by a
+/// single atomic upsert so two simultaneous requests cannot both read the
+/// pre-increment value.
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}
+
+/// Singleton row of operator-editable platform settings.
+///
+/// Deliberately not environment variables: these are values platform staff
+/// change from the admin console while the site is running, and an env var
+/// cannot be edited without a redeploy. Secrets stay in the environment.
+model PlatformSetting {
+  id        String   @id @default("singleton")
+  /// Where the twice-daily customer-data backup is delivered.
+  backupEmail String?
+  /// Set when a backup run fails, cleared on the next success, so the failure
+  /// is visible in the admin console rather than only in a log file.
+  lastBackupAt      DateTime?
+  lastBackupStatus  String?
+  lastBackupError   String?
+  lastBackupBytes   Int?
+
+  updatedAt DateTime @updatedAt
+}

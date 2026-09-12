@@ -1,0 +1,55 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+src/generated/
+.DS_Store
+
+# ---------------------------------------------------------------------------
+# Customer data
+#
+# There is nothing to ignore here any more, and that is the point: everything a
+# customer owns now lives in the sibling `../data/` directory, outside this
+# repository entirely, so it cannot be committed by accident and cannot be lost
+# when this folder is replaced.
+#
+# The two entries below are belt-and-braces for anyone who sets DATA_DIR to a
+# path inside the application tree despite the documentation. See
+# docs/DATA-BOUNDARY.md.
+# ---------------------------------------------------------------------------
+/data/
+.snapshots/
+
+# ---------------------------------------------------------------------------
+# Environment files
+#
+# `.env` and `.env*.local` are covered at the top of this file. This widens the
+# net to every other variant an operator might create on the server —
+# `.env.production`, `.env.staging`, `.env.backup` — and then re-admits the one
+# file that is meant to be committed.
+#
+# Order matters: the negation has to come after the pattern that would
+# otherwise exclude it, or git never reconsiders the file.
+# ---------------------------------------------------------------------------
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Editor, OS and log noise
+#
+# None of this exists in the tree today. It is here so that the first person to
+# open the project in a different editor, or on a different operating system,
+# does not commit their own machine's clutter into a repository that has been
+# clean from its first commit.
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+desktop.ini
+*.log

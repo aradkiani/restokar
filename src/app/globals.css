@@ -1,0 +1,846 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Vazirmatn — self-hosted (SIL Open Font License 1.1).
+
+   Served from /public/fonts rather than a CDN. Iranian networks reach foreign
+   CDNs unreliably, and a blocked stylesheet would silently drop every menu to
+   the Tahoma fallback — a visible downgrade on the one screen a restaurant's
+   customers actually see. Self-hosting also removes a third-party runtime
+   dependency in a sanctions environment.
+
+   One variable file (111KB) covers the full 100–900 range; the app uses six
+   distinct weights, which as static files would have cost ~203KB and four
+   requests. `font-display: swap` keeps text readable while it loads.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/Vazirmatn-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------------
+   The other menu faces — all SIL OFL 1.1, all self-hosted for the same reasons.
+   See public/fonts/README.md for versions and sources.
+
+   Declaring a face costs nothing: a browser fetches it only when something on
+   the page actually uses that family. A venue on Vazirmatn therefore downloads
+   exactly one font, and only the venue that picked Samim pays for Samim.
+
+   Only Vazirmatn is preloaded in layout.tsx. Preloading all four would fetch
+   ~230KB on every menu to use ~50KB of it — the opposite of the point.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Estedad";
+  src: url("/fonts/Estedad-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sahel";
+  src: url("/fonts/Sahel-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Samim has no variable build, so the two weights the templates use are
+   declared separately rather than letting the browser synthesise a fake bold. */
+@font-face {
+  font-family: "Samim";
+  src: url("/fonts/Samim-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Samim";
+  src: url("/fonts/Samim-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------------
+   Menuland design tokens — the *product chrome* (marketing site, dashboard).
+   Tenant menus are themed separately at runtime via the --m-* custom
+   properties emitted by src/lib/theme.ts, so an owner's brand colours can
+   never leak into the admin UI or vice versa.
+--------------------------------------------------------------------------- */
+
+@theme {
+  /* Saffron — warm, appetising, unmistakably food-industry. */
+  --color-brand-50: #fdf8ed;
+  --color-brand-100: #f9ecc9;
+  --color-brand-200: #f3d795;
+  --color-brand-300: #ecbd58;
+  --color-brand-400: #e6a63a;
+  --color-brand-500: #d98c1f;
+  --color-brand-600: #bd6c15;
+  --color-brand-700: #9c4e15;
+  --color-brand-800: #7f3e18;
+  --color-brand-900: #693417;
+  --color-brand-950: #3c1a09;
+
+  /* Deep teal — the calm counterweight used for secondary actions. */
+  --color-accent-50: #eefbf7;
+  --color-accent-100: #d5f5ea;
+  --color-accent-200: #afe9d8;
+  --color-accent-300: #7bd7c1;
+  --color-accent-400: #46bca4;
+  --color-accent-500: #26a08a;
+  --color-accent-600: #188070;
+  --color-accent-700: #16665b;
+  --color-accent-800: #16514a;
+  --color-accent-900: #16443e;
+  --color-accent-950: #062825;
+
+  /* Warm neutrals — softer than pure grey, reads as "linen" not "office". */
+  --color-ink-50: #faf9f7;
+  --color-ink-100: #f2f0ec;
+  --color-ink-200: #e6e2db;
+  --color-ink-300: #d3cdc2;
+  --color-ink-400: #a8a094;
+  --color-ink-500: #857c70;
+  --color-ink-600: #6b6359;
+  --color-ink-700: #57504a;
+  --color-ink-800: #3b3733;
+  --color-ink-900: #24211f;
+  --color-ink-950: #141211;
+
+  /* The one "paper" colour. Was written as literal `bg-white` in 60 places,
+     which is exactly the thing that cannot follow a theme. */
+  --color-surface: #ffffff;
+
+  /* The dashboard sidebar is a dark panel in *both* themes — it is chrome, not
+     paper. It gets its own token because it was previously `bg-ink-950`, and
+     ink-950 is also "text on a saffron chip"; one of those wants to follow the
+     theme and the other must never. */
+  --color-sidebar: #141211;
+
+  /* Text on that panel, and the reason these exist at all.
+
+     The sidebar deliberately does not invert, but the ink scale does — so
+     `text-ink-300` on it resolved to a light beige in light mode and to
+     #403b36, a dark brown, in dark mode. Against a #0f0e0d panel that is about
+     1.5:1: the navigation was very nearly invisible to anyone using the dark
+     panel, which is most people working a kitchen at night.
+
+     Fixed values, defined once and never redefined in a theme block, because a
+     surface that does not follow the theme cannot have text that does. */
+  --color-sidebar-fg: #ffffff;
+  --color-sidebar-muted: #b9b3ab;
+
+  /* Destructive actions — a saturated chip that must NOT follow the theme.
+
+     `red-600/700/800` served two incompatible jobs: the background of a delete
+     button carrying white text, and the colour of warning *text*. In dark mode
+     text has to become light to be readable, which would have turned every
+     delete button into pale pink with white text on it. Splitting the button
+     out — the same reasoning that gave the sidebar its own token — lets the red
+     scale invert freely for text while the button stays a red chip in both
+     themes. */
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-danger-active: #991b1b;
+  --color-danger-fg: #ffffff;
+
+  --font-sans: "Vazirmatn", Tahoma, "Segoe UI", system-ui, sans-serif;
+
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-soft: 0 1px 2px rgb(20 18 17 / 0.04), 0 8px 24px -8px rgb(20 18 17 / 0.1);
+  --shadow-lift: 0 2px 4px rgb(20 18 17 / 0.05), 0 16px 40px -12px rgb(20 18 17 / 0.16);
+  --shadow-glow:
+    0 0 0 1px rgb(217 140 31 / 0.18), 0 10px 40px -10px rgb(217 140 31 / 0.35);
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-scale-in: scale-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-slide-up: slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-pulse-ring: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Dark theme — product chrome only.
+
+   Implemented by *re-pointing the same tokens* rather than by adding `dark:`
+   variants to sixty components. The ink scale is used semantically everywhere
+   (ink-50 is the page, ink-900 is the text), so reversing it flips the whole
+   dashboard consistently and no component has to know a theme exists.
+
+   The values are not a mechanical inversion. Mid-scale greys that read as
+   "secondary text" on paper are unreadable on near-black, so ink-500 is lifted
+   until it clears 4.5:1 against the page; likewise the brand tints, which are
+   pale chips in light mode and must become dark washes here rather than glare.
+
+   **Scoped to the signed-in panel, not to the document.** The attribute is
+   rendered on the dashboard and admin wrappers, never on <html>, so the
+   marketing site, the pricing page, login and every public menu stay on the
+   light palette whatever the operator's preference or their OS setting. Dark
+   mode here is a tool for the person working the evening shift, not a
+   restyling of the storefront.
+
+   Two selectors, deliberately:
+     * `[data-theme="system"]` inside the media query follows the OS, so "light"
+       remains a real choice rather than a no-op;
+     * `[data-theme="dark"]` is an explicit choice and wins over the system.
+
+   Tenant menus are untouched. They render inside `.menu-scope` against the
+   --m-* properties from src/lib/theme.ts, so a guest's menu never inherits the
+   owner's dashboard theme, and an owner reading their menu in dark mode still
+   sees exactly what their customers see.
+
+   Note what is NOT inverted: `--color-ink-950` and `--color-sidebar`. Every use
+   of ink-950 wants a near-black — the sidebar panel, modal backdrops, and the
+   label on a saffron chip — so inverting it turned the sidebar pure white and
+   put white text on yellow. In dark mode only *type* goes light; no surface
+   here is ever pure white.
+--------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --color-ink-50: #171514;
+    /* Lifted so structure is actually visible. ink-100 was #211e1c — byte for
+       byte the same as --color-surface — so every `divide-ink-100` row rule and
+       every `bg-ink-100` chip on a card was invisible, and ink-200 dividers sat
+       at 1.18:1. ink-400 carries icons, placeholders and secondary labels and
+       was 2.81:1 against a card; it now clears 4.5:1. */
+    --color-ink-100: #2b2724;
+    --color-ink-200: #454039;
+    --color-ink-300: #56504a;
+    --color-ink-400: #948b7e;
+    --color-ink-500: #a29a8f;
+    --color-ink-600: #bdb5aa;
+    --color-ink-700: #d5cec5;
+    --color-ink-800: #e8e4dd;
+    --color-ink-900: #f5f3ef;
+    --color-ink-950: #141211;
+
+    --color-surface: #211e1c;
+    --color-sidebar: #0f0e0d;
+
+    --color-brand-50: #2a1d08;
+    --color-brand-100: #3a280b;
+    --color-brand-200: #553a0f;
+    --color-brand-300: #7f3e18;
+    --color-brand-700: #ecbd58;
+    --color-brand-800: #f3d795;
+
+    --color-accent-50: #08251f;
+    --color-accent-100: #0d3229;
+    --color-accent-200: #16514a;
+    --color-accent-700: #7bd7c1;
+    --color-accent-800: #afe9d8;
+
+    /* ---- status palettes — see the note above the light block ---- */
+    --color-emerald-50: #06251c;
+    --color-emerald-100: #0a3327;
+    --color-emerald-200: #14543f;
+    --color-emerald-600: #5ddaa8;
+    --color-emerald-700: #6ee7b7;
+    --color-emerald-800: #a7f3d0;
+    --color-emerald-900: #d1fae5;
+
+    --color-red-50: #2c1214;
+    --color-red-100: #3d1719;
+    --color-red-200: #5c1f22;
+    --color-red-300: #7f2a2d;
+    --color-red-400: #b45156;
+    --color-red-600: #ff8f8f;
+    --color-red-700: #fca5a5;
+    --color-red-800: #fecaca;
+    --color-red-900: #fee2e2;
+
+    --color-amber-50: #2a1d08;
+    --color-amber-100: #3a280b;
+    --color-amber-200: #553a0f;
+    --color-amber-300: #7a5211;
+    --color-amber-400: #a06f14;
+    --color-amber-600: #f0b445;
+    --color-amber-700: #fbbf24;
+    --color-amber-800: #fcd34d;
+    --color-amber-900: #fde68a;
+
+    --color-orange-50: #2b1608;
+    --color-orange-200: #5c2f10;
+    --color-orange-300: #7d3f14;
+    --color-orange-900: #fed7aa;
+
+    --color-rose-50: #2d1119;
+    --color-rose-600: #fda4af;
+
+    --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -8px rgb(0 0 0 / 0.6);
+    --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.45), 0 16px 40px -12px rgb(0 0 0 / 0.7);
+
+    color-scheme: dark;
+  }
+}
+
+[data-theme="dark"] {
+  --color-ink-50: #171514;
+  /* Lifted so structure is actually visible. ink-100 was #211e1c — byte for
+     byte the same as --color-surface — so every `divide-ink-100` row rule and
+     every `bg-ink-100` chip on a card was invisible, and ink-200 dividers sat
+     at 1.18:1. ink-400 carries icons, placeholders and secondary labels and
+     was 2.81:1 against a card; it now clears 4.5:1. */
+  --color-ink-100: #2b2724;
+  --color-ink-200: #454039;
+  --color-ink-300: #56504a;
+  --color-ink-400: #948b7e;
+  --color-ink-500: #a29a8f;
+  --color-ink-600: #bdb5aa;
+  --color-ink-700: #d5cec5;
+  --color-ink-800: #e8e4dd;
+  --color-ink-900: #f5f3ef;
+  --color-ink-950: #141211;
+
+  --color-surface: #211e1c;
+  --color-sidebar: #0f0e0d;
+
+  --color-brand-50: #2a1d08;
+  --color-brand-100: #3a280b;
+  --color-brand-200: #553a0f;
+  --color-brand-300: #7f3e18;
+  --color-brand-700: #ecbd58;
+  --color-brand-800: #f3d795;
+
+  --color-accent-50: #08251f;
+  --color-accent-100: #0d3229;
+  --color-accent-200: #16514a;
+  --color-accent-700: #7bd7c1;
+  --color-accent-800: #afe9d8;
+
+  /* ---- status palettes — see the note above the light block ---- */
+  --color-emerald-50: #06251c;
+  --color-emerald-100: #0a3327;
+  --color-emerald-200: #14543f;
+  --color-emerald-600: #5ddaa8;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+  --color-emerald-900: #d1fae5;
+
+  --color-red-50: #2c1214;
+  --color-red-100: #3d1719;
+  --color-red-200: #5c1f22;
+  --color-red-300: #7f2a2d;
+  --color-red-400: #b45156;
+  --color-red-600: #ff8f8f;
+  --color-red-700: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-red-900: #fee2e2;
+
+  --color-amber-50: #2a1d08;
+  --color-amber-100: #3a280b;
+  --color-amber-200: #553a0f;
+  --color-amber-300: #7a5211;
+  --color-amber-400: #a06f14;
+  --color-amber-600: #f0b445;
+  --color-amber-700: #fbbf24;
+  --color-amber-800: #fcd34d;
+  --color-amber-900: #fde68a;
+
+  --color-orange-50: #2b1608;
+  --color-orange-200: #5c2f10;
+  --color-orange-300: #7d3f14;
+  --color-orange-900: #fed7aa;
+
+  --color-rose-50: #2d1119;
+  --color-rose-600: #fda4af;
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.45), 0 16px 40px -12px rgb(0 0 0 / 0.7);
+
+  color-scheme: dark;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes pulse-ring {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* --------------------------------- base --------------------------------- */
+
+@layer base {
+  * {
+    border-color: var(--color-ink-200);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-ink-50);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    /* Persian glyphs sit better with slightly looser tracking. */
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+     Re-establish the inherited text colour inside a themed scope.
+
+     `body` sits *outside* the `[data-theme]` wrapper — the dark palette is
+     deliberately scoped to the signed-in panel rather than to the document — so
+     `color: var(--color-ink-900)` above resolves against the light tokens and
+     descendants inherit the computed near-black, not the variable. Every
+     element that does not set its own `text-*` class therefore stayed #24211f:
+     on a dark card that is 1.04:1, which is how the profit table's figures, the
+     manual-order product names and several dashboard labels became invisible
+     while the elements that *did* carry a text class looked fine.
+
+     Resolving the same variable again inside the scope fixes all of them at
+     once. In light mode it computes to exactly what `body` already set, so
+     nothing about the light theme changes.
+  */
+  [data-theme] {
+    color: var(--color-ink-900);
+  }
+
+  /* Persian numerals should never be rendered in a fallback Latin face. */
+  :lang(fa) {
+    font-feature-settings: "ss01";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+    font-weight: 700;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Native controls follow the document direction. */
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /*
+     Removes the ~300ms delay mobile browsers hold before firing a click while
+     they wait to see whether the tap was a double-tap-to-zoom. On a QR menu
+     every interaction is a tap, and that delay is the single most noticeable
+     source of "this feels like a website, not an app".
+  */
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label,
+  summary {
+    touch-action: manipulation;
+  }
+
+  /* Pointer affordance on anything actionable. */
+  button:not(:disabled),
+  a[href],
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--color-ink-950);
+  }
+
+  /* Scrollbars — subtle, and direction-aware by virtue of being inline. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-300) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-300);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-clip: content-box;
+    background-color: var(--color-ink-400);
+  }
+}
+
+/* ------------------------------ utilities ------------------------------- */
+
+@utility glass {
+  background: rgb(255 255 255 / 0.72);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgb(255 255 255 / 0.6);
+
+  /* A white scrim over a dark page reads as fog, so the frosted header inverts
+     inside the signed-in panel. The marketing header keeps the light glass. */
+  [data-theme="dark"] & {
+    background: rgb(33 30 28 / 0.72);
+    border-color: rgb(255 255 255 / 0.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    [data-theme="system"] & {
+      background: rgb(33 30 28 / 0.72);
+      border-color: rgb(255 255 255 / 0.08);
+    }
+  }
+}
+
+@utility glass-dark {
+  background: rgb(20 18 17 / 0.55);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgb(255 255 255 / 0.1);
+}
+
+/* Hides content visually while leaving it available to screen readers. */
+@utility sr-only-focusable {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+   Guarantees a 44×44px touch area (WCAG 2.5.5 / Apple HIG) without forcing the
+   control to *look* 44px. The pseudo-element grows the hit region outward, so a
+   compact 36px icon button stays visually compact while becoming reliably
+   tappable. Only applied on coarse pointers — on a mouse the padding is wasted
+   space and can overlap neighbouring controls.
+*/
+@utility tap-safe {
+  position: relative;
+
+  @media (pointer: coarse) {
+    &::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      translate: -50% -50%;
+      min-width: 44px;
+      min-height: 44px;
+      width: 100%;
+      height: 100%;
+    }
+  }
+}
+
+/*
+   Horizontal chip rails (category navigation). Snap points stop a flick from
+   leaving a chip half-cut, and the edge padding keeps the first and last chip
+   clear of the screen edge on a phone.
+*/
+@utility chip-rail {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  & > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+}
+
+/*
+   Any flex/grid child that contains a scrollable table needs this, or it
+   inflates to its content width and pushes the whole page sideways instead of
+   scrolling internally.
+*/
+@utility min-w-0-fix {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Loading placeholder that works on any background. */
+@utility skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-ink-100) 25%,
+    var(--color-ink-200) 37%,
+    var(--color-ink-100) 63%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* --------------------------- tenant menu scope --------------------------- */
+/*
+   Applied to the root of every public menu. All values come from
+   themeToCssVars(); nothing here is hard-coded to a particular restaurant.
+*/
+.menu-scope {
+  background-color: var(--m-bg);
+  color: var(--m-text);
+  font-family: var(--m-font);
+  min-height: 100dvh;
+}
+
+.menu-surface {
+  background: var(--m-surface-bg);
+  backdrop-filter: var(--m-surface-blur);
+  -webkit-backdrop-filter: var(--m-surface-blur);
+  box-shadow: var(--m-surface-shadow);
+  border: 1px solid var(--m-surface-border);
+  border-radius: var(--m-radius);
+}
+
+.menu-bg-image {
+  position: fixed;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.menu-bg-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--m-overlay);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   The financial report is a *document*, not a screen.
+
+   It is laid out to be printed and its on-screen form is a preview of the page
+   that comes out of the printer, so it is pinned to the light palette in both
+   themes. A dark preview of a document that prints white is a preview of
+   nothing, and the owner would only discover the mismatch after printing.
+--------------------------------------------------------------------------- */
+.report-doc {
+  --color-ink-50: #faf9f7;
+  --color-ink-100: #f2f0ec;
+  --color-ink-200: #e6e2db;
+  --color-ink-300: #d3cdc2;
+  --color-ink-400: #a8a094;
+  --color-ink-500: #857c70;
+  --color-ink-600: #6b6359;
+  --color-ink-700: #57504a;
+  --color-ink-800: #3b3733;
+  --color-ink-900: #24211f;
+  --color-ink-950: #141211;
+  --color-surface: #ffffff;
+  --color-brand-50: #fdf8ed;
+  --color-brand-100: #f9ecc9;
+  --color-brand-700: #9c4e15;
+  --color-accent-50: #eefbf7;
+  --color-accent-100: #d5f5ea;
+  --color-accent-700: #16665b;
+  color-scheme: light;
+  background: #ffffff;
+  color: var(--color-ink-900);
+}
+
+/* ------------------------------ print sheet ------------------------------ */
+/*
+   The QR sheet is the one thing owners physically print, so it gets real
+   print styles rather than relying on the browser's default reflow.
+*/
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .qr-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px dashed #999 !important;
+    box-shadow: none !important;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+
+  /*
+     Financial report pagination. The report is a real document, so the cover
+     gets its own page, each section starts cleanly, and tables never split a
+     row or orphan a header across a page boundary.
+  */
+  .report-doc {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .report-cover {
+    min-height: auto !important;
+    break-after: page;
+    page-break-after: always;
+    padding-top: 40mm;
+  }
+
+  .report-section {
+    break-inside: avoid-page;
+    margin-top: 10mm;
+  }
+
+  .report-section h2 {
+    break-after: avoid-page;
+  }
+
+  .report-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-doc table {
+    break-inside: auto;
+  }
+
+  .report-doc tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Repeat column headers when a long table spills onto the next page. */
+  .report-doc thead {
+    display: table-header-group;
+  }
+
+  /* Backgrounds and chart fills must survive the print colour pass. */
+  .report-doc * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+.print-only {
+  display: none;
+}
+
+/* --------------------------- motion preferences -------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

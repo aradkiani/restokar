@@ -1,0 +1,16 @@
+-- AlterTable
+ALTER TABLE "Order" ADD COLUMN     "roundingAdjustment" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "serviceCharge" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "tax" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "tip" INTEGER NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "Restaurant" ADD COLUMN     "minimumOrderAmount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "roundingDirection" TEXT NOT NULL DEFAULT 'nearest',
+ADD COLUMN     "roundingIncrement" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "serviceChargeEnabled" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "serviceChargePercent" INTEGER NOT NULL DEFAULT 10,
+ADD COLUMN     "taxEnabled" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "taxPercent" INTEGER NOT NULL DEFAULT 9,
+ADD COLUMN     "tipEnabled" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "tipPercents" INTEGER[] DEFAULT ARRAY[5, 10, 15]::INTEGER[];

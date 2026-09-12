@@ -1,0 +1,13 @@
+# Machine-generated — reformatting it creates noise and is undone by the next
+# `prisma generate`.
+src/generated/
+prisma/migrations/
+
+.next/
+node_modules/
+public/uploads/
+*.tsbuildinfo
+package-lock.json
+
+# Editor/agent tooling, not project source.
+.claude/
