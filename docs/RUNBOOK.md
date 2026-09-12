@@ -197,25 +197,6 @@ sudo tail -n 100 /var/log/nginx/error.log
 
 ## Take a backup
 
-> **KNOWN BROKEN as of 2026-09-12 — read before relying on this.**
->
-> `npm run backup` currently **refuses to run**. Eleven tables added by
-> migrations since 2026-09-04 (`DiscountCode`, `SupportTicket`, `InventoryItem`,
-> `ProductIngredient`, `StockMovement`, `RecommendationEvent`,
-> `AvailabilityWindow`, `ProductRecommendation`, `FeaturedProductEvent`,
-> `Customer`, `Campaign`) are not listed in `TABLE_ORDER` in
-> `src/lib/backup/export.ts`, and the script's own completeness check stops
-> rather than write a backup that would silently omit them.
->
-> That check is doing its job — the failure is the missing list entries, not the
-> guard. **The newest archive on disk is from 2026-08-26.** Until `TABLE_ORDER`
-> is updated there is no current backup, and a restore from the newest archive
-> would lose every discount code, support ticket, inventory record, customer and
-> campaign.
->
-> See also the restore defect below. Both must be fixed before this procedure
-> can be trusted.
-
 Do this before any update, any migration, and any restore.
 
 ```bash
@@ -251,27 +232,10 @@ ls -lht /var/lib/menuland/backups/ | head
 > Take a fresh backup first — even a broken current state is worth keeping until
 > you are sure the restore worked.
 
-> **KNOWN BROKEN as of 2026-09-12 — this procedure does not currently work.**
->
-> A rehearsal into a scratch database (commands below) failed on the first table
-> after `Plan`:
->
-> ```
-> insert or update on table "User" violates foreign key constraint
-> "User_restaurantId_fkey"
-> ```
->
-> `Restaurant.ownerId` references `User` and `User.restaurantId` references
-> `Restaurant` — a circular foreign key. `TABLE_ORDER` in
-> `src/lib/backup/export.ts` is a flat parent-before-child list, and **no flat
-> ordering can satisfy a cycle.** None of the 49 foreign keys are `DEFERRABLE`,
-> so `SET CONSTRAINTS ALL DEFERRED` cannot work around it without a schema
-> change. Restoring users needs a two-pass insert (users with a null
-> `restaurantId`, then restaurants, then an update to set it).
->
-> The one piece of good news: the restore runs inside a transaction and **rolled
-> back cleanly**. The scratch database was left completely empty, not
-> half-filled. A failed restore does not leave a corrupted database.
+> Verified end to end on 2026-09-12 against a scratch database: 31 tables,
+> 51,918 rows and 109 uploaded files restored with every row count, id, foreign
+> key and file hash identical to the source. See
+> [Rehearse a restore](#rehearse-a-restore).
 
 ### 1. See what the archive contains, without touching anything
 
@@ -323,6 +287,11 @@ A backup you have not restored is a hypothesis. Rehearse into a **scratch
 database** — never into the live one. These are the exact commands used for the
 2026-09-12 rehearsal, run from the application directory.
 
+That rehearsal restored 31 tables, 51,918 rows and 109 uploaded files in 8.3
+seconds, and every row count, id set, foreign key and file hash came back
+identical to the source. Repeat it after any change to the backup or restore
+code, and after any migration that adds a table.
+
 Create the scratch database and give it the current schema:
 
 ```bash
@@ -349,7 +318,11 @@ npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=men
 ```
 
 Compare row counts against the counts the dry run printed from the archive
-manifest, then drop the scratch database:
+manifest. `Session` and `RateLimit` are expected to be empty — they are excluded
+from the backup on purpose — and `.gitkeep` is expected to be absent from the
+restored uploads for the same reason. Everything else must match exactly.
+
+Then drop the scratch database:
 
 ```bash
 psql "$DATABASE_URL" -c 'DROP DATABASE menuland_restore_rehearsal'

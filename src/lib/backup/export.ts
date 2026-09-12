@@ -25,6 +25,20 @@ import { writeTarGz, type ArchiveEntry } from "./archive";
  * Written down rather than derived, because a restore has to apply these in an
  * order that satisfies the foreign keys, and the person doing the restore
  * should not have to work that out during an incident.
+ *
+ * One edge is deliberately *not* satisfiable here: `Restaurant.ownerId`
+ * references `User` and `User.restaurantId` references `Restaurant`, so no flat
+ * ordering can put both children after both parents. `User` is listed first and
+ * the restore writes `restaurantId` on a second pass — see DEFERRED_COLUMNS in
+ * scripts/backup-restore.ts. Changing the relative position of `User` and
+ * `Restaurant` here without reading that will produce a restore that fails on
+ * its second table.
+ *
+ * `export.test.ts` asserts this list still covers every model in the Prisma
+ * schema. That test exists because this list silently fell eleven tables behind
+ * between 2026-09-04 and 2026-09-12, and the completeness check below — which
+ * only runs when a backup is actually taken — reported it as a hard failure
+ * that nobody was reading.
  */
 const TABLE_ORDER = [
   "Plan",
@@ -39,6 +53,9 @@ const TABLE_ORDER = [
   "ProductInfoSection",
   "RestaurantTable",
   "StaffCall",
+  // Both are referenced by Order, so they precede it.
+  "Customer",
+  "Campaign",
   "Order",
   "OrderItem",
   "OrderItemOption",
@@ -47,6 +64,16 @@ const TABLE_ORDER = [
   "Payment",
   "AuditLog",
   "PlatformSetting",
+  "AvailabilityWindow",
+  "DiscountCode",
+  "FeaturedProductEvent",
+  // InventoryItem precedes the two tables that reference it.
+  "InventoryItem",
+  "ProductIngredient",
+  "ProductRecommendation",
+  "RecommendationEvent",
+  "StockMovement",
+  "SupportTicket",
 ] as const;
 
 /**

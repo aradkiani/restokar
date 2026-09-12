@@ -79,6 +79,50 @@ interface Manifest {
 }
 
 /**
+ * Columns held back on the first insert and written on a second pass.
+ *
+ * `Restaurant.ownerId` references `User` and `User.restaurantId` references
+ * `Restaurant`. That is a cycle, and no flat table order can satisfy it: an
+ * insert into whichever table comes first fails because the row it points at
+ * does not exist yet. Restoring users used to fail on exactly this, one table
+ * into the run.
+ *
+ * A two-pass insert works because the cycle has a nullable side.
+ * `User.restaurantId` is nullable (`String?` — it is null for SUPER_ADMIN
+ * accounts, which belong to no tenant), while `Restaurant.ownerId` is NOT NULL.
+ * So users go in first with `restaurantId` held back, restaurants follow and
+ * find their owners, and the held-back values are written afterwards. Nothing
+ * about the schema changes, and no constraint is dropped, disabled or deferred
+ * — every foreign key is enforced at every moment.
+ *
+ * The whole thing still runs inside one transaction, so a failure anywhere,
+ * including in the second pass, rolls the target back to untouched.
+ *
+ * A table listed here must have an `id` column, which every model in this
+ * schema does; the second pass keys on it.
+ */
+const DEFERRED_COLUMNS: Record<string, readonly string[]> = {
+  User: ["restaurantId"],
+};
+
+/**
+ * How long the restore transaction may run.
+ *
+ * Prisma's interactive transactions default to five seconds, which is a sane
+ * limit for a request handler and far too short for this: the restore writes
+ * every row the archive holds one INSERT at a time, and a modest development
+ * dataset of ~51,000 rows blows through five seconds around the order table.
+ * The restore then aborts and rolls back — safely, but never finishing.
+ *
+ * Thirty minutes is deliberately generous. A restore is a rare, supervised
+ * operation run with the application stopped, so a long-held transaction costs
+ * nothing, while a restore that dies four fifths of the way through costs an
+ * incident. Raise it if a dataset ever needs longer; the work is bounded by the
+ * archive, not by this number.
+ */
+const TRANSACTION_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
  * The database `DATABASE_URL` actually resolves to.
  *
  * Read from the environment rather than from `src/lib/env.ts` so the guard
@@ -211,44 +255,118 @@ async function main() {
 
   console.log("\nRestoring…");
 
-  await prisma.$transaction(async (tx) => {
-    // Emptied in reverse dependency order, then filled forwards. CASCADE covers
-    // the excluded tables (Session, RateLimit) that reference restored rows.
-    for (const table of [...manifest.tableOrder].reverse()) {
-      await tx.$executeRawUnsafe(
-        `TRUNCATE TABLE ${quoteIdent(table)} RESTART IDENTITY CASCADE`,
-      );
-    }
+  // Column types for the whole schema, read once. `normalise` needs them to
+  // tell a native array column from a json one.
+  const typeRows = await prisma.$queryRaw<
+    { table_name: string; column_name: string; udt_name: string }[]
+  >`
+    SELECT table_name, column_name, udt_name FROM information_schema.columns
+    WHERE table_schema = 'public'
+  `;
+  const columnType = new Map(
+    typeRows.map((row) => [`${row.table_name}.${row.column_name}`, row.udt_name]),
+  );
 
-    for (const table of manifest.tableOrder) {
-      const chunks = entries
-        .filter((e) => new RegExp(`^database/${table}(\\.\\d+)?\\.json$`).test(e.name))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      let restored = 0;
-      for (const chunk of chunks) {
-        const rows = JSON.parse(chunk.content.toString("utf8")) as Record<
-          string,
-          unknown
-        >[];
-        if (rows.length === 0) continue;
-
-        const columns = Object.keys(rows[0]!);
-        const columnList = columns.map(quoteIdent).join(", ");
-
-        for (const row of rows) {
-          const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-          const values = columns.map((column) => normalise(row[column]));
-          await tx.$executeRawUnsafe(
-            `INSERT INTO ${quoteIdent(table)} (${columnList}) VALUES (${placeholders})`,
-            ...values,
-          );
-          restored += 1;
-        }
+  await prisma.$transaction(
+    async (tx) => {
+      // Emptied in reverse dependency order, then filled forwards. CASCADE covers
+      // the excluded tables (Session, RateLimit) that reference restored rows.
+      for (const table of [...manifest.tableOrder].reverse()) {
+        await tx.$executeRawUnsafe(
+          `TRUNCATE TABLE ${quoteIdent(table)} RESTART IDENTITY CASCADE`,
+        );
       }
-      console.log(`  ${table.padEnd(24)} ${restored}`);
-    }
-  });
+
+      // Values held back by DEFERRED_COLUMNS, replayed once every table is in.
+      const deferredWrites: {
+        table: string;
+        id: unknown;
+        values: Record<string, unknown>;
+      }[] = [];
+
+      for (const table of manifest.tableOrder) {
+        const chunks = entries
+          .filter((e) => new RegExp(`^database/${table}(\\.\\d+)?\\.json$`).test(e.name))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        const deferred = DEFERRED_COLUMNS[table] ?? [];
+
+        let restored = 0;
+        for (const chunk of chunks) {
+          const rows = JSON.parse(chunk.content.toString("utf8")) as Record<
+            string,
+            unknown
+          >[];
+          if (rows.length === 0) continue;
+
+          const columns = Object.keys(rows[0]!);
+          const columnList = columns.map(quoteIdent).join(", ");
+
+          if (deferred.length > 0 && !columns.includes("id")) {
+            throw new Error(
+              `${table} has deferred columns but no id column to key the second pass on.`,
+            );
+          }
+
+          for (const row of rows) {
+            const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
+            const values = columns.map((column) =>
+              deferred.includes(column)
+                ? null
+                : normalise(row[column], columnType.get(`${table}.${column}`)),
+            );
+            await tx.$executeRawUnsafe(
+              `INSERT INTO ${quoteIdent(table)} (${columnList}) VALUES (${placeholders})`,
+              ...values,
+            );
+
+            // Only rows that actually carried a value need revisiting; a
+            // SUPER_ADMIN's null restaurantId is already correct.
+            if (
+              deferred.some((column) => row[column] !== null && row[column] !== undefined)
+            ) {
+              deferredWrites.push({
+                table,
+                id: row.id,
+                values: Object.fromEntries(
+                  deferred.map((column) => [column, row[column]]),
+                ),
+              });
+            }
+
+            restored += 1;
+          }
+        }
+        console.log(`  ${table.padEnd(24)} ${restored}`);
+      }
+
+      // Second pass: the cycle's nullable side, now that both ends exist.
+      for (const write of deferredWrites) {
+        const columns = Object.keys(write.values);
+        const assignments = columns
+          .map((column, i) => `${quoteIdent(column)} = $${i + 1}`)
+          .join(", ");
+
+        await tx.$executeRawUnsafe(
+          `UPDATE ${quoteIdent(write.table)} SET ${assignments} WHERE "id" = $${columns.length + 1}`,
+          ...columns.map((column) =>
+            normalise(write.values[column], columnType.get(`${write.table}.${column}`)),
+          ),
+          write.id,
+        );
+      }
+
+      if (deferredWrites.length > 0) {
+        console.log(`  ${"(deferred refs)".padEnd(24)} ${deferredWrites.length}`);
+      }
+    },
+    {
+      timeout: TRANSACTION_TIMEOUT_MS,
+      // Time to wait for a connection before giving up. The default two seconds
+      // is tight when the pool is busy, and failing here wastes the whole run.
+      maxWait: 30_000,
+    },
+  );
 
   for (const entry of uploadEntries) {
     const relative = entry.name.slice("uploads/".length);
@@ -264,10 +382,27 @@ async function main() {
 
 /**
  * JSON gives back strings for timestamps; Postgres wants something it can cast.
- * Objects and arrays are re-serialised for json/jsonb columns.
+ * Objects are re-serialised for json/jsonb columns.
+ *
+ * `udtName` decides what to do with an array, and getting it wrong is not a
+ * detail: Postgres writes a native array as `{a,b}` and JSON as `[a,b]`, and it
+ * rejects each in the other's column. Stringifying everything made
+ * `User.staffTabs` (`_text`) fail with `malformed array literal: "[]"` on the
+ * first account restored. Passing everything through would break the three
+ * `jsonb` columns instead.
+ *
+ * So native array columns — `_`-prefixed in `udt_name`, which is
+ * `User.staffTabs` and `Restaurant.tipPercents` today — hand the JS array
+ * straight to the driver, which builds the `{…}` literal itself. Everything
+ * else keeps the old behaviour.
+ *
+ * Neither array column existed when the last restorable archive was taken,
+ * which is why this surfaced only once the restore got far enough to reach
+ * them.
  */
-function normalise(value: unknown): unknown {
+function normalise(value: unknown, udtName: string | undefined): unknown {
   if (value === null || value === undefined) return null;
+  if (Array.isArray(value) && udtName?.startsWith("_")) return value;
   if (typeof value === "object") return JSON.stringify(value);
   return value;
 }
