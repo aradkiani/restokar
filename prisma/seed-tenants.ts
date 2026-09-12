@@ -11,6 +11,9 @@
  *
  * Idempotent: a slug that already exists is skipped, so re-running is safe.
  */
+// MUST be first: refuses to run against anything but a local development
+// database, before the client below is constructed.
+import { demoSeedPassword } from "./demo-seed-guard";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -35,7 +38,7 @@ const prisma = new PrismaClient({ adapter });
 /** Three months of history, which is what makes month-over-month comparisons real. */
 const DAYS_OF_HISTORY = 92;
 
-const SHARED_PASSWORD = "password123";
+const SHARED_PASSWORD = demoSeedPassword();
 
 interface TenantSpec {
   slug: string;
@@ -447,7 +450,7 @@ async function main() {
     await seedTenant(spec);
   }
 
-  console.log("\nSign in with (password: password123):\n");
+  console.log(`\nSign in with (password: ${SHARED_PASSWORD}):\n`);
   for (const spec of TENANTS) {
     console.log(
       `  ${spec.templateId.padEnd(7)} ${spec.ownerEmail.padEnd(34)} ${spec.name}`,

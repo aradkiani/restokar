@@ -474,6 +474,14 @@ npm run db:restore FILE    # restore one
 > `npm run db:reset` **drops the entire database**, re-runs every migration and
 > re-seeds. It is a local development command. Never run it on a server.
 
+**The demo seeds must never be run on the server** — they create sample
+restaurants, months of invented orders and accounts with a known password.
+`prisma/demo-seed-guard.ts` enforces this before any connection is opened: every
+seed refuses unless `ALLOW_DEMO_SEED="true"`, `DATABASE_URL` points at localhost
+or 127.0.0.1, and `NODE_ENV` is not `production`, failing closed if the URL is
+missing or unparseable. The account password comes from `DEMO_SEED_PASSWORD`, or
+is generated per run and printed once, so no working password is committed.
+
 ---
 
 ## Before you finish

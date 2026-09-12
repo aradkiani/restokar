@@ -6,6 +6,9 @@
  * Idempotent: re-running upserts plans and skips restaurants that already
  * exist, so `npm run db:seed` is safe to repeat.
  */
+// MUST be first: refuses to run against anything but a local development
+// database, before the client below is constructed.
+import { demoSeedPassword } from "./demo-seed-guard";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import bcrypt from "bcryptjs";
@@ -480,7 +483,7 @@ async function seedRestaurant(options: {
     },
   });
 
-  const passwordHash = await bcrypt.hash("password123", 12);
+  const passwordHash = await bcrypt.hash(demoSeedPassword(), 12);
   const plan = await prisma.plan.findUniqueOrThrow({ where: { code: options.planCode } });
 
   const owner = await prisma.user.create({
@@ -702,7 +705,7 @@ async function seedChain() {
     },
   ];
 
-  const passwordHash = await bcrypt.hash("password123", 12);
+  const passwordHash = await bcrypt.hash(demoSeedPassword(), 12);
 
   for (const spec of BRANCHES) {
     const branch = await prisma.restaurant.create({
@@ -915,7 +918,7 @@ async function seedAdmin() {
   await prisma.user.create({
     data: {
       email,
-      passwordHash: await bcrypt.hash("password123", 12),
+      passwordHash: await bcrypt.hash(demoSeedPassword(), 12),
       name: "مدیر پلتفرم",
       role: "SUPER_ADMIN",
     },
@@ -970,12 +973,13 @@ async function main() {
 
   console.log("\nDone.\n");
   console.log("Sign in with:");
-  console.log("  chain owner    → owner@karimi.ir / password123");
-  console.log("  branch manager → vanak@karimi.ir / password123");
-  console.log("  owner   → owner@cafe-nabsh.ir / password123");
-  console.log("  owner   → owner@burger-lab.ir / password123");
-  console.log("  kitchen → kitchen@cafe-nabsh.ir / password123");
-  console.log("  admin   → admin@menuland.ir / password123");
+  const password = demoSeedPassword();
+  console.log(`  chain owner    → owner@karimi.ir / ${password}`);
+  console.log(`  branch manager → vanak@karimi.ir / ${password}`);
+  console.log(`  owner   → owner@cafe-nabsh.ir / ${password}`);
+  console.log(`  owner   → owner@burger-lab.ir / ${password}`);
+  console.log(`  kitchen → kitchen@cafe-nabsh.ir / ${password}`);
+  console.log(`  admin   → admin@menuland.ir / ${password}`);
   console.log("\nTenant menus: /menu/cafe-nabsh · /menu/burger-lab");
   console.log(
     "Homepage demos: /menu/demo-aurora · /menu/demo-ember · /menu/demo-linen · " +
