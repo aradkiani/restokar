@@ -53,3 +53,10 @@ src/generated/
 Thumbs.db
 desktop.ini
 *.log
+
+# Editor and tool backups. `prisma/seed.ts.bak` — a month-old copy of the seed
+# that nothing referenced — was committed by the first `git add -A` because
+# nothing here excluded it, and it carried the demo password in the clear.
+*.bak
+*.orig
+*~
