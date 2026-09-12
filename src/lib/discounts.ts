@@ -75,6 +75,95 @@ export function discountAmountFor(
 }
 
 /**
+ * Why a code was refused.
+ *
+ * Every member corresponds to a condition this schema can actually express.
+ * `DiscountCode` carries `code`, `type`, `value`, `maxDiscount` and `isActive`
+ * and nothing else, so there is deliberately no `EXPIRED`, `NOT_YET_ACTIVE`,
+ * `MIN_ORDER_NOT_MET`, `USAGE_LIMIT_REACHED` or `NOT_APPLICABLE` here. Inventing
+ * a reason the data cannot support would mean a message that is never true or,
+ * worse, one that is sometimes wrong. Adding any of them is a migration plus an
+ * owner-facing editor plus enforcement at submission, not a display change.
+ */
+export const DISCOUNT_REJECTIONS = [
+  /** The venue does not take codes at all. */
+  "DISABLED",
+  /** Nothing was typed. */
+  "EMPTY",
+  /** Typed, but nothing usable survived normalising — " - - - " and the like. */
+  "MALFORMED",
+  /** No such code for this venue, or it is switched off. See below. */
+  "NOT_FOUND",
+  /** The basket is empty, so there is nothing for a code to come off. */
+  "NO_BASKET",
+  /** A real, live code that is worth nothing here. */
+  "NO_VALUE",
+] as const;
+
+export type DiscountRejection = (typeof DISCOUNT_REJECTIONS)[number];
+
+/** The stored fields an evaluation needs. Supplied by the caller, not read here. */
+export interface DiscountRecord {
+  code: string;
+  type: DiscountType;
+  value: number;
+  maxDiscount?: number | null;
+  isActive: boolean;
+}
+
+export type DiscountEvaluation =
+  { ok: true; code: string; amount: number } | { ok: false; reason: DiscountRejection };
+
+/**
+ * Decides what a typed code is worth, or why it is worth nothing.
+ *
+ * Database-free like everything else in this module: the caller looks the code
+ * up and passes the row, so the decision itself is testable without a database
+ * and is the same decision wherever it is made.
+ *
+ * **A missing code and an inactive one both answer `NOT_FOUND`, on purpose.**
+ * That mirrors `resolveDiscountCode` in orders.ts, and the reason matters more
+ * here than there: distinguishing them would confirm which codes exist, and
+ * this function backs a preview endpoint a guest can call repeatedly without
+ * ever placing an order. Telling someone "that code is switched off" is telling
+ * them the code is real, one guess at a time.
+ *
+ * Order of checks is from cheapest and most general to most specific, so the
+ * reason a guest is shown is the first thing actually wrong rather than a
+ * downstream consequence of it.
+ */
+export function evaluateDiscount(args: {
+  enabled: boolean;
+  raw: string | null | undefined;
+  subtotal: number;
+  found: DiscountRecord | null;
+}): DiscountEvaluation {
+  if (!args.enabled) return { ok: false, reason: "DISABLED" };
+
+  const typed = args.raw?.trim();
+  if (!typed) return { ok: false, reason: "EMPTY" };
+
+  const code = normaliseCode(typed);
+  // Same rule the owner-side input schema enforces, so a string that could
+  // never have been saved as a code is refused as malformed rather than
+  // reported as a code that does not exist.
+  if (!/[A-Z0-9]/.test(code)) return { ok: false, reason: "MALFORMED" };
+
+  if (!args.found || !args.found.isActive) {
+    return { ok: false, reason: "NOT_FOUND" };
+  }
+
+  const basket = Math.max(0, Math.round(args.subtotal || 0));
+  if (basket === 0) return { ok: false, reason: "NO_BASKET" };
+
+  // The one shared implementation of what a code is worth. Not re-derived here.
+  const amount = discountAmountFor(basket, args.found);
+  if (amount <= 0) return { ok: false, reason: "NO_VALUE" };
+
+  return { ok: true, code: args.found.code, amount };
+}
+
+/**
  * A code as the owner writes it.
  *
  * `value` carries two different units depending on `type`, so it is bounded

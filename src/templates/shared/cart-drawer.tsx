@@ -39,6 +39,25 @@ export function CartDrawer() {
     "CASH_ON_SITE",
   );
   const [discountCode, setDiscountCode] = React.useState("");
+  /**
+   * What the server said the typed code is worth.
+   *
+   * Never computed here. The drawer knows the size of the basket and nothing
+   * about what any code means, which is the point: the amount, the reason a
+   * code was refused, and the spelling shown back to the guest all come from
+   * `/api/public/discount-preview`. Cleared whenever the code or the basket
+   * changes, so a stale saving can never sit next to a total it no longer
+   * belongs to.
+   */
+  const [discount, setDiscount] = React.useState<{
+    code: string;
+    amount: number;
+    /** What it was computed against, so a stale figure can be spotted. */
+    subtotal: number;
+    typed: string;
+  } | null>(null);
+  const [discountReason, setDiscountReason] = React.useState<string | null>(null);
+  const [checkingDiscount, setCheckingDiscount] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [tipPercent, setTipPercent] = React.useState(0);
@@ -92,10 +111,78 @@ export function CartDrawer() {
     ? Math.round((cart.subtotal * tipPercent) / 100)
     : 0;
 
+  /**
+   * The saving, but only while it still describes what is on screen.
+   *
+   * A preview is a statement about one code and one basket. Derived rather than
+   * cleared from an effect so there is no moment — however brief — where a
+   * saving from the previous basket is rendered beside the new total; the
+   * comparison simply stops matching and the line is gone on the same render.
+   */
+  const appliedDiscount =
+    discount && discount.subtotal === cart.subtotal && discount.typed === discountCode
+      ? discount
+      : null;
+
   const price = React.useMemo(
-    () => calculatePrice(cart.subtotal, data.restaurant, { tip: tipAmount }),
-    [cart.subtotal, data.restaurant, tipAmount],
+    () =>
+      calculatePrice(cart.subtotal, data.restaurant, {
+        tip: tipAmount,
+        // The server's figure, fed through the same shared calculation the
+        // drawer already ran for tax, service and rounding. Nothing about what
+        // the code is worth is decided here.
+        discount: appliedDiscount?.amount ?? 0,
+      }),
+    [cart.subtotal, data.restaurant, tipAmount, appliedDiscount],
   );
+
+  /** Asks the server what the typed code is worth on this basket. */
+  async function checkDiscount() {
+    if (checkingDiscount) return;
+    setCheckingDiscount(true);
+    setDiscountReason(null);
+
+    try {
+      const response = await fetch("/api/public/discount-preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug: data.restaurant.slug,
+          code: discountCode,
+          subtotal: cart.subtotal,
+          tip: tipAmount,
+        }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok || !payload.ok) {
+        setDiscountReason(payload?.error?.message ?? t.publicMenu.discountCheckFailed);
+        return;
+      }
+
+      if (!payload.data.valid) {
+        // Keyed by the server's reason; an unrecognised one falls back rather
+        // than rendering "undefined" at a guest.
+        const reasons = t.publicMenu.discountRejected as Record<string, string>;
+        setDiscountReason(
+          reasons[payload.data.reason] ?? t.publicMenu.discountCheckFailed,
+        );
+        return;
+      }
+
+      setDiscount({
+        code: payload.data.code,
+        amount: payload.data.discount,
+        subtotal: cart.subtotal,
+        typed: discountCode,
+      });
+    } catch {
+      setDiscountReason(t.publicMenu.discountCheckFailed);
+    } finally {
+      setCheckingDiscount(false);
+    }
+  }
 
   async function submitOrder() {
     setError(null);
@@ -463,12 +550,24 @@ export function CartDrawer() {
                   {(price.serviceCharge > 0 ||
                     price.tax > 0 ||
                     price.roundingAdjustment !== 0 ||
-                    price.tip > 0) && (
+                    price.tip > 0 ||
+                    price.discount > 0) && (
                     <>
                       <TotalRow
                         label={t.publicMenu.subtotal}
                         value={fmt(price.subtotal)}
                       />
+                      {/* Directly under the subtotal, because that is the order
+                          the arithmetic happens in: the code comes off the
+                          basket before service and tax are added. Signed like
+                          the rounding row below, so it reads as a subtraction
+                          rather than as another charge. */}
+                      {price.discount > 0 && (
+                        <TotalRow
+                          label={t.publicMenu.discountSaving}
+                          value={fmt(-price.discount)}
+                        />
+                      )}
                       {price.serviceCharge > 0 && (
                         <TotalRow
                           label={t.publicMenu.serviceCharge}
@@ -553,23 +652,74 @@ export function CartDrawer() {
                     >
                       {t.publicMenu.discountCode}
                     </label>
-                    <input
-                      id="discount-code"
-                      value={discountCode}
-                      onChange={(e) => setDiscountCode(e.target.value)}
-                      maxLength={24}
-                      autoCapitalize="characters"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      // Codes are Latin characters even on a Persian menu, so
-                      // the field reads left-to-right whatever the page does.
-                      dir="ltr"
-                      className="tap-safe h-12 w-full rounded-[var(--m-radius-sm)] border px-3 text-sm font-bold tracking-wider uppercase"
-                      style={{
-                        borderColor: "var(--m-border)",
-                        background: "var(--m-surface-bg)",
-                      }}
-                    />
+                    {/* Field and button on one row. `gap` and the logical
+                        padding below keep this correct in both directions
+                        without a single left/right anywhere. */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="discount-code"
+                        value={discountCode}
+                        onChange={(e) => setDiscountCode(e.target.value)}
+                        maxLength={24}
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        // Codes are Latin characters even on a Persian menu, so
+                        // the field reads left-to-right whatever the page does.
+                        dir="ltr"
+                        className="tap-safe h-12 min-w-0 flex-1 rounded-[var(--m-radius-sm)] border px-3 text-sm font-bold tracking-wider uppercase"
+                        style={{
+                          borderColor: "var(--m-border)",
+                          background: "var(--m-surface-bg)",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={checkDiscount}
+                        disabled={checkingDiscount || !discountCode.trim()}
+                        className="tap-safe h-12 shrink-0 rounded-[var(--m-radius-sm)] border px-4 text-xs font-extrabold disabled:opacity-50"
+                        style={{
+                          borderColor: "var(--m-border)",
+                          color: "var(--m-primary)",
+                        }}
+                      >
+                        {checkingDiscount
+                          ? t.publicMenu.discountChecking
+                          : t.publicMenu.discountApply}
+                      </button>
+                    </div>
+
+                    {/*
+                      The outcome, either way. `role="status"` rather than
+                      `alert`: a code that did not apply is an ordinary answer
+                      to a question the guest asked, not an error condition, and
+                      it should not interrupt a screen reader mid-sentence.
+                    */}
+                    {appliedDiscount && (
+                      <p
+                        role="status"
+                        className="mt-1.5 text-xs font-semibold"
+                        style={{ color: "var(--m-primary)" }}
+                      >
+                        {t.publicMenu.discountApplied.replace(
+                          "{code}",
+                          appliedDiscount.code,
+                        )}
+                        {" — "}
+                        <bdi className="tabular-nums">
+                          {fmt(appliedDiscount.amount)} {t.common.toman}
+                        </bdi>
+                      </p>
+                    )}
+
+                    {discountReason && !appliedDiscount && (
+                      <p
+                        role="status"
+                        className="mt-1.5 text-xs font-semibold opacity-70"
+                      >
+                        {discountReason}
+                      </p>
+                    )}
                   </div>
                 )}
 

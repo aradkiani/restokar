@@ -878,6 +878,26 @@ export const fa = {
     addTip: "انعام (اختیاری)",
     noTip: "بدون انعام",
     discountCode: "کد تخفیف (اختیاری)",
+    discountApply: "اعمال",
+    discountChecking: "در حال بررسی…",
+    discountRemove: "حذف کد",
+    /** The saving, as its own line in the bill breakdown. */
+    discountSaving: "تخفیف",
+    discountApplied: "کد {code} اعمال شد",
+    /*
+      One message per reason the schema can actually justify. A missing code and
+      a switched-off one share this message on purpose — telling a guest which
+      it was would confirm the code exists, one guess at a time.
+    */
+    discountRejected: {
+      DISABLED: "این رستوران در حال حاضر کد تخفیف نمی‌پذیرد.",
+      EMPTY: "کد تخفیف را وارد کنید.",
+      MALFORMED: "کد تخفیف باید حرف یا عدد داشته باشد.",
+      NOT_FOUND: "این کد تخفیف معتبر نیست.",
+      NO_BASKET: "سبد خرید شما خالی است.",
+      NO_VALUE: "این کد روی سبد فعلی شما تخفیفی ندارد.",
+    },
+    discountCheckFailed: "بررسی کد ممکن نشد. دوباره تلاش کنید.",
     staffCallSend: "ارسال",
     staffCallSending: "در حال ارسال…",
     staffCallSent: "درخواست شما ثبت شد؛ همکاران ما در راه هستند.",

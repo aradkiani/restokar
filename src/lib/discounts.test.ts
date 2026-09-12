@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DiscountCodeInput, discountAmountFor, normaliseCode } from "./discounts";
+import {
+  DISCOUNT_REJECTIONS,
+  DiscountCodeInput,
+  type DiscountRecord,
+  discountAmountFor,
+  evaluateDiscount,
+  normaliseCode,
+} from "./discounts";
 
 /**
  * A discount code is the one figure on a bill that a *guest* supplies, which
@@ -202,5 +209,127 @@ describe("DiscountCodeInput", () => {
     expect(
       DiscountCodeInput.safeParse({ code: "---", type: "FIXED", value: 5000 }).success,
     ).toBe(false);
+  });
+});
+
+describe("evaluateDiscount", () => {
+  const live: DiscountRecord = {
+    code: "SAVE10",
+    type: "PERCENT",
+    value: 10,
+    maxDiscount: null,
+    isActive: true,
+  };
+
+  const evaluate = (over: Partial<Parameters<typeof evaluateDiscount>[0]> = {}) =>
+    evaluateDiscount({
+      enabled: true,
+      raw: "SAVE10",
+      subtotal: 200_000,
+      found: live,
+      ...over,
+    });
+
+  it("returns the amount and the stored spelling of the code", () => {
+    // The stored spelling, not the guest's: it goes onto the order and onto
+    // the owner's report, where two spellings of one code would read as two.
+    expect(evaluate({ raw: "  save10 " })).toEqual({
+      ok: true,
+      code: "SAVE10",
+      amount: 20_000,
+    });
+  });
+
+  it("agrees with discountAmountFor rather than computing its own figure", () => {
+    const result = evaluate({ subtotal: 137_000 });
+    expect(result).toEqual({
+      ok: true,
+      code: "SAVE10",
+      amount: discountAmountFor(137_000, live),
+    });
+  });
+
+  describe("rejection reasons", () => {
+    it("refuses when the venue does not take codes", () => {
+      expect(evaluate({ enabled: false })).toEqual({
+        ok: false,
+        reason: "DISABLED",
+      });
+    });
+
+    it("refuses an empty field before anything else is considered", () => {
+      for (const raw of ["", "   ", null, undefined]) {
+        expect(evaluate({ raw })).toEqual({ ok: false, reason: "EMPTY" });
+      }
+    });
+
+    it("refuses a code with no letter or digit in it", () => {
+      // Matches what DiscountCodeInput refuses on the owner's side, so a string
+      // that could never have been saved is not reported as "no such code".
+      expect(evaluate({ raw: " - - - " })).toEqual({
+        ok: false,
+        reason: "MALFORMED",
+      });
+    });
+
+    it("refuses a code this venue does not have", () => {
+      expect(evaluate({ found: null })).toEqual({
+        ok: false,
+        reason: "NOT_FOUND",
+      });
+    });
+
+    it("gives a switched-off code the same answer as a missing one", () => {
+      /*
+        Deliberate, and the single most important assertion in this block.
+        Distinguishing the two would confirm which codes exist, and this
+        function backs a preview a guest can call repeatedly without ever
+        placing an order — so "that one is switched off" is an enumeration
+        oracle. orders.ts merges them for the same reason.
+      */
+      const switchedOff = { ...live, isActive: false };
+      expect(evaluate({ found: switchedOff })).toEqual(evaluate({ found: null }));
+    });
+
+    it("refuses when there is nothing in the basket to discount", () => {
+      expect(evaluate({ subtotal: 0 })).toEqual({ ok: false, reason: "NO_BASKET" });
+    });
+
+    it("refuses a live code that is worth nothing on this basket", () => {
+      // A stored value of zero is not reachable through DiscountCodeInput, but
+      // a row predating that schema — or edited by hand — must not present the
+      // guest with a successful discount of nothing.
+      expect(evaluate({ found: { ...live, value: 0 } })).toEqual({
+        ok: false,
+        reason: "NO_VALUE",
+      });
+    });
+
+    it("reports the first thing actually wrong, not a consequence of it", () => {
+      // Disabled venue *and* an empty basket: the venue is the reason, because
+      // fixing the basket would change nothing.
+      expect(evaluate({ enabled: false, subtotal: 0, raw: "" })).toEqual({
+        ok: false,
+        reason: "DISABLED",
+      });
+    });
+  });
+
+  it("never answers with a reason the schema cannot support", () => {
+    /*
+      DiscountCode stores code, type, value, maxDiscount and isActive. There is
+      no expiry, no start date, no per-code minimum, no usage counter and no
+      product scoping, so there is no honest way to answer "expired" or "usage
+      limit reached". This pins the list: adding a member here without the
+      column behind it produces a message that is never true.
+    */
+    expect([...DISCOUNT_REJECTIONS]).toEqual([
+      "DISABLED",
+      "EMPTY",
+      "MALFORMED",
+      "NOT_FOUND",
+      "NO_BASKET",
+      "NO_VALUE",
+    ]);
   });
 });

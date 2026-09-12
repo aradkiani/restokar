@@ -106,6 +106,16 @@ export const RATE_LIMITS = {
    * traffic.
    */
   recommendationEvent: { limit: 60, windowSeconds: 300 },
+  /**
+   * Checking what a discount code is worth before ordering.
+   *
+   * Tighter than the telemetry above and deliberately so: this endpoint answers
+   * questions about codes, and answering them quickly enough, often enough, is
+   * how someone discovers a venue's promotions by guessing. A guest legitimately
+   * types one code, maybe mistypes it once, and orders — twenty in five minutes
+   * is already far more than that.
+   */
+  discountPreview: { limit: 20, windowSeconds: 300 },
 } as const;
 
 /** A staff call stays on the dashboard this long before it is treated as stale. */
