@@ -197,6 +197,25 @@ sudo tail -n 100 /var/log/nginx/error.log
 
 ## Take a backup
 
+> **KNOWN BROKEN as of 2026-09-12 — read before relying on this.**
+>
+> `npm run backup` currently **refuses to run**. Eleven tables added by
+> migrations since 2026-09-04 (`DiscountCode`, `SupportTicket`, `InventoryItem`,
+> `ProductIngredient`, `StockMovement`, `RecommendationEvent`,
+> `AvailabilityWindow`, `ProductRecommendation`, `FeaturedProductEvent`,
+> `Customer`, `Campaign`) are not listed in `TABLE_ORDER` in
+> `src/lib/backup/export.ts`, and the script's own completeness check stops
+> rather than write a backup that would silently omit them.
+>
+> That check is doing its job — the failure is the missing list entries, not the
+> guard. **The newest archive on disk is from 2026-08-26.** Until `TABLE_ORDER`
+> is updated there is no current backup, and a restore from the newest archive
+> would lose every discount code, support ticket, inventory record, customer and
+> campaign.
+>
+> See also the restore defect below. Both must be fixed before this procedure
+> can be trusted.
+
 Do this before any update, any migration, and any restore.
 
 ```bash
@@ -232,12 +251,34 @@ ls -lht /var/lib/menuland/backups/ | head
 > Take a fresh backup first — even a broken current state is worth keeping until
 > you are sure the restore worked.
 
+> **KNOWN BROKEN as of 2026-09-12 — this procedure does not currently work.**
+>
+> A rehearsal into a scratch database (commands below) failed on the first table
+> after `Plan`:
+>
+> ```
+> insert or update on table "User" violates foreign key constraint
+> "User_restaurantId_fkey"
+> ```
+>
+> `Restaurant.ownerId` references `User` and `User.restaurantId` references
+> `Restaurant` — a circular foreign key. `TABLE_ORDER` in
+> `src/lib/backup/export.ts` is a flat parent-before-child list, and **no flat
+> ordering can satisfy a cycle.** None of the 49 foreign keys are `DEFERRABLE`,
+> so `SET CONSTRAINTS ALL DEFERRED` cannot work around it without a schema
+> change. Restoring users needs a two-pass insert (users with a null
+> `restaurantId`, then restaurants, then an update to set it).
+>
+> The one piece of good news: the restore runs inside a transaction and **rolled
+> back cleanly**. The scratch database was left completely empty, not
+> half-filled. A failed restore does not leave a corrupted database.
+
 ### 1. See what the archive contains, without touching anything
 
 The script is a dry run by default. It prints what it would restore and stops.
 
 ```bash
-cd /srv/menuland && npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz
+cd /srv/menuland && npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland
 ```
 
 Read the output. It shows when the archive was taken, which schema version it
@@ -256,8 +297,14 @@ sudo systemctl stop menuland
 ### 3. Apply it
 
 ```bash
-cd /srv/menuland && npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --yes
+cd /srv/menuland && npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland --yes
 ```
+
+`--confirm=<dbname>` is checked against the database `DATABASE_URL` actually
+resolves to, before the archive is opened. If they differ the script prints both
+names and exits 1 having read and written nothing. Always pass it: it is the
+difference between restoring into the scratch database you meant and restoring
+over production because the shell still had the wrong connection string.
 
 ### 4. Start up and check
 
@@ -268,9 +315,49 @@ sudo systemctl start menuland && curl -s https://YOUR-DOMAIN/api/health
 Then open a menu page and the dashboard in a browser and confirm real data is
 there.
 
-> **Before you run this on a server, confirm which database `DATABASE_URL` in
-> `/srv/menuland/.env` points at.** The script restores into whatever that
-> variable names. It has no separate production guard.
+---
+
+## Rehearse a restore
+
+A backup you have not restored is a hypothesis. Rehearse into a **scratch
+database** — never into the live one. These are the exact commands used for the
+2026-09-12 rehearsal, run from the application directory.
+
+Create the scratch database and give it the current schema:
+
+```bash
+psql "$DATABASE_URL" -c 'CREATE DATABASE menuland_restore_rehearsal'
+```
+
+```bash
+DATABASE_URL="postgresql://USER:PASS@localhost:5432/menuland_restore_rehearsal?schema=public" npx prisma migrate deploy
+```
+
+Restore into it. `DATA_DIR` is pointed at a throwaway directory so the archive's
+uploads do not overwrite the real ones, and `--confirm` names the scratch
+database:
+
+```bash
+DATABASE_URL="postgresql://USER:PASS@localhost:5432/menuland_restore_rehearsal?schema=public" DATA_DIR=/tmp/restore-rehearsal npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland_restore_rehearsal --yes
+```
+
+Check the guard actually protects you — this must refuse, because
+`DATABASE_URL` is the live database while `--confirm` names the scratch one:
+
+```bash
+npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland_restore_rehearsal --yes
+```
+
+Compare row counts against the counts the dry run printed from the archive
+manifest, then drop the scratch database:
+
+```bash
+psql "$DATABASE_URL" -c 'DROP DATABASE menuland_restore_rehearsal'
+```
+
+> On the Windows development machine the portable PostgreSQL build ships no
+> `psql`. Create and drop the scratch database through the project's own `pg`
+> driver instead — `node -e` with a `CREATE DATABASE` / `DROP DATABASE` query.
 
 ---
 

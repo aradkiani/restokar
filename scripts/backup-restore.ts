@@ -3,11 +3,20 @@
  *
  *   npx tsx scripts/backup-restore.ts data/backups/menuland-backup-….tar.gz --yes
  *   npx tsx scripts/backup-restore.ts <archive>            (dry run: reports only)
+ *   npx tsx scripts/backup-restore.ts <archive> --confirm=menuland --yes
  *
  * DESTRUCTIVE. Every table listed in the archive's manifest is emptied and
  * refilled. Without `--yes` the script only reads the archive and prints what it
  * would do, because the one thing worse than a missing backup is a restore
  * nobody meant to run.
+ *
+ * `--confirm=<dbname>` is an optional second lock: the operator states which
+ * database they believe they are aimed at, and the run stops before reading
+ * anything if that is not the database `DATABASE_URL` resolves to. It is
+ * opt-in so that every existing invocation keeps working unchanged, but the
+ * runbook always passes it — the accident it prevents is a command recalled
+ * from shell history carrying last week's archive path and this week's
+ * production connection string.
  *
  * The counterpart to src/lib/backup/export.ts. Written because a backup that
  * has never been restored is a guess, not a safety net — this is the file that
@@ -69,6 +78,66 @@ interface Manifest {
   uploadCount: number;
 }
 
+/**
+ * The database `DATABASE_URL` actually resolves to.
+ *
+ * Read from the environment rather than from `src/lib/env.ts` so the guard
+ * still answers when the connection string is malformed — a bad URL is the
+ * connection's failure to report, and this check should not pre-empt it with a
+ * less useful error. Returns null when there is nothing trustworthy to compare.
+ */
+function databaseNameFromUrl(): string | null {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) return null;
+
+  try {
+    return new URL(raw).pathname.replace(/^\//, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Checks the operator's stated target against the real one.
+ *
+ * Returns an exit code to stop on, or null to continue. Runs before the archive
+ * is opened, so a refusal has touched nothing at all.
+ */
+function checkConfirmedTarget(): number | null {
+  const flag = process.argv.find((arg) => arg.startsWith("--confirm="));
+  if (!flag) return null;
+
+  const claimed = flag.slice("--confirm=".length).trim();
+  const actual = databaseNameFromUrl();
+
+  if (!claimed) {
+    console.error("--confirm needs a database name, e.g. --confirm=menuland");
+    return 1;
+  }
+
+  if (!actual) {
+    console.error(
+      "--confirm was given, but no database name could be read from DATABASE_URL.\n" +
+        "Refusing to run rather than assuming the target is correct.",
+    );
+    return 1;
+  }
+
+  if (claimed !== actual) {
+    console.error(
+      `REFUSING TO RUN — wrong database.\n\n` +
+        `  --confirm says:   ${claimed}\n` +
+        `  DATABASE_URL is:  ${actual}\n\n` +
+        `Nothing was read and nothing was written. Either point DATABASE_URL at ` +
+        `"${claimed}", or correct --confirm to match the database you meant.`,
+    );
+    return 1;
+  }
+
+  console.log(`Target database confirmed: ${actual}`);
+  return null;
+}
+
 /** Quotes an identifier for interpolation. Table names come from the manifest. */
 function quoteIdent(name: string): string {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
@@ -82,9 +151,15 @@ async function main() {
   const confirmed = process.argv.includes("--yes");
 
   if (!archivePath) {
-    console.error("Usage: tsx scripts/backup-restore.ts <archive.tar.gz> [--yes]");
+    console.error(
+      "Usage: tsx scripts/backup-restore.ts <archive.tar.gz> [--confirm=<dbname>] [--yes]",
+    );
     return 1;
   }
+
+  // Before the archive is opened, so a refusal is a complete no-op.
+  const refusal = checkConfirmedTarget();
+  if (refusal !== null) return refusal;
 
   const entries = readTar(gunzipSync(readFileSync(path.resolve(archivePath))));
   const byName = new Map(entries.map((e) => [e.name, e.content]));
