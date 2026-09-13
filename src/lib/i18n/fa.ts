@@ -482,6 +482,8 @@ export const fa = {
     addOptionChoice: "افزودن گزینه",
     addInfoSection: "افزودن بخش",
     noProducts: "محصولی در این دسته نیست",
+    moveUp: "انتقال به بالا",
+    moveDown: "انتقال به پایین",
     profitPreview: "سود هر واحد",
     marginPreview: "حاشیه سود",
     deleteProductConfirm: "این محصول حذف شود؟",

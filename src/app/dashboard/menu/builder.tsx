@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Pencil, Plus, Star, Trash2, UtensilsCrossed } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ImageIcon,
+  Pencil,
+  Plus,
+  Star,
+  Trash2,
+  UtensilsCrossed,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, Badge, EmptyState } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/modal";
@@ -136,6 +145,46 @@ export function MenuBuilder({
   // Keep the server copy authoritative after every mutation.
   React.useEffect(() => setCategories(initialCategories), [initialCategories]);
   React.useEffect(() => setProducts(initialProducts), [initialProducts]);
+
+  /**
+   * Moves a category one place up or down the rail.
+   *
+   * Buttons rather than drag-and-drop, deliberately. The panel is used on a
+   * phone behind a counter as often as on a laptop, and HTML5 drag events do
+   * not fire from touch at all — a drag handle would be dead on the device
+   * this is most used from. Two arrows work by pointer, by finger and by
+   * keyboard, and need no library.
+   *
+   * The list is reordered locally first and the whole arrangement is sent, so
+   * the rail responds immediately and the server is told what the owner is
+   * actually looking at rather than being asked to infer it. A failure puts the
+   * previous order straight back.
+   */
+  async function moveCategory(categoryId: string, direction: -1 | 1) {
+    const from = categories.findIndex((category) => category.id === categoryId);
+    const to = from + direction;
+    if (from === -1 || to < 0 || to >= categories.length) return;
+
+    const previous = categories;
+    const next = [...categories];
+    // Swap rather than splice: one step is a swap, and writing it as one keeps
+    // the two positions that changed obvious.
+    [next[from], next[to]] = [next[to]!, next[from]!];
+    setCategories(next);
+
+    const result = await api.patch("/api/categories", {
+      order: next.map((category) => category.id),
+    });
+
+    if (!result.ok) {
+      setCategories(previous);
+      toast.error(result.error.message);
+      return;
+    }
+
+    // Re-read, so the rail agrees with the order everything else will load.
+    router.refresh();
+  }
 
   /**
    * The effective selection, derived rather than stored.
@@ -290,9 +339,11 @@ export function MenuBuilder({
         <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
           {/* ------------------------------------------------ category rail */}
           <nav aria-label={t.dashboard.categories} className="space-y-1.5">
-            {categories.map((category) => {
+            {categories.map((category, index) => {
               const count = products.filter((p) => p.categoryId === category.id).length;
               const active = category.id === activeCategoryId;
+              const first = index === 0;
+              const last = index === categories.length - 1;
 
               return (
                 <div
@@ -330,6 +381,39 @@ export function MenuBuilder({
                       <Badge tone="neutral">{t.common.inactive}</Badge>
                     )}
                   </button>
+
+                  {/*
+                    Reordering, kept in its own column beside the edit/delete
+                    pair so the two kinds of action do not read as one stack of
+                    four. Hidden when there is only one category, where there is
+                    no order to change.
+
+                    Up and down are physical directions on the screen and stay
+                    up and down in RTL — unlike start/end, these are not
+                    logical properties and must not be flipped.
+                  */}
+                  {categories.length > 1 && (
+                    <div className="flex shrink-0 flex-col">
+                      <button
+                        type="button"
+                        onClick={() => moveCategory(category.id, -1)}
+                        disabled={first}
+                        aria-label={`${t.menuBuilder.moveUp} — ${category.name}`}
+                        className="grid size-7 place-items-center rounded-md text-ink-400 hover:bg-surface hover:text-ink-800 disabled:pointer-events-none disabled:opacity-30"
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveCategory(category.id, 1)}
+                        disabled={last}
+                        aria-label={`${t.menuBuilder.moveDown} — ${category.name}`}
+                        className="grid size-7 place-items-center rounded-md text-ink-400 hover:bg-surface hover:text-ink-800 disabled:pointer-events-none disabled:opacity-30"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
 
                   <div className="flex shrink-0 flex-col pe-1.5">
                     <button

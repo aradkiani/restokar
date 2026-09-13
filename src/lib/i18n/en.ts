@@ -477,6 +477,8 @@ export const en: Dictionary = {
     addOptionChoice: "Add a choice",
     addInfoSection: "Add section",
     noProducts: "No products in this category",
+    moveUp: "Move up",
+    moveDown: "Move down",
     profitPreview: "Profit per unit",
     marginPreview: "Margin",
     deleteProductConfirm: "Delete this product?",
