@@ -125,6 +125,14 @@ export const RATE_LIMITS = {
    * script inflating a venue's figures, not to shape real use.
    */
   menuView: { limit: 120, windowSeconds: 300 },
+  /**
+   * Leaving or correcting a rating.
+   *
+   * Tight, because one guest rates one meal — and reconsiders once or twice at
+   * most. The token already bounds this to orders the caller can see; this
+   * bounds how fast someone holding one can rewrite it.
+   */
+  review: { limit: 10, windowSeconds: 300 },
 } as const;
 
 /** A staff call stays on the dashboard this long before it is treated as stale. */

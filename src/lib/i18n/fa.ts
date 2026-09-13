@@ -329,6 +329,7 @@ export const fa = {
     // ---- support ----
     inventoryTab: "موجودی انبار",
     supportTab: "پشتیبانی",
+    reviewsTab: "نظرها",
     supportTitle: "ارتباط با پشتیبانی",
     supportHint:
       "سؤال یا مشکلتان را بنویسید؛ تیم پشتیبانی پاسخ را همین‌جا برایتان می‌گذارد.",
@@ -635,6 +636,17 @@ export const fa = {
    * Campaign planning. Nothing here sends a message, and the copy says so
    * plainly rather than implying a capability the platform does not have.
    */
+  reviews: {
+    title: "نظرهای مشتریان",
+    countSuffix: "نظر",
+    filterLabel: "فیلتر بر اساس امتیاز",
+    allRatings: "همه",
+    noneInBand: "نظری با این امتیاز ثبت نشده است.",
+    noComment: "بدون نظر نوشته‌شده",
+    emptyTitle: "هنوز نظری ثبت نشده",
+    emptyBody:
+      "پس از تحویل هر سفارش، از مشتری خواسته می‌شود امتیاز دهد. نظرها اینجا نمایش داده می‌شوند.",
+  },
   campaigns: {
     navLabel: "کمپین‌ها",
     title: "کمپین‌ها",
@@ -977,6 +989,13 @@ export const fa = {
     deliveredHint: "نوش جان!",
     canceledHint: "این سفارش لغو شده است",
     liveUpdating: "به‌روزرسانی لحظه‌ای",
+    reviewTitle: "سفارش شما چطور بود؟",
+    reviewHint: "با انتخاب ستاره امتیاز دهید. نوشتن نظر اختیاری است.",
+    reviewThanks: "ممنون از امتیاز شما",
+    reviewChangeHint: "هر زمان خواستید می‌توانید امتیاز یا نظرتان را تغییر دهید.",
+    reviewCommentLabel: "نظر شما (اختیاری)",
+    reviewSave: "ثبت نظر",
+    reviewSaving: "در حال ثبت…",
     items: "اقلام سفارش",
     placedAt: "زمان ثبت",
     backToMenu: "بازگشت به منو",

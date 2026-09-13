@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, LifeBuoy, Percent, SlidersHorizontal, Users } from "lucide-react";
+import { Boxes, LifeBuoy, Percent, SlidersHorizontal, Star, Users } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,9 @@ const TABS = [
   { href: "/dashboard/options/discounts", labelKey: "discountsTab", icon: Percent },
   { href: "/dashboard/options/inventory", labelKey: "inventoryTab", icon: Boxes },
   { href: "/dashboard/options/staff", labelKey: "staffTab", icon: Users },
+  // Guest feedback, beside Support for the same reason: both are the customer
+  // talking back, and an owner checks them in the same sitting.
+  { href: "/dashboard/options/reviews", labelKey: "reviewsTab", icon: Star },
   // Support sits last deliberately: it is where an owner goes when the tabs
   // above have not answered the question.
   { href: "/dashboard/options/support", labelKey: "supportTab", icon: LifeBuoy },

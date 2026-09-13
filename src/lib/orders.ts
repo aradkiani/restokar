@@ -1017,6 +1017,9 @@ export async function getOrderByToken(slug: string, token: string) {
     include: {
       items: true,
       events: { orderBy: { createdAt: "asc" } },
+      // So a guest returning to the link sees the rating they already left
+      // rather than being asked for it again.
+      review: { select: { rating: true, comment: true } },
       restaurant: {
         select: {
           name: true,

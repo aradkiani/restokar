@@ -93,6 +93,8 @@ export default async function OrderStatusPage({
           initialStatus={order.status}
           locale={locale}
           placedAt={order.placedAt.toISOString()}
+          initialRating={order.review?.rating ?? null}
+          initialComment={order.review?.comment ?? null}
         />
 
         <section className="menu-surface mt-5 p-4">
