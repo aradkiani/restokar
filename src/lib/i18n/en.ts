@@ -275,6 +275,9 @@ export const en: Dictionary = {
     enableAtCheckout: "Ask for a discount code at checkout",
     enableAtCheckoutHint:
       "With this off, no discount code field is shown during checkout.",
+    showOrderDiscount: "Show the discount amount on the placed order",
+    showOrderDiscountHint:
+      "The amount is stored on the order either way; this only decides whether the customer sees it broken out on the order page.",
     codeLabel: "Code",
     codeType: "Type",
     codePercent: "Percentage",

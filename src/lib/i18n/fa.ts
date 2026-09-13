@@ -276,6 +276,9 @@ export const fa = {
     enableAtCheckout: "دریافت کد تخفیف هنگام پرداخت",
     enableAtCheckoutHint:
       "با خاموش بودن این گزینه، فیلد کد تخفیف در پرداخت نمایش داده نمی‌شود.",
+    showOrderDiscount: "نمایش مبلغ تخفیف در سفارش ثبت‌شده",
+    showOrderDiscountHint:
+      "مبلغ تخفیف روی سفارش ذخیره می‌شود؛ این گزینه فقط تعیین می‌کند که در صفحهٔ سفارش به مشتری نشان داده شود یا نه.",
     codeLabel: "کد",
     codeType: "نوع",
     codePercent: "درصدی",

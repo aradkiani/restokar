@@ -23,6 +23,7 @@ export const PATCH = route(async (request: Request) => {
     where: { id: restaurantId },
     data: {
       discountCodesEnabled: input.discountCodesEnabled,
+      showOrderDiscount: input.showOrderDiscount,
       taxEnabled: input.taxEnabled,
       taxPercent: input.taxPercent,
       serviceChargeEnabled: input.serviceChargeEnabled,

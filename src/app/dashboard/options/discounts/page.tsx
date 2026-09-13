@@ -16,7 +16,7 @@ export default async function DiscountsPage() {
   const [restaurant, codes] = await Promise.all([
     prisma.restaurant.findUnique({
       where: { id: restaurantId },
-      select: { discountCodesEnabled: true },
+      select: { discountCodesEnabled: true, showOrderDiscount: true },
     }),
     prisma.discountCode.findMany({
       where: { restaurantId },
@@ -38,6 +38,7 @@ export default async function DiscountsPage() {
   return (
     <DiscountsManager
       enabledAtCheckout={restaurant.discountCodesEnabled}
+      showOrderDiscount={restaurant.showOrderDiscount}
       initialCodes={codes}
     />
   );

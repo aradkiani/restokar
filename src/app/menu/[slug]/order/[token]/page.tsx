@@ -137,14 +137,34 @@ export default async function OrderStatusPage({
 
           {order.restaurant.showPrices && (
             <div
-              className="mt-4 flex items-center justify-between border-t pt-3 text-sm font-black"
+              className="mt-4 border-t pt-3"
               style={{ borderColor: "var(--m-border)" }}
             >
-              <span>{t.publicMenu.total}</span>
-              <span className="tabular-nums">
-                {formatMoney(order.total, locale)}{" "}
-                <span className="text-xs font-normal opacity-70">{t.common.toman}</span>
-              </span>
+              {/*
+                The saving, when there was one and the venue shows it.
+
+                Read from the order's own snapshot rather than recomputed: this
+                is what the guest was actually charged, months ago if they come
+                back to the link, and a code edited since must not change what
+                a placed order says it cost. Signed, so it reads as a
+                subtraction against the total below it.
+              */}
+              {order.restaurant.showOrderDiscount && order.discount > 0 && (
+                <div className="mb-2 flex items-center justify-between text-xs opacity-80">
+                  <span>{t.publicMenu.discountSaving}</span>
+                  <bdi className="tabular-nums">
+                    {formatMoney(-order.discount, locale)}
+                  </bdi>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-sm font-black">
+                <span>{t.publicMenu.total}</span>
+                <span className="tabular-nums">
+                  {formatMoney(order.total, locale)}{" "}
+                  <span className="text-xs font-normal opacity-70">{t.common.toman}</span>
+                </span>
+              </div>
             </div>
           )}
         </section>

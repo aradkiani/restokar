@@ -749,6 +749,15 @@ export const PricingOptionsSchema = z.object({
    */
   discountCodesEnabled: z.boolean().optional(),
 
+  /**
+   * Whether a placed order shows the guest what their code took off.
+   *
+   * Display only: the amount is snapshotted onto the order either way, so
+   * switching this off hides a figure rather than changing one. Sits beside
+   * `discountCodesEnabled` because it is the same screen and the same decision.
+   */
+  showOrderDiscount: z.boolean().optional(),
+
   taxEnabled: z.boolean().optional(),
   taxPercent: z.coerce
     .number()

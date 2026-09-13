@@ -278,6 +278,18 @@ model Restaurant {
   /// a menu with no photos is then a finished menu, not an incomplete one.
   showProductPhotos Boolean @default(true)
 
+  /// Whether a placed order shows the guest what their code took off.
+  ///
+  /// The order is already stored with `discount` snapshotted onto it; this only
+  /// governs whether the confirmation screen breaks the figure out or shows the
+  /// total alone.
+  ///
+  /// Defaults to true because it describes a saving the guest asked for by
+  /// typing a code, and a venue that issues codes and then declines to show
+  /// what they were worth invites the question at the counter. A venue running
+  /// staff-only or negotiated codes can switch it off.
+  showOrderDiscount Boolean @default(true)
+
   /// Offers the menu in English as well as Persian. Off by default, so an
   /// untouched restaurant behaves exactly as it did before this existed.
   ///

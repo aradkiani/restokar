@@ -1017,7 +1017,15 @@ export async function getOrderByToken(slug: string, token: string) {
     include: {
       items: true,
       events: { orderBy: { createdAt: "asc" } },
-      restaurant: { select: { name: true, slug: true, logoUrl: true, showPrices: true } },
+      restaurant: {
+        select: {
+          name: true,
+          slug: true,
+          logoUrl: true,
+          showPrices: true,
+          showOrderDiscount: true,
+        },
+      },
     },
   });
 }

@@ -32,15 +32,18 @@ interface DiscountRow {
  */
 export function DiscountsManager({
   enabledAtCheckout,
+  showOrderDiscount,
   initialCodes,
 }: {
   enabledAtCheckout: boolean;
+  showOrderDiscount: boolean;
   initialCodes: DiscountRow[];
 }) {
   const { t, locale } = useI18n();
   const toast = useToast();
 
   const [enabled, setEnabled] = React.useState(enabledAtCheckout);
+  const [showDiscount, setShowDiscount] = React.useState(showOrderDiscount);
   const [codes, setCodes] = React.useState<DiscountRow[]>(initialCodes);
 
   const [code, setCode] = React.useState("");
@@ -58,6 +61,18 @@ export function DiscountsManager({
     });
     if (!result.ok) {
       setEnabled(!next);
+      toast.error(result.error.message);
+    }
+  }
+
+  /** Display only: the amount is snapshotted onto the order either way. */
+  async function toggleShowDiscount(next: boolean) {
+    setShowDiscount(next);
+    const result = await api.patch("/api/settings/options", {
+      showOrderDiscount: next,
+    });
+    if (!result.ok) {
+      setShowDiscount(!next);
       toast.error(result.error.message);
     }
   }
@@ -142,6 +157,20 @@ export function DiscountsManager({
             label={t.options.enableAtCheckout}
             description={t.options.enableAtCheckoutHint}
           />
+
+          {/*
+            Only meaningful once checkout actually asks for a code, so it is
+            nested under the switch that decides that rather than sitting
+            beside it offering to configure something that cannot happen.
+          */}
+          {enabled && (
+            <Toggle
+              checked={showDiscount}
+              onChange={toggleShowDiscount}
+              label={t.options.showOrderDiscount}
+              description={t.options.showOrderDiscountHint}
+            />
+          )}
 
           <form onSubmit={createCode} className="grid gap-3 sm:grid-cols-[1fr_auto_1fr]">
             <Field label={t.options.codeLabel} htmlFor="discount-code">
