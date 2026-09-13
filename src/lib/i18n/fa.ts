@@ -229,7 +229,23 @@ export const fa = {
     place: "ثبت سفارش",
     placed: "سفارش ثبت شد",
     total: "مبلغ قابل پرداخت",
+    /**
+     * Kept although nothing renders it any more: the pad can now ask for
+     * options, so no dish is unaddable. Removing the key is a separate tidy-up
+     * — `fa.ts` defines the Dictionary type, so deleting it here is a compile
+     * error anywhere it is still referenced, which is what makes it safe to do
+     * on its own rather than folded into this change.
+     */
     optionsUnsupported: "این غذا انتخاب اجباری دارد و باید از منو ثبت شود.",
+    browseMode: "نحوهٔ نمایش",
+    modeList: "فهرست",
+    modeMenu: "منو",
+    chooseOptions: "انتخاب گزینه‌ها برای",
+    chooseRequired: "یک گزینه انتخاب کنید:",
+    addToOrder: "افزودن به سفارش",
+    required: "اجباری",
+    optional: "اختیاری",
+    upTo: "حداکثر",
   },
   branches: {
     navLabel: "شعبه‌ها",

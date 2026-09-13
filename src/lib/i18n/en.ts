@@ -229,6 +229,15 @@ export const en: Dictionary = {
     total: "Total",
     optionsUnsupported:
       "This dish has a required choice and must be ordered from the menu.",
+    browseMode: "View",
+    modeList: "List",
+    modeMenu: "Menu",
+    chooseOptions: "Choose options for",
+    chooseRequired: "Choose an option:",
+    addToOrder: "Add to order",
+    required: "Required",
+    optional: "Optional",
+    upTo: "Up to",
   },
   branches: {
     navLabel: "Branches",

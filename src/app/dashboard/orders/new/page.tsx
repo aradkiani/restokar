@@ -39,7 +39,41 @@ export default async function ManualOrderPage() {
           id: true,
           name: true,
           price: true,
-          optionGroups: { select: { isRequired: true } },
+          /*
+            Loaded for the menu view — the mode that shows the dishes the way a
+            guest sees them, for staff reading an order back over the phone.
+            The short description is what distinguishes two similarly-named
+            dishes; the photo is what makes the list scannable at a counter.
+          */
+          shortDescription: true,
+          imageUrl: true,
+          /*
+            The whole option tree, not just whether one is required.
+
+            The server has always accepted `choiceIds` on a manual order and
+            priced them exactly as it does a guest's — `ManualOrderInput` is
+            `CreateOrderInput` minus the slug. The pad simply never asked, so a
+            dish with a required group could not be added at all. Now it asks.
+          */
+          optionGroups: {
+            orderBy: { sortOrder: "asc" },
+            select: {
+              id: true,
+              name: true,
+              isRequired: true,
+              minSelect: true,
+              maxSelect: true,
+              choices: {
+                orderBy: { sortOrder: "asc" },
+                select: {
+                  id: true,
+                  name: true,
+                  priceDelta: true,
+                  isAvailable: true,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -47,6 +81,7 @@ export default async function ManualOrderPage() {
 
   return (
     <ManualOrderForm
+      showPrices={venue.showPrices}
       categories={categories.map((category) => ({
         id: category.id,
         name: category.name,
@@ -54,14 +89,9 @@ export default async function ManualOrderPage() {
           id: product.id,
           name: product.name,
           price: product.price,
-          /*
-            A dish with a required choice cannot be added from a flat list —
-            there is no answer here to "chicken or beef?", and the server
-            rightly refuses an order that skipped a required group. Those are
-            shown but not addable, with the reason stated, rather than silently
-            missing from a menu the person on the phone is reading aloud.
-          */
-          needsChoices: product.optionGroups.some((group) => group.isRequired),
+          shortDescription: product.shortDescription,
+          imageUrl: product.imageUrl,
+          optionGroups: product.optionGroups,
         })),
       }))}
     />
