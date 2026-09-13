@@ -74,6 +74,9 @@ const TABLE_ORDER = [
   "RecommendationEvent",
   "StockMovement",
   "SupportTicket",
+  "MenuDailyView",
+  // After Order, which it references.
+  "OrderReview",
 ] as const;
 
 /**

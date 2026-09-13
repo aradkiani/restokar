@@ -7,6 +7,7 @@ import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 import { Badge, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { SUBSCRIPTION_CHECKOUT_ENABLED } from "@/lib/features";
 import { CONTACT } from "@/lib/constants";
+import { dailyViews, viewsToday } from "@/lib/menu-views";
 import { PlanPicker } from "./plan-picker";
 
 export const metadata: Metadata = { title: "اشتراک" };
@@ -21,7 +22,7 @@ export default async function SubscriptionPage({
   const { t, locale } = await getI18n();
   const { payment, ref } = await searchParams;
 
-  const [state, plans, payments] = await Promise.all([
+  const [state, plans, payments, views, todayViews] = await Promise.all([
     getSubscriptionState(restaurantId),
     prisma.plan.findMany({ where: { isPublic: true }, orderBy: { sortOrder: "asc" } }),
     prisma.payment.findMany({
@@ -29,7 +30,24 @@ export default async function SubscriptionPage({
       orderBy: { createdAt: "desc" },
       take: 12,
     }),
+    // Shown here rather than on the analytics page because this is where the
+    // ceiling it is measured against already appears. A number on its own says
+    // little; "312 of 1,000" says whether the plan still fits.
+    dailyViews(restaurantId, 7),
+    // Asked for separately rather than read off the newest row above: with no
+    // views yet today the newest row is yesterday's, and calling that "today"
+    // would report a number the venue has not earned.
+    viewsToday(restaurantId),
   ]);
+
+  /*
+    The ceiling for the venue's current plan, taken from the list already
+    loaded rather than by widening `getSubscriptionState`. A venue sitting on a
+    retired plan is simply not found here and gets no ratio — which is the right
+    answer, since the figure it would be measured against is no longer offered.
+  */
+  const viewCeiling =
+    plans.find((plan) => plan.code === state?.planCode)?.maxDailyViews ?? -1;
 
   const statusLabels: Record<string, string> = {
     TRIALING: t.subscription.statusTRIALING,
@@ -163,6 +181,47 @@ export default async function SubscriptionPage({
           }))}
         />
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t.subscription.menuViews}</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-black text-ink-900 tabular-nums">
+              {formatNumber(todayViews, locale)}
+            </span>
+            {viewCeiling > 0 && (
+              <span className="text-sm text-ink-500 tabular-nums">
+                / {formatNumber(viewCeiling, locale)}
+              </span>
+            )}
+            <span className="text-sm text-ink-500">{t.subscription.viewsToday}</span>
+          </div>
+
+          {views.length === 0 ? (
+            <p className="text-xs text-ink-500">{t.subscription.noViewsYet}</p>
+          ) : (
+            <ul className="space-y-1">
+              {views.map((row) => (
+                <li
+                  key={row.day.toISOString()}
+                  className="flex items-center justify-between gap-3 text-xs"
+                >
+                  <span className="text-ink-500">{formatDate(row.day, locale)}</span>
+                  <span className="font-bold text-ink-800 tabular-nums">
+                    {formatNumber(row.count, locale)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Said plainly, because a ceiling shown beside a count reads as a
+              limit being enforced, and this one is not. */}
+          <p className="text-[11px] leading-5 text-ink-400">{t.subscription.viewsHint}</p>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader>

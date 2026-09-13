@@ -116,6 +116,15 @@ export const RATE_LIMITS = {
    * is already far more than that.
    */
   discountPreview: { limit: 20, windowSeconds: 300 },
+  /**
+   * Menu opens reported from the browser.
+   *
+   * The roomiest limit here, because a table of four sharing one address all
+   * scanning the same code is exactly the traffic this is meant to count, and
+   * a guest reopening the menu between courses is normal. It exists to stop a
+   * script inflating a venue's figures, not to shape real use.
+   */
+  menuView: { limit: 120, windowSeconds: 300 },
 } as const;
 
 /** A staff call stays on the dashboard this long before it is treated as stale. */

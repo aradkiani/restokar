@@ -1237,6 +1237,11 @@ export const en: Dictionary = {
     limitCategories: "categories",
     limitTables: "tables",
     limitDailyViews: "menu views per day",
+    menuViews: "Menu views",
+    viewsToday: "views today",
+    noViewsYet: "No views recorded yet.",
+    viewsHint:
+      "Counts each time the menu page is opened, not unique visitors. Recorded only for now — the plan ceiling is not enforced.",
     priceFrom: "From",
     contractNote:
       "The base price covers two sites and rises with the number of branches; the final figure is agreed with support.",

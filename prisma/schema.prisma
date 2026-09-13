@@ -391,6 +391,8 @@ model Restaurant {
   featuredEvents       FeaturedProductEvent[]
   customers            Customer[]
   campaigns            Campaign[]
+  dailyViews           MenuDailyView[]
+  reviews              OrderReview[]
 
   /// Whether the menu shows a featured strip at all.
   ///
@@ -787,6 +789,70 @@ model RestaurantTable {
 
   @@unique([restaurantId, number])
   @@index([restaurantId])
+}
+
+/// How many times a venue's menu was opened on a given trading day.
+///
+/// An aggregate, not a log: one row per restaurant per day, incremented in
+/// place. A row per view would be the largest table in the database within a
+/// month — a 200-venue server at the measured ~250 opens a day is 15 million
+/// rows a year — to answer a question that is only ever asked per day.
+///
+/// `day` is midnight in APP_TIME_ZONE, never the host's. A server running UTC
+/// would otherwise split a Tehran evening across two rows and report a venue's
+/// busiest night as two quiet ones.
+///
+/// Counts page loads rather than unique visitors, because the figure exists to
+/// track the per-tier `maxDailyViews` ceiling and that ceiling is about what
+/// the platform serves. **Nothing enforces it yet** — see docs and Plan.
+model MenuDailyView {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  day   DateTime
+  count Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// What makes the upsert-and-increment safe under concurrent requests.
+  @@unique([restaurantId, day])
+}
+
+/// A guest's rating of a delivered order.
+///
+/// One per order, which is what `orderId @unique` says: the rating is about
+/// that meal, and a second submission corrects the first rather than adding to
+/// it. Tied to the order rather than to a customer because an order is the only
+/// thing a guest can prove they own — they hold its `publicToken`, and that is
+/// what the submission is authorised by. No account, no email, no login.
+///
+/// `restaurantId` is denormalised off the order so the owner's list can be
+/// read, filtered and counted without joining every order. For a branch this is
+/// the branch's own id: the meal was cooked and served there, so that is who
+/// the feedback is about, even though the menu belongs to the chain.
+model OrderReview {
+  id      String @id @default(cuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// 1–5. A CHECK constraint is appended to the migration by hand, because
+  /// Prisma cannot express one and a 0 or a 7 would quietly poison every
+  /// average built on this column.
+  rating Int
+
+  /// The guest's own words. Optional — most people rate and say nothing.
+  comment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, rating])
+  @@index([restaurantId, createdAt])
 }
 
 // ------------------------------ customers ----------------------------------
@@ -1308,6 +1374,9 @@ model Order {
   id           String     @id @default(cuid())
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// The guest's rating of this meal, once they have left one.
+  review OrderReview?
 
   /// Per-tenant sequential number shown to staff and customers.
   orderNumber Int

@@ -1305,6 +1305,11 @@ export const fa = {
     limitCategories: "دسته‌بندی",
     limitTables: "میز",
     limitDailyViews: "بازدید منو در روز",
+    menuViews: "بازدید منو",
+    viewsToday: "بازدید امروز",
+    noViewsYet: "هنوز بازدیدی ثبت نشده است.",
+    viewsHint:
+      "هر بار باز شدن صفحهٔ منو شمرده می‌شود (نه بازدیدکنندهٔ یکتا). این عدد فعلاً فقط ثبت می‌شود و سقف پلن اعمال نمی‌شود.",
     /** Prefix for a quoted tier: the listed figure is a floor, not the price. */
     priceFrom: "شروع از",
     contractNote:

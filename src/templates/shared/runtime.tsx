@@ -4,6 +4,7 @@ import * as React from "react";
 import { CartProvider, useCart } from "./cart";
 import { ProductSheet } from "./product-sheet";
 import { CartDrawer } from "./cart-drawer";
+import { reportMenuView } from "./menu-view-events";
 import type { MenuData, MenuProduct } from "../types";
 import type { Locale } from "@/lib/i18n";
 import { getDictionary } from "@/lib/i18n/client";
@@ -104,6 +105,18 @@ export function MenuRuntimeProvider({
   const [recommendedFrom, setRecommendedFrom] = React.useState<string | null>(null);
   const [fromFeatured, setFromFeatured] = React.useState(false);
   const t = React.useMemo(() => getDictionary(locale), [locale]);
+
+  /*
+    One "this menu was opened" report per page load.
+
+    Here rather than in a template, because every template renders through this
+    provider and a count that depended on which design a venue had chosen would
+    be worthless. Sets no state, so it does not add to the effects the lint rule
+    tracks; `reportMenuView` is idempotent per page load on its own.
+  */
+  React.useEffect(() => {
+    reportMenuView({ slug: data.restaurant.slug, preview });
+  }, [data.restaurant.slug, preview]);
 
   const value = React.useMemo<MenuRuntimeValue>(
     () => ({
