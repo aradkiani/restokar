@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  bulkTextIssue,
   containsLink,
   DEFAULT_OPT_OUT_SUFFIX,
   detectEncoding,
   estimateCost,
+  promoTextIssue,
   variablesContainLink,
   withOptOutSuffix,
 } from "./text";
@@ -86,7 +86,7 @@ describe("containsLink", () => {
 });
 
 describe("withOptOutSuffix", () => {
-  it("appends the suffix that keeps a bulk send from being refused", () => {
+  it("appends the suffix that keeps a promotional send from being refused", () => {
     expect(withOptOutSuffix("تخفیف ویژه امروز")).toBe(
       `تخفیف ویژه امروز\n${DEFAULT_OPT_OUT_SUFFIX}`,
     );
@@ -112,17 +112,17 @@ describe("withOptOutSuffix", () => {
   });
 });
 
-describe("bulkTextIssue", () => {
+describe("promoTextIssue", () => {
   it("passes ordinary copy", () => {
-    expect(bulkTextIssue("تخفیف ۲۰٪ تا پایان هفته")).toBeNull();
+    expect(promoTextIssue("تخفیف ۲۰٪ تا پایان هفته")).toBeNull();
   });
 
   it("refuses an empty text before it costs a call", () => {
-    expect(bulkTextIssue("")).toBe("EMPTY");
-    expect(bulkTextIssue("   ")).toBe("EMPTY");
+    expect(promoTextIssue("")).toBe("EMPTY");
+    expect(promoTextIssue("   ")).toBe("EMPTY");
   });
 
   it("refuses a link, which the provider rejects for everybody at once", () => {
-    expect(bulkTextIssue("ببینید restokar.ir")).toBe("CONTAINS_LINK");
+    expect(promoTextIssue("ببینید restokar.ir")).toBe("CONTAINS_LINK");
   });
 });

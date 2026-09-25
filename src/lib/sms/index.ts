@@ -85,8 +85,8 @@ export interface TransactionalInput {
  * endpoint is unreachable. Every failure below returns a result and logs; none
  * propagates.
  *
- * Callers on a request path that do not need the answer should use
- * `sendTransactionalAsync` rather than awaiting this.
+ * Await it: a person is waiting for the code, and the result is what tells the
+ * caller whether to say "code sent" or to offer another try.
  */
 export async function sendTransactional(
   input: TransactionalInput,
@@ -149,22 +149,6 @@ export async function sendTransactional(
 
     await delay(RETRY_DELAYS_MS[attempt]!);
   }
-}
-
-/**
- * Fire-and-forget form for request paths.
- *
- * Starts the send and returns immediately; the result reaches the log rather
- * than the caller.
- *
- * The rejection handler is required rather than decorative — an unhandled
- * rejection terminates the Node process under default settings, so a provider
- * throwing here would take the server down with it.
- */
-export function sendTransactionalAsync(input: TransactionalInput): void {
-  void sendTransactional(input).catch((error: unknown) => {
-    console.error(`[sms] unexpected failure for ${input.type}`, error);
-  });
 }
 
 /**

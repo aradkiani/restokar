@@ -2,8 +2,8 @@ import type { AudienceCandidate } from "./campaigns";
 import { canBeContacted, CUSTOMER_SEGMENTS, resolveSegment } from "./customers";
 import { prepareRecipients } from "./sms/recipients";
 import {
-  bulkTextIssue,
   estimateCost,
+  promoTextIssue,
   withOptOutSuffix,
   type SmsEncoding,
 } from "./sms/text";
@@ -158,7 +158,7 @@ export function quoteBroadcast(input: {
   const recipientCount = Math.max(0, Math.floor(input.recipientCount));
   const pricePerPart = Math.max(0, Math.floor(input.pricePerPart));
 
-  let issue: BroadcastIssue | null = bulkTextIssue(text);
+  let issue: BroadcastIssue | null = promoTextIssue(text);
   if (!issue && cost.parts > MAX_BROADCAST_PARTS) issue = "TOO_LONG";
   if (!issue && recipientCount === 0) issue = "NO_RECIPIENTS";
 

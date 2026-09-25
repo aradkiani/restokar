@@ -130,7 +130,7 @@ export function variablesContainLink(variables: readonly string[]): boolean {
 // ------------------------------- opt-out -----------------------------------
 
 /**
- * Ensures a bulk text carries the opt-out suffix exactly once.
+ * Ensures a promotional text carries the opt-out suffix exactly once.
  *
  * Idempotent, because the text reaching this function may already have been
  * composed with a suffix by an owner who knows the rule, and a message ending
@@ -152,10 +152,10 @@ export function withOptOutSuffix(text: string, suffix = DEFAULT_OPT_OUT_SUFFIX):
 
 // ------------------------------ validation ---------------------------------
 
-export type BulkTextIssue = "EMPTY" | "CONTAINS_LINK";
+export type PromoTextIssue = "EMPTY" | "CONTAINS_LINK";
 
 /**
- * What is wrong with a bulk text, if anything.
+ * What is wrong with a promotional text, if anything.
  *
  * Returns a key rather than a message, the same convention `campaigns.ts` and
  * `report-insights.ts` use, so the dashboard renders it in the owner's language.
@@ -164,7 +164,7 @@ export type BulkTextIssue = "EMPTY" | "CONTAINS_LINK";
  * rather than demanded of the caller, so its absence is never an error the owner
  * has to fix.
  */
-export function bulkTextIssue(text: string): BulkTextIssue | null {
+export function promoTextIssue(text: string): PromoTextIssue | null {
   if (!text.trim()) return "EMPTY";
   if (containsLink(text)) return "CONTAINS_LINK";
   return null;
