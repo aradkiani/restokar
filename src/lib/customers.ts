@@ -46,6 +46,72 @@ export const AT_RISK_DAYS = 30;
 export const INACTIVE_DAYS = 90;
 
 /**
+ * How far past their *own* usual gap a guest has to be before it is worth
+ * saying.
+ *
+ * Twice. A weekly regular who misses one week is on holiday; one who misses two
+ * has changed something. Below 2× this would cry wolf at every business trip,
+ * and an alert an owner learns to ignore is worse than no alert.
+ */
+export const OVERDUE_FACTOR = 2;
+
+/**
+ * The soonest anyone is called at risk, however tight their rhythm.
+ *
+ * A guest who buys coffee every morning has a one-day interval, and twice that
+ * is two days. Nobody has churned in two days. Fourteen is the floor at which
+ * silence from even the most frequent guest is a fact rather than a weekend.
+ */
+export const MIN_AT_RISK_DAYS = 14;
+
+/**
+ * The latest anyone is called at risk, however slow their rhythm.
+ *
+ * Sixty days, which is two thirds of the way to `INACTIVE_DAYS`. The obvious
+ * ceiling is `INACTIVE_DAYS - 1`, and it is wrong: a seasonal diner on a 45-day
+ * rhythm is twice overdue at 90 days, which is the exact day they are written
+ * off anyway. That leaves a one-day window in which an owner could notice and
+ * act, which is no window at all.
+ *
+ * Sixty guarantees every guest at least a month of being visibly in trouble
+ * while the relationship is still recoverable — which is the only reason the
+ * "at risk" group exists.
+ */
+export const MAX_AT_RISK_DAYS = 60;
+
+/**
+ * How many idle days make *this particular* guest overdue.
+ *
+ * `AT_RISK_DAYS` is one number applied to everyone, which has to be wrong for
+ * someone: thirty days of silence means something entirely different from a
+ * guest who came every Friday than from one who visits each season. Where there
+ * is enough history to know a guest's rhythm, this scales the threshold to it.
+ *
+ * Bounded at both ends, and both bounds matter:
+ *
+ *   * The **floor** stops a daily regular being written off over a long weekend.
+ *   * The **ceiling** guarantees a guest passes through "at risk" — where an
+ *     owner can still act — with time to spare before arriving at "inactive",
+ *     where the relationship is already over. A seasonal diner on a 45-day
+ *     rhythm is twice overdue on the very day they are written off, so without
+ *     a ceiling they are never actionably flagged at all.
+ *
+ * With no known rhythm this returns the platform's existing fixed threshold
+ * unchanged, which is what keeps every current caller behaving exactly as it
+ * did. The rhythm itself is computed by `typicalReturnInterval` in
+ * `retention.ts`; it lives there because deriving a median from order history is
+ * a different job from deciding what the median means.
+ */
+export function atRiskThreshold(typicalInterval: number | null): number {
+  if (typicalInterval === null) return AT_RISK_DAYS;
+
+  return Math.min(
+    MAX_AT_RISK_DAYS,
+    Math.max(MIN_AT_RISK_DAYS, typicalInterval * OVERDUE_FACTOR),
+  );
+}
+
+/**
  * Paging bounds for the customer list.
  *
  * Here rather than beside the query that uses them because the request schema
@@ -77,6 +143,16 @@ export interface SegmentInput {
   /** Orders that count — see `COUNTED` in analytics.ts. */
   orderCount: number;
   lastOrderAt: Date | null;
+  /**
+   * The guest's own median gap between orders, in days, when it is knowable.
+   *
+   * Optional, and absent is the honest default: below three orders there is no
+   * rhythm to speak of, and inventing one from a single visit is exactly the
+   * fake precision this feature must not have. When it is absent the fixed
+   * `AT_RISK_DAYS` applies, which is what every caller predating this field
+   * already got.
+   */
+  typicalInterval?: number | null;
 }
 
 /**
@@ -110,6 +186,12 @@ export function daysSince(instant: Date, now: Date): number {
  *
  * A customer with no counted orders is `new`: they exist because they gave a
  * phone number, and nothing they have done yet says otherwise.
+ *
+ * **Step 2 is measured against the guest's own rhythm** where there is enough
+ * history to know it — see `atRiskThreshold`. A weekly regular is overdue after
+ * a fortnight; a seasonal diner is not overdue at thirty days. With too little
+ * history the fixed threshold applies, exactly as it always did, so a caller
+ * that passes no interval gets precisely its previous behaviour.
  */
 export function resolveSegment(input: SegmentInput, now: Date): CustomerSegment {
   if (input.orderCount === 0 || !input.lastOrderAt) return "new";
@@ -117,7 +199,12 @@ export function resolveSegment(input: SegmentInput, now: Date): CustomerSegment 
   const idleDays = daysSince(input.lastOrderAt, now);
 
   if (idleDays >= INACTIVE_DAYS) return "inactive";
-  if (idleDays >= AT_RISK_DAYS && input.orderCount >= 2) return "atRisk";
+  if (
+    idleDays >= atRiskThreshold(input.typicalInterval ?? null) &&
+    input.orderCount >= 2
+  ) {
+    return "atRisk";
+  }
   if (input.orderCount >= LOYAL_ORDER_THRESHOLD) return "loyal";
   if (input.orderCount >= 2) return "returning";
 
@@ -157,6 +244,12 @@ export interface CustomerRecord extends CustomerMetrics {
   name: string | null;
   marketingConsent: boolean;
   segment: CustomerSegment;
+  /**
+   * The guest's median gap between orders, or null when there is too little
+   * history to say. Carried so the dashboard can show its working rather than
+   * asserting a verdict — see `explainSegment` in `retention.ts`.
+   */
+  typicalInterval: number | null;
 }
 
 /** Rounded down: a fractional Toman is not a unit anyone can be charged. */
@@ -181,9 +274,20 @@ export function deriveCustomer(
     totalRevenue: number;
     firstOrderAt: Date | null;
     lastOrderAt: Date | null;
+    /**
+     * The guest's median gap between orders, when it is knowable.
+     *
+     * Supplied rather than computed here for the same reason the totals are:
+     * this stays a pure function of already-aggregated figures. The caller gets
+     * it from `typicalReturnInterval` in `retention.ts`, which is also what
+     * keeps the two modules' imports flowing one way.
+     */
+    typicalInterval?: number | null;
   },
   now: Date,
 ): CustomerRecord {
+  const typicalInterval = input.typicalInterval ?? null;
+
   return {
     id: input.id,
     phone: input.phone,
@@ -195,8 +299,13 @@ export function deriveCustomer(
     firstOrderAt: input.firstOrderAt,
     lastOrderAt: input.lastOrderAt,
     daysSinceLastOrder: input.lastOrderAt ? daysSince(input.lastOrderAt, now) : null,
+    typicalInterval,
     segment: resolveSegment(
-      { orderCount: input.orderCount, lastOrderAt: input.lastOrderAt },
+      {
+        orderCount: input.orderCount,
+        lastOrderAt: input.lastOrderAt,
+        typicalInterval,
+      },
       now,
     ),
   };

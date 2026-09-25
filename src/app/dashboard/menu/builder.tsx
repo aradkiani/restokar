@@ -21,11 +21,14 @@ import { CategoryIcon } from "@/components/icon";
 import { api } from "@/lib/client-api";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { priceHealth } from "@/lib/costing";
 import type { Locale } from "@/lib/i18n";
 import { CategoryDialog, type CategoryDraft } from "./category-dialog";
 import { ProductDialog, type ProductDraft } from "./product-dialog";
+import type { MenuPricing } from "./price-health";
 import { windowsToRows } from "./schedule-editor";
 import { recommendationsToRows } from "./recommendation-editor";
+import { bundleItemsToRows } from "./bundle-editor";
 import { zonedWallClockOf } from "@/lib/time";
 
 /**
@@ -71,8 +74,10 @@ export interface ProductRow {
   pairingNoteEn: string | null;
   imageUrl: string | null;
   price: number;
+  priceExact: number;
   compareAtPrice: number | null;
   costPrice: number;
+  costFromRecipe: boolean;
   prepMinutes: number | null;
   isAvailable: boolean;
   hideWhenUnavailable: boolean;
@@ -82,6 +87,8 @@ export interface ProductRow {
   availabilityWindows: ScheduleWindowRow[];
   /** Suggestions made when this dish is ordered, in the owner's order. */
   recommendations: { recommendedProductId: string; isActive: boolean }[];
+  /** What this dish contains, when it is a meal deal. Empty for ordinary dishes. */
+  bundleItems: { componentProductId: string; quantity: number }[];
   featuredOrder: number;
   featuredLabel: string | null;
   featuredLabelText: string | null;
@@ -100,6 +107,8 @@ export interface ProductRow {
     nameEn: string | null;
     isRequired: boolean;
     maxSelect: number;
+    /** This group is the dish's size ladder. */
+    isUpgrade: boolean;
     choices: {
       name: string;
       nameEn: string | null;
@@ -116,8 +125,11 @@ export function MenuBuilder({
   initialProducts,
   limits,
   shortOnly = false,
+  pricing,
 }: {
   locale: Locale;
+  /** The venue's display step and margin floor, for the dish editor. */
+  pricing: MenuPricing;
   /** Venue is on a template that only shows a product's short description. */
   shortOnly?: boolean;
   initialCategories: CategoryRow[];
@@ -238,9 +250,19 @@ export function MenuBuilder({
           </p>
         </div>
 
-        {/* Both labels are long in Persian; side by side they exceed a 320px
-            screen, so they wrap rather than widening the page. */}
+        {/* All three labels are long in Persian; side by side they exceed a
+            320px screen, so they wrap rather than widening the page. */}
         <div className="flex flex-wrap gap-2">
+          {/* A plain link rather than a sidebar entry: this is a view *of* the
+              menu, reached from the menu, and it shares the menu's permission.
+              A seventh nav item would imply a seventh section. */}
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/dashboard/menu/merchandising")}
+          >
+            {t.merchandising.navLabel}
+          </Button>
+
           <Button
             variant="outline"
             onClick={() =>
@@ -276,8 +298,10 @@ export function MenuBuilder({
                 pairingNoteEn: "",
                 imageUrl: "",
                 price: 0,
+                priceExact: 0,
                 compareAtPrice: null,
                 costPrice: 0,
+                costFromRecipe: false,
                 prepMinutes: null,
                 isAvailable: true,
                 hideWhenUnavailable: false,
@@ -285,6 +309,7 @@ export function MenuBuilder({
                 scheduleEnabled: true,
                 schedule: [],
                 recommendations: [],
+                bundleItems: [],
                 featuredOrder: 0,
                 featuredLabel: "",
                 featuredLabelText: "",
@@ -475,8 +500,10 @@ export function MenuBuilder({
                           pairingNoteEn: "",
                           imageUrl: "",
                           price: 0,
+                          priceExact: 0,
                           compareAtPrice: null,
                           costPrice: 0,
+                          costFromRecipe: false,
                           prepMinutes: null,
                           isAvailable: true,
                           hideWhenUnavailable: false,
@@ -484,6 +511,7 @@ export function MenuBuilder({
                           scheduleEnabled: true,
                           schedule: [],
                           recommendations: [],
+                          bundleItems: [],
                           featuredOrder: 0,
                           featuredLabel: "",
                           featuredLabelText: "",
@@ -506,6 +534,13 @@ export function MenuBuilder({
                 {visibleProducts.map((product) => {
                   const profit = product.price - product.costPrice;
                   const margin = product.price > 0 ? profit / product.price : 0;
+                  // The same verdict the dish editor gives, so a dish priced
+                  // too thin is visible in the list without opening it.
+                  const health = priceHealth({
+                    price: product.price,
+                    cost: product.costPrice,
+                    lowMarginPercent: pricing.lowMarginPercent,
+                  });
 
                   return (
                     <li
@@ -555,8 +590,10 @@ export function MenuBuilder({
                                   pairingNoteEn: product.pairingNoteEn ?? "",
                                   imageUrl: product.imageUrl ?? "",
                                   price: product.price,
+                                  priceExact: product.priceExact,
                                   compareAtPrice: product.compareAtPrice,
                                   costPrice: product.costPrice,
+                                  costFromRecipe: product.costFromRecipe,
                                   prepMinutes: product.prepMinutes,
                                   isAvailable: product.isAvailable,
                                   hideWhenUnavailable: product.hideWhenUnavailable,
@@ -565,6 +602,9 @@ export function MenuBuilder({
                                   schedule: windowsToRows(product.availabilityWindows),
                                   recommendations: recommendationsToRows(
                                     product.recommendations,
+                                  ),
+                                  bundleItems: bundleItemsToRows(
+                                    product.bundleItems ?? [],
                                   ),
                                   featuredOrder: product.featuredOrder,
                                   featuredLabel: product.featuredLabel ?? "",
@@ -587,6 +627,8 @@ export function MenuBuilder({
                                     isRequired: group.isRequired,
 
                                     maxSelect: group.maxSelect,
+
+                                    isUpgrade: group.isUpgrade ?? false,
 
                                     choices: group.choices.map((choice) => ({
                                       name: choice.name,
@@ -631,7 +673,16 @@ export function MenuBuilder({
                             {formatMoney(product.price, locale)}
                           </span>
                           {product.costPrice > 0 && (
-                            <span className="text-emerald-700 tabular-nums">
+                            <span
+                              className={cn(
+                                "tabular-nums",
+                                health.warning === "BELOW_COST"
+                                  ? "font-bold text-red-700"
+                                  : health.warning === "LOW_MARGIN"
+                                    ? "font-bold text-amber-700"
+                                    : "text-emerald-700",
+                              )}
+                            >
                               {t.menuBuilder.marginPreview}{" "}
                               {formatPercent(margin, locale)}
                             </span>
@@ -684,6 +735,7 @@ export function MenuBuilder({
           allProducts={products}
           locale={locale}
           shortOnly={shortOnly}
+          pricing={pricing}
           onClose={() => setProductDialog(null)}
           onSaved={() => {
             setProductDialog(null);

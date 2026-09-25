@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getTranslationStatus } from "@/lib/translation-status";
 import { OptionsForm } from "./form";
 import { BulkPriceCard } from "./bulk-price";
+import { MenuPricingCard } from "./menu-pricing";
 
 export const metadata: Metadata = { title: "تنظیمات بیشتر" };
 export const dynamic = "force-dynamic";
@@ -33,6 +34,9 @@ export default async function MoreOptionsPage() {
         staffCallLabelEn: true,
         bilingualEnabled: true,
         phoneCollectionEnabled: true,
+        menuPriceStep: true,
+        autoRepriceFromCost: true,
+        lowMarginPercent: true,
       },
     }),
     getTranslationStatus(restaurantId),
@@ -69,7 +73,17 @@ export default async function MoreOptionsPage() {
         by flipping a toggle back. Keeping it in its own card, after the form
         that saves, keeps the two from being read as the same kind of setting.
       */}
-      <BulkPriceCard />
+      {/* How dish prices are rounded and follow costs — above the bulk tool,
+          which applies its percentage to the exact prices this card governs. */}
+      <MenuPricingCard
+        initial={{
+          menuPriceStep: restaurant.menuPriceStep,
+          autoRepriceFromCost: restaurant.autoRepriceFromCost,
+          lowMarginPercent: restaurant.lowMarginPercent,
+        }}
+      />
+
+      <BulkPriceCard step={restaurant.menuPriceStep} />
     </div>
   );
 }

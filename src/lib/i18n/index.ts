@@ -6,7 +6,7 @@ export const LOCALES = ["fa", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "fa";
-export const LOCALE_COOKIE = "menuland_locale";
+export const LOCALE_COOKIE = "restokar_locale";
 
 const dictionaries: Record<Locale, Dictionary> = { fa, en };
 

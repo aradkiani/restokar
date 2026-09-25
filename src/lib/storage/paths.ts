@@ -16,7 +16,7 @@ import { env } from "../env";
  * operation, and only one of them can win.
  *
  * `DATA_DIR` now points somewhere outside the repo (`./data` by default, an
- * absolute path such as `/var/lib/menuland` in production). See
+ * absolute path such as `/var/lib/restokar` in production). See
  * docs/DATA-BOUNDARY.md for the full contract.
  *
  * The public URL is deliberately unchanged: files are still addressed as

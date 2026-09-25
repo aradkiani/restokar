@@ -183,8 +183,27 @@ describe("deriveCustomer", () => {
       firstOrderAt: base.firstOrderAt,
       lastOrderAt: base.lastOrderAt,
       daysSinceLastOrder: 3,
+      // Null because the caller supplied no rhythm — which is the honest
+      // default, and what keeps every pre-existing caller behaving as before.
+      typicalInterval: null,
       segment: "returning",
     });
+  });
+
+  /**
+   * The rhythm reaches the segment rule rather than merely being carried.
+   * Four orders, last seen 20 days ago: unremarkable against the fixed 30-day
+   * threshold, well overdue for someone who normally returns weekly.
+   */
+  it("passes a supplied rhythm through to the segment", () => {
+    expect(deriveCustomer({ ...base, lastOrderAt: daysAgo(20) }, NOW).segment).toBe(
+      "returning",
+    );
+
+    expect(
+      deriveCustomer({ ...base, lastOrderAt: daysAgo(20), typicalInterval: 7 }, NOW)
+        .segment,
+    ).toBe("atRisk");
   });
 
   it("handles a customer who has never ordered", () => {

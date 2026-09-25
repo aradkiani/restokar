@@ -1,9 +1,9 @@
 /**
  * Restores a backup produced by `npm run backup`.
  *
- *   npx tsx scripts/backup-restore.ts data/backups/menuland-backup-….tar.gz --yes
+ *   npx tsx scripts/backup-restore.ts data/backups/restokar-backup-….tar.gz --yes
  *   npx tsx scripts/backup-restore.ts <archive>            (dry run: reports only)
- *   npx tsx scripts/backup-restore.ts <archive> --confirm=menuland --yes
+ *   npx tsx scripts/backup-restore.ts <archive> --confirm=restokar --yes
  *
  * DESTRUCTIVE. Every table listed in the archive's manifest is emptied and
  * refilled. Without `--yes` the script only reads the archive and prints what it
@@ -155,7 +155,7 @@ function checkConfirmedTarget(): number | null {
   const actual = databaseNameFromUrl();
 
   if (!claimed) {
-    console.error("--confirm needs a database name, e.g. --confirm=menuland");
+    console.error("--confirm needs a database name, e.g. --confirm=restokar");
     return 1;
   }
 
@@ -210,13 +210,13 @@ async function main() {
 
   const manifestRaw = byName.get("manifest.json");
   if (!manifestRaw) {
-    console.error("No manifest.json in the archive — is this a Menuland backup?");
+    console.error("No manifest.json in the archive — is this a Restokar backup?");
     return 1;
   }
 
   const manifest = JSON.parse(manifestRaw.toString("utf8")) as Manifest;
-  if (manifest.product !== "menuland") {
-    console.error(`Archive is for "${manifest.product}", not menuland.`);
+  if (manifest.product !== "restokar") {
+    console.error(`Archive is for "${manifest.product}", not restokar.`);
     return 1;
   }
 

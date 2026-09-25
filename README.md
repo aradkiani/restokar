@@ -1,4 +1,4 @@
-# منولند — Menuland
+# رستوکار — Restokar
 
 Multi-tenant SaaS for restaurant and café digital menus: QR ordering, a live
 kitchen board, and sales/profit reporting. Persian (RTL) first, English second.
@@ -65,14 +65,18 @@ Open <http://localhost:3000>.
 
 ### Demo accounts
 
-All seeded accounts use the password `password123`.
+On the **existing** development database these accounts use `password123`. A
+**fresh** seed generates a single random password instead and prints it once as
+it runs — set `DEMO_SEED_PASSWORD` to choose your own. The seed is idempotent,
+so re-running it against a database that already has these rows leaves their
+current passwords alone.
 
 | Role           | Email                   | Lands on            |
 | -------------- | ----------------------- | ------------------- |
 | Owner          | `owner@cafe-nabsh.ir`   | `/dashboard`        |
 | Owner          | `owner@burger-lab.ir`   | `/dashboard`        |
 | Kitchen staff  | `kitchen@cafe-nabsh.ir` | `/dashboard/orders` |
-| Platform admin | `admin@menuland.ir`     | `/admin`            |
+| Platform admin | `admin@restokar.ir`     | `/admin`            |
 
 The seed generates six weeks of orders with lunch/dinner peaks and busier
 Thursday–Friday weekends, so analytics and finance have something meaningful to

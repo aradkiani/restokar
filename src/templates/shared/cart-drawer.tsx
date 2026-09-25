@@ -59,6 +59,8 @@ export function CartDrawer() {
   const [discountReason, setDiscountReason] = React.useState<string | null>(null);
   const [checkingDiscount, setCheckingDiscount] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  /** Guards double submission ahead of the re-render — see `submitOrder`. */
+  const submitLock = React.useRef(false);
   const [error, setError] = React.useState<string | null>(null);
   const [tipPercent, setTipPercent] = React.useState(0);
 
@@ -89,7 +91,7 @@ export function CartDrawer() {
   // Remember the guest's name between visits; the table comes from the QR code.
   React.useEffect(() => {
     try {
-      const saved = window.localStorage.getItem("menuland:guest-name");
+      const saved = window.localStorage.getItem("restokar:guest-name");
       if (saved) setCustomerName(saved);
     } catch {
       /* storage unavailable */
@@ -185,6 +187,17 @@ export function CartDrawer() {
   }
 
   async function submitOrder() {
+    /*
+      A synchronous lock, because `disabled={submitting}` is not one.
+
+      Setting state does not disable the button until React re-renders, and a
+      double-tap on a phone lands well inside that window — two POSTs, two
+      orders, one guest. The ref flips before the first `await`, so the second
+      tap returns immediately however fast it arrives. The state flag stays
+      because it is what draws the spinner.
+    */
+    if (submitLock.current) return;
+
     setError(null);
 
     const name = customerName.trim();
@@ -194,6 +207,18 @@ export function CartDrawer() {
       return;
     }
 
+    /*
+      The footer is already gated on a non-empty basket, so this only catches
+      the odd case: a second tab clearing the cart through the shared storage
+      key while this one sits on the details step. Cheaper than letting the
+      server answer with a validation error the guest cannot act on.
+    */
+    if (cart.lines.length === 0) {
+      setError(t.publicMenu.emptyCart);
+      return;
+    }
+
+    submitLock.current = true;
     setSubmitting(true);
     try {
       const response = await fetch("/api/public/orders", {
@@ -247,11 +272,13 @@ export function CartDrawer() {
 
       if (!response.ok || !payload.ok) {
         setError(payload?.error?.message ?? t.common.error);
+        submitLock.current = false;
+        setSubmitting(false);
         return;
       }
 
       try {
-        window.localStorage.setItem("menuland:guest-name", name);
+        window.localStorage.setItem("restokar:guest-name", name);
       } catch {
         /* non-fatal */
       }
@@ -261,16 +288,29 @@ export function CartDrawer() {
 
       // Online orders hand off to the gateway; on-site orders go straight to
       // the live status page.
+      /*
+        Deliberately still locked.
+
+        Navigation is asynchronous: releasing the lock here leaves a live button
+        on screen for as long as the gateway takes to answer, and a guest who
+        taps it again during that gap places a second order they will be charged
+        for. The lock is released only on a path that stays on this page — the
+        component unmounts on success.
+      */
       if (payload.data.paymentUrl) {
         window.location.href = payload.data.paymentUrl;
       } else {
         router.push(`/menu/${data.restaurant.slug}/order/${payload.data.publicToken}`);
       }
+      return;
     } catch {
       setError(t.common.error);
-    } finally {
-      setSubmitting(false);
     }
+
+    // Only reached when the order was *not* placed, so the guest can correct
+    // whatever was wrong and try again.
+    submitLock.current = false;
+    setSubmitting(false);
   }
 
   const allowOnlinePayment =

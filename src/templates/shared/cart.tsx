@@ -71,6 +71,22 @@ interface CartState {
   clear: () => void;
   /** Total across every variant of a product — drives the "in cart" badge. */
   quantityOf: (productId: string) => number;
+  /**
+   * Dishes already offered as a suggestion during this visit.
+   *
+   * Two surfaces suggest: the sheet that appears the moment something is added,
+   * and the strip above the checkout button. Without a shared memory they
+   * would independently arrive at the same answer — the engine is
+   * deterministic — and a guest who declined the fries once would be offered
+   * them again on the way to paying. Lives on the cart because that is the one
+   * thing both surfaces already share.
+   *
+   * Deliberately not persisted. A guest returning tomorrow to a saved cart
+   * should be offered the fries again; the point is not to nag twice in one
+   * sitting.
+   */
+  suggestedProductIds: readonly string[];
+  markSuggested: (productIds: readonly string[]) => void;
   /** Cart drawer visibility lives here so any template can open it. */
   isOpen: boolean;
   open: () => void;
@@ -85,7 +101,7 @@ export function useCart(): CartState {
   return ctx;
 }
 
-const storageKey = (slug: string) => `menuland:cart:${slug}`;
+const storageKey = (slug: string) => `restokar:cart:${slug}`;
 
 /**
  * Two orders of the same dish with the same choices are one line; with
@@ -233,6 +249,17 @@ export function CartProvider({
 
   const clear = React.useCallback(() => setLines([]), []);
 
+  const [suggestedProductIds, setSuggested] = React.useState<string[]>([]);
+  const markSuggested = React.useCallback((ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    setSuggested((prev) => {
+      const next = prev.concat(ids.filter((id) => !prev.includes(id)));
+      // Same array when nothing was new, so subscribers do not re-render and
+      // the effect that calls this cannot loop.
+      return next.length === prev.length ? prev : next;
+    });
+  }, []);
+
   const value = React.useMemo<CartState>(() => {
     const count = lines.reduce((sum, l) => sum + l.quantity, 0);
     const subtotal = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
@@ -247,11 +274,23 @@ export function CartProvider({
       clear,
       quantityOf: (id) =>
         lines.reduce((sum, l) => (l.productId === id ? sum + l.quantity : sum), 0),
+      suggestedProductIds,
+      markSuggested,
       isOpen,
       open: () => setIsOpen(true),
       close: () => setIsOpen(false),
     };
-  }, [lines, add, setQuantity, setNote, remove, clear, isOpen]);
+  }, [
+    lines,
+    add,
+    setQuantity,
+    setNote,
+    remove,
+    clear,
+    isOpen,
+    suggestedProductIds,
+    markSuggested,
+  ]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

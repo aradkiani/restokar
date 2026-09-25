@@ -38,7 +38,39 @@ export interface MenuOptionGroup {
   minSelect: number;
   /** 1 renders as radio buttons, higher as checkboxes. */
   maxSelect: number;
+  /**
+   * This group is the dish's size ladder, and may be offered as a one-tap
+   * upgrade rather than only as a row inside the sheet.
+   *
+   * Carried rather than inferred because "which of these groups is the size"
+   * is the owner's judgement, not something a heuristic on names should guess.
+   * `resolveUpgrade` in src/lib/upgrades.ts turns it into an offer; a template
+   * that ignores this flag simply renders the group as it always has.
+   */
+  isUpgrade: boolean;
   choices: MenuOptionChoice[];
+}
+
+/** One dish inside a meal deal, as the menu carries it. */
+export interface MenuBundleComponent {
+  productId: string;
+  quantity: number;
+}
+
+/**
+ * One co-occurrence pair, as raw counts.
+ *
+ * The counts rather than a finished score, so the client applies exactly the
+ * thresholds the dashboard does — see `CO_OCCURRENCE_THRESHOLDS`. Nothing here
+ * identifies a guest: it is four integers about two dishes.
+ */
+export interface MenuPairStat {
+  sourceProductId: string;
+  targetProductId: string;
+  pairCount: number;
+  sourceSupport: number;
+  targetSupport: number;
+  totalOrders: number;
 }
 
 export interface MenuProduct {
@@ -107,6 +139,29 @@ export interface MenuProduct {
    * suggestion pointing at something hidden simply is not listed.
    */
   recommendedProductIds: string[];
+
+  /**
+   * The dishes this one contains, when it is a meal deal. Empty for every
+   * ordinary dish, which is exactly what makes it ordinary.
+   *
+   * Ids rather than embedded products, for the same reason
+   * `recommendedProductIds` are: every component is already somewhere in
+   * `categories`, so a second copy could only disagree with the first about
+   * price or availability. The saving is computed from those live prices by
+   * `bundles.ts` rather than stored, so it can never go stale against them.
+   */
+  bundleComponents: MenuBundleComponent[];
+
+  /**
+   * Dishes this venue's own bills say go with this one.
+   *
+   * Raw counts, not a ranking: the thresholds live in `co-occurrence.ts` and
+   * are applied at render, so the guest menu and the owner's dashboard can
+   * never disagree about what qualifies. Empty for a venue that has not traded
+   * enough, which is the intended low-data answer — it falls back to whatever
+   * the owner defined.
+   */
+  frequentlyWith: MenuPairStat[];
 
   /**
    * The owner's line introducing those pairings, already resolved to the

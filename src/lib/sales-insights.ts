@@ -1,4 +1,11 @@
 import { merchandisingRatio } from "./merchandising";
+import type {
+  CostCoverage,
+  MenuBenchmark,
+  MenuConcentration,
+  ProductPerformance,
+} from "./profitability";
+import { TABLE_THRESHOLDS, type TableConcentration, type TableReport } from "./tables";
 
 /**
  * Why the numbers moved, stated as rules rather than as a model.
@@ -101,7 +108,45 @@ export type InsightType =
   | "categoryGrowth"
   | "customerMixChange"
   | "featuredWeakConversion"
-  | "recommendationWeakConversion";
+  | "recommendationWeakConversion"
+  /*
+    Profitability, added as rules inside this engine rather than as a second one.
+
+    This module already owns severity, confidence, scoring, ranking and the
+    message-key contract; a separate "profit insight engine" would have had to
+    reproduce all of it, and the two would then have competed for the same space
+    on the same page with no shared idea of which finding mattered more. The
+    arithmetic they rank lives in `profitability.ts`; the judgement about whether
+    it is worth an owner's attention stays here, with every other such judgement.
+  */
+  /** Sells well, earns little — the commercially important one. */
+  | "highSalesLowMargin"
+  /** Earns well, barely sells. Points at the existing merchandising tools. */
+  | "lowSalesHighMargin"
+  /** Too much of the period's revenue had no cost behind it to trust a margin. */
+  | "costDataIncomplete"
+  /** A large share of revenue resting on very few dishes. */
+  | "menuConcentration"
+  /*
+    Table intelligence, added as rules inside this engine rather than as a third
+    one, on exactly the reasoning recorded above for profitability.
+
+    They are reached through `buildTableInsights` rather than through
+    `buildSalesInsights`, because they answer a question asked on a different
+    screen and about a different axis — the room, not the menu. Same
+    `SalesInsight` shape, same severities, same `scoreOf`, same `rank`, same
+    message-key contract, so the table page renders them with the analytics
+    page's own `InsightCard` and nothing about "what an insight is" is
+    duplicated.
+  */
+  /** A table carrying much more of the room's trade than an even one would. */
+  | "tableHighActivity"
+  /** A table that has gone quieter against the comparison window. */
+  | "tableActivityDecline"
+  /** Its code is opened often, and comparatively few orders follow. */
+  | "tableViewsWithoutOrders"
+  /** A large share of the room's takings resting on very few tables. */
+  | "tableConcentration";
 
 export type InsightSeverity = "critical" | "warning" | "positive" | "neutral";
 export type InsightDirection = "up" | "down" | "flat";
@@ -109,8 +154,11 @@ export type InsightConfidence = "high" | "low";
 export type RevenueDriver = "orders" | "averageOrderValue" | "both" | "none";
 
 export interface InsightEntity {
-  kind: "product" | "category";
-  /** Null for a product that has since been deleted. */
+  kind: "product" | "category" | "table";
+  /**
+   * Null for a product that has since been deleted, or for a table number that
+   * orders name but no `RestaurantTable` row does.
+   */
   id: string | null;
   name: string;
 }
@@ -182,6 +230,24 @@ export interface SalesInsightInput {
   customers?: { current: CustomerActivity; previous: CustomerActivity };
   featured?: MerchandisingSurface[];
   recommendations?: MerchandisingSurface[];
+  /**
+   * Realised per-dish economics for the current period.
+   *
+   * Optional, so every existing caller keeps working and simply produces no
+   * profitability insights — which is the honest outcome for a caller that has
+   * not supplied any cost information.
+   *
+   * Already classified by `profitability.ts` rather than raw: placing a dish on
+   * the volume/margin grid is arithmetic that module owns, and re-deriving it
+   * here would give the analytics table and the insight beneath it two chances
+   * to disagree about the same dish.
+   */
+  profitability?: {
+    products: readonly ProductPerformance[];
+    benchmark: MenuBenchmark;
+    coverage: CostCoverage;
+    concentration: MenuConcentration;
+  };
 }
 
 /**
@@ -262,14 +328,44 @@ const TYPE_WEIGHT: Record<InsightType, number> = {
   revenueChange: 1,
   revenueDriver: 0.95,
   orderVolumeChange: 0.9,
+  /*
+    Margin outranks the basket, and deliberately.
+
+    A dish selling heavily at a margin a third of the menu's is a bigger
+    business problem than a 9% move in the average ticket, because it is losing
+    money on every sale rather than on the difference. It sits just under the
+    revenue decomposition, which is still the first thing an owner should read.
+  */
+  highSalesLowMargin: 0.89,
   aovChange: 0.88,
   topNegativeContributor: 0.85,
   topPositiveContributor: 0.8,
   categoryDecline: 0.75,
   categoryGrowth: 0.7,
+  /* An opportunity, so below every problem but above the housekeeping. */
+  lowSalesHighMargin: 0.65,
   customerMixChange: 0.6,
+  menuConcentration: 0.5,
+  /*
+    Lowest of all, and it belongs there: it is a data-quality notice, not a
+    finding about the business. But it is *not* omitted, because an owner
+    reading a margin built from half the revenue needs to know that.
+  */
+  costDataIncomplete: 0.25,
   featuredWeakConversion: 0.3,
   recommendationWeakConversion: 0.3,
+  /*
+    Table rules rank among themselves, never against the menu rules — they are
+    built by a separate entry point and shown on their own screen. The weights
+    still matter, because the four of them compete for the top of that list.
+
+    A table going quiet outranks a table doing well, on the same principle the
+    revenue rules follow: a problem is worth reading before a compliment.
+  */
+  tableActivityDecline: 0.9,
+  tableViewsWithoutOrders: 0.7,
+  tableHighActivity: 0.6,
+  tableConcentration: 0.5,
 };
 
 /**
@@ -787,5 +883,440 @@ export function buildSalesInsights(input: SalesInsightInput): SalesInsightReport
     });
   }
 
+  // --- I. profitability -----------------------------------------------------
+  /*
+    What sold well but earned little, and what earned well but barely sold.
+
+    The placement itself is `profitability.ts`'s job — every dish arrives
+    already on the grid, with its own low-data guards applied. What happens here
+    is only the decision about whether it is worth an owner's attention, which
+    is what this engine exists to decide.
+
+    Nothing in this block re-derives a margin, a benchmark or a quadrant.
+  */
+  if (input.profitability) {
+    const { products, benchmark, coverage, concentration } = input.profitability;
+
+    /*
+      Cost coverage gates the two margin rules entirely.
+
+      A margin computed from half a venue's revenue is not a weak signal, it is
+      an unknown one — and naming a specific dish as low-margin on that basis
+      would be exactly the false precision this feature must not have. When
+      coverage is poor the engine says *that* instead, which is the true and
+      useful thing to say.
+    */
+    /*
+      `typicalMargin` throughout, never `menuMargin`.
+
+      The sentence an owner reads must quote the figure that actually produced
+      the judgement. `menuMargin` is the revenue-weighted average — the right
+      thing to *display* as "what my turnover earns" — but the classification
+      compares against the median dish, and on a skewed menu the two can sit far
+      enough apart to print a dish's margin as higher than the number it is
+      being called weak against. Quoting the deciding figure keeps the claim
+      checkable, which is the whole point of showing it.
+    */
+    const marginsAreTrustworthy =
+      coverage.confidence === "reliable" && benchmark.typicalMargin !== null;
+
+    if (marginsAreTrustworthy) {
+      // Worst offender first: the dish losing the most margin against the menu.
+      const weak = products
+        .filter((p) => p.quadrant === "reviewPricing" && p.margin !== null)
+        .sort((a, b) => b.revenue - a.revenue || a.key.localeCompare(b.key))[0];
+
+      if (weak) {
+        /*
+          The impact, in Toman: what this dish would have earned at the menu's
+          own margin, less what it did earn. That makes the score directly
+          comparable with every revenue movement above, which is the whole
+          reason the ranking works across rule types.
+        */
+        const shortfall = weak.revenue * (benchmark.typicalMargin! - (weak.margin ?? 0));
+
+        insights.push({
+          id: `highSalesLowMargin:${weak.key}`,
+          type: "highSalesLowMargin",
+          severity: "warning",
+          direction: "flat",
+          messageKey: "highSalesLowMargin",
+          values: {
+            margin: weak.margin ?? 0,
+            menuMargin: benchmark.typicalMargin!,
+            revenue: weak.revenue,
+            quantity: weak.quantity,
+            cost: weak.cost,
+            shortfall,
+          },
+          metric: weak.margin ?? 0,
+          comparison: benchmark.typicalMargin!,
+          deltaAbsolute: shortfall,
+          deltaPercent: null,
+          entity: { kind: "product", id: weak.id, name: weak.name },
+          // Points at the product editor, which already owns price and cost.
+          actionKey: "reviewProductPricing",
+          confidence,
+          score: scoreOf("highSalesLowMargin", shortfall, confidence),
+        });
+      }
+
+      // And the mirror: good economics, no volume. An opportunity, not a fault.
+      const quiet = products
+        .filter((p) => p.quadrant === "promote" && p.margin !== null)
+        .sort(
+          (a, b) => (b.margin ?? 0) - (a.margin ?? 0) || a.key.localeCompare(b.key),
+        )[0];
+
+      if (quiet) {
+        /*
+          Upside, stated conservatively: what this dish would add if it merely
+          reached the high-volume bar — not a forecast, and deliberately not
+          presented as one. It exists to rank the finding, and the message the
+          owner reads states the margin and the sales, never a prediction.
+        */
+        const headroom =
+          Math.max(
+            0,
+            benchmark.highVolumeShare * totalRevenueOf(products) - quiet.revenue,
+          ) * (quiet.margin ?? 0);
+
+        insights.push({
+          id: `lowSalesHighMargin:${quiet.key}`,
+          type: "lowSalesHighMargin",
+          severity: "positive",
+          direction: "flat",
+          messageKey: "lowSalesHighMargin",
+          values: {
+            margin: quiet.margin ?? 0,
+            menuMargin: benchmark.typicalMargin!,
+            revenue: quiet.revenue,
+            quantity: quiet.quantity,
+          },
+          metric: quiet.margin ?? 0,
+          comparison: benchmark.typicalMargin!,
+          deltaAbsolute: 0,
+          deltaPercent: null,
+          entity: { kind: "product", id: quiet.id, name: quiet.name },
+          // Points at Part 1's merchandising screen, which already exists.
+          actionKey: "promoteProduct",
+          confidence,
+          score: scoreOf("lowSalesHighMargin", headroom, confidence),
+        });
+      }
+    }
+
+    /*
+      Why a margin is missing, rather than a missing margin.
+
+      Emitted whenever coverage is anything short of reliable — including when
+      it is so poor that the two rules above stayed silent, which is precisely
+      when an owner most needs to be told why the screen has gone quiet.
+    */
+    if (coverage.confidence !== "reliable" && coverage.uncostedProducts > 0) {
+      insights.push({
+        id: "costDataIncomplete",
+        type: "costDataIncomplete",
+        severity: "neutral",
+        direction: "flat",
+        messageKey: "costDataIncomplete",
+        values: {
+          products: coverage.uncostedProducts,
+          coverage: coverage.coverage,
+          uncostedRevenue: coverage.uncostedRevenue,
+        },
+        metric: coverage.coverage,
+        comparison: 1,
+        deltaAbsolute: coverage.uncostedRevenue,
+        deltaPercent: null,
+        actionKey: "addProductCosts",
+        confidence,
+        score: scoreOf("costDataIncomplete", coverage.uncostedRevenue, confidence),
+      });
+    }
+
+    /*
+      Concentration risk. An observation about exposure, with no claim that a
+      concentrated menu is wrong — plenty of excellent restaurants sell four
+      things.
+    */
+    if (concentration.isConcentrated) {
+      insights.push({
+        id: "menuConcentration",
+        type: "menuConcentration",
+        severity: "neutral",
+        direction: "flat",
+        messageKey: "menuConcentration",
+        values: { share: concentration.share, count: concentration.topN },
+        metric: concentration.share,
+        comparison: 1,
+        deltaAbsolute: 0,
+        deltaPercent: null,
+        confidence,
+        score: scoreOf(
+          "menuConcentration",
+          concentration.share * input.current.revenue,
+          confidence,
+        ),
+      });
+    }
+  }
+
   return { status: "ok", insights: rank(insights), decomposition, totals };
+}
+
+// ------------------------------- table rules --------------------------------
+
+export interface TableInsightInput {
+  report: TableReport;
+  concentration: TableConcentration | null;
+}
+
+/**
+ * What is worth saying about the room.
+ *
+ * A separate entry point rather than a branch inside `buildSalesInsights`,
+ * because these answer a question asked on a different screen: the analytics
+ * page explains why revenue moved, and this explains which tables it moved at.
+ * Folding them together would put four table findings into a list an owner
+ * opens to read about their menu, and rank them against it on a scale neither
+ * shares. Everything else is reused — the `SalesInsight` shape, the severities,
+ * `scoreOf`, `rank`, and the `t.insights` message contract — so the table page
+ * renders these with the analytics page's own card component.
+ *
+ * ### Descriptive only
+ *
+ * Every rule below states what the figures show and stops. None of them
+ * concludes that a QR code has failed, that a table is badly placed, or that
+ * guests dislike it — the data cannot distinguish those, and a sentence that
+ * picked one would be a guess wearing a measurement's clothes. The owner knows
+ * the room; this tells them where to look in it.
+ */
+export function buildTableInsights(input: TableInsightInput): SalesInsight[] {
+  const { report, concentration } = input;
+  const insights: SalesInsight[] = [];
+
+  /*
+    The same confidence rule the sales rules use, read off the same threshold:
+    a finding drawn from under thirty orders is still reported, but quietly.
+  */
+  const confidence: InsightConfidence =
+    report.totals.orders >= INSIGHT_THRESHOLDS.lowConfidenceOrders ? "high" : "low";
+
+  const fairShareRevenue =
+    report.totals.activeTables > 0
+      ? report.totals.revenue / report.totals.activeTables
+      : 0;
+
+  /*
+    The busiest table, when the venue has enough trade for "busiest" to mean
+    something. `activity` is already null when it does not, so the band does the
+    gating and nothing here re-derives it.
+  */
+  const busiest = report.rows
+    .filter(
+      (row) =>
+        row.activity === "high" && row.revenue >= INSIGHT_THRESHOLDS.minCategoryRevenue,
+    )
+    .sort((a, b) => b.revenue - a.revenue || a.number.localeCompare(b.number))[0];
+
+  if (busiest) {
+    insights.push({
+      id: `tableHighActivity:${busiest.key}`,
+      type: "tableHighActivity",
+      severity: "positive",
+      direction: "up",
+      messageKey: "tableHighActivity",
+      values: {
+        orders: busiest.orders,
+        revenue: busiest.revenue,
+        share: busiest.revenueShare,
+      },
+      metric: busiest.revenue,
+      comparison: Math.round(fairShareRevenue),
+      deltaAbsolute: busiest.revenue - fairShareRevenue,
+      deltaPercent: null,
+      entity: { kind: "table", id: busiest.id, name: busiest.number },
+      confidence,
+      score: scoreOf("tableHighActivity", busiest.revenue - fairShareRevenue, confidence),
+    });
+  }
+
+  /*
+    The table that has gone quietest, measured in money against the same window
+    a period earlier.
+
+    Gated on the previous window having real trade at that table: a table that
+    took two orders last month and one this month has not declined, it has been
+    used twice. `isMeaningful` then applies the platform's own floors — 8% and
+    500,000 Toman — so this rule agrees with every other rule about what counts
+    as a movement.
+  */
+  const declined = report.rows
+    .filter((row) => {
+      if (!row.trend) return false;
+      if (row.trend.previousOrders < INSIGHT_THRESHOLDS.minOrdersPerPeriod) return false;
+      if (row.revenue >= row.trend.previousRevenue) return false;
+
+      return isMeaningful(
+        row.trend.revenueDelta,
+        row.revenue - row.trend.previousRevenue,
+        INSIGHT_THRESHOLDS.minRevenueDelta,
+      );
+    })
+    .sort(
+      (a, b) =>
+        a.revenue - a.trend!.previousRevenue - (b.revenue - b.trend!.previousRevenue) ||
+        a.number.localeCompare(b.number),
+    )[0];
+
+  if (declined?.trend) {
+    const drop = declined.revenue - declined.trend.previousRevenue;
+
+    insights.push({
+      id: `tableActivityDecline:${declined.key}`,
+      type: "tableActivityDecline",
+      severity: "warning",
+      direction: "down",
+      messageKey: "tableActivityDecline",
+      values: {
+        orders: declined.orders,
+        previousOrders: declined.trend.previousOrders,
+        amount: Math.abs(drop),
+        percent: declined.trend.revenueDelta ?? 0,
+      },
+      metric: declined.revenue,
+      comparison: declined.trend.previousRevenue,
+      deltaAbsolute: drop,
+      deltaPercent: declined.trend.revenueDelta,
+      entity: { kind: "table", id: declined.id, name: declined.number },
+      confidence,
+      score: scoreOf("tableActivityDecline", drop, confidence),
+    });
+  }
+
+  /*
+    A table whose code is opened often while comparatively few orders follow.
+
+    The one rule on this screen that could most easily become a false claim, so
+    it is the most heavily gated:
+
+      * `views.status` must be `measured`, which already requires that most of
+        the venue's traffic could be attributed to a table at all.
+      * Each row's own `visits.status` must be `measured`, which requires the
+        table to have cleared the 30-open floor on its own.
+      * There must be a roomful of such tables to compare against, so the bar is
+        the venue's own observed rate rather than a number invented here.
+
+    And it says only that: opens are high and orders are lower. Not that the
+    code is broken, not that the table is bad. Both are possible; so is a table
+    by the door that everyone reads the menu at while waiting for a seat.
+  */
+  const measured = report.rows.filter((row) => row.visits.status === "measured");
+
+  if (
+    report.views.status === "measured" &&
+    measured.length >= TABLE_THRESHOLDS.minTablesForBands
+  ) {
+    const venueViews = measured.reduce((sum, row) => sum + row.visits.views, 0);
+    const venueOrders = measured.reduce((sum, row) => sum + row.visits.orders, 0);
+    const venueRatio = venueViews > 0 ? venueOrders / venueViews : 0;
+
+    const lagging = measured
+      .filter(
+        (row) =>
+          venueRatio > 0 &&
+          (row.visits.ratio ?? 0) <= venueRatio * TABLE_THRESHOLDS.lowActivityShareFactor,
+      )
+      .sort(
+        (a, b) => b.visits.views - a.visits.views || a.number.localeCompare(b.number),
+      )[0];
+
+    if (lagging) {
+      /*
+        Ranked by the orders the table would have taken at the room's own rate,
+        less the orders it took, valued at its own average ticket. A gap, not a
+        forecast — nothing tells the owner those orders were available.
+      */
+      const expected = lagging.visits.views * venueRatio;
+      const gap = Math.max(0, expected - lagging.visits.orders);
+
+      insights.push({
+        id: `tableViewsWithoutOrders:${lagging.key}`,
+        type: "tableViewsWithoutOrders",
+        // Neutral, deliberately. It is an observation to investigate, not a
+        // fault to fix, and a warning badge would assert more than the data.
+        severity: "neutral",
+        direction: "flat",
+        messageKey: "tableViewsWithoutOrders",
+        values: {
+          views: lagging.visits.views,
+          orders: lagging.visits.orders,
+          ratio: lagging.visits.ratio ?? 0,
+          venueRatio,
+        },
+        metric: lagging.visits.orders,
+        comparison: Math.round(expected),
+        deltaAbsolute: gap,
+        deltaPercent: null,
+        entity: { kind: "table", id: lagging.id, name: lagging.number },
+        confidence,
+        score: scoreOf(
+          "tableViewsWithoutOrders",
+          gap * lagging.averageOrderValue,
+          confidence,
+        ),
+      });
+    }
+  }
+
+  /*
+    Exposure, with no claim that it is wrong. A venue whose four window tables
+    take most of the money is a normal venue with a good window.
+  */
+  if (concentration) {
+    /*
+      Ranked on the revenue held *above* an even spread, not on the top slice's
+      whole share.
+
+      The distinction decides the order of the page. `share × totalRevenue` is a
+      fraction of the venue's entire turnover, while every other rule here
+      scores a *movement* — so concentration measured that way outranked a
+      25,000,000 Toman collapse at table 2 simply because turnover is a bigger
+      number than any change in it. The excess over an even room is the part
+      that is actually about concentration, and it is on the same scale as the
+      deltas it competes with.
+    */
+    const evenShare =
+      report.totals.activeTables > 0
+        ? Math.min(1, concentration.tables.length / report.totals.activeTables)
+        : 1;
+    const excess =
+      Math.max(0, concentration.topShare - evenShare) * report.totals.revenue;
+
+    insights.push({
+      id: "tableConcentration",
+      type: "tableConcentration",
+      severity: "neutral",
+      direction: "flat",
+      messageKey: "tableConcentration",
+      values: {
+        share: concentration.topShare,
+        count: concentration.tables.length,
+      },
+      metric: concentration.topShare,
+      comparison: 1,
+      deltaAbsolute: 0,
+      deltaPercent: null,
+      confidence,
+      score: scoreOf("tableConcentration", excess, confidence),
+    });
+  }
+
+  return rank(insights);
+}
+
+/** Period revenue across the classified dishes, for the headroom arithmetic. */
+function totalRevenueOf(products: readonly ProductPerformance[]): number {
+  return products.reduce((sum, product) => sum + product.revenue, 0);
 }

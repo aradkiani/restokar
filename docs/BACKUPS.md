@@ -5,7 +5,7 @@ the admin console.
 
 ## What is backed up
 
-A single `menuland-backup-<timestamp>.tar.gz` containing:
+A single `restokar-backup-<timestamp>.tar.gz` containing:
 
 ```
 manifest.json                 what was taken, when, and against which migration
@@ -63,28 +63,28 @@ when one failed.
 powershell -ExecutionPolicy Bypass -File ./scripts/install-backup-schedule.ps1
 ```
 
-**Linux (systemd)** — `/etc/systemd/system/menuland-backup.service`:
+**Linux (systemd)** — `/etc/systemd/system/restokar-backup.service`:
 
 ```ini
 [Unit]
-Description=Menuland customer-data backup
+Description=Restokar customer-data backup
 After=network-online.target postgresql.service
 
 [Service]
 Type=oneshot
-User=menuland
-WorkingDirectory=/srv/menuland
-EnvironmentFile=/srv/menuland/.env
+User=restokar
+WorkingDirectory=/srv/restokar
+EnvironmentFile=/srv/restokar/.env
 ExecStart=/usr/bin/npm run backup
-StandardOutput=append:/var/lib/menuland/logs/backup.log
-StandardError=append:/var/lib/menuland/logs/backup.log
+StandardOutput=append:/var/lib/restokar/logs/backup.log
+StandardError=append:/var/lib/restokar/logs/backup.log
 ```
 
-`/etc/systemd/system/menuland-backup.timer`:
+`/etc/systemd/system/restokar-backup.timer`:
 
 ```ini
 [Unit]
-Description=Run the Menuland backup every 12 hours
+Description=Run the Restokar backup every 12 hours
 
 [Timer]
 OnCalendar=*-*-* 03,15:00:00
@@ -96,7 +96,7 @@ WantedBy=timers.target
 ```
 
 ```bash
-sudo systemctl enable --now menuland-backup.timer
+sudo systemctl enable --now restokar-backup.timer
 ```
 
 `Persistent=true` matters: it runs a missed backup after the machine comes back
@@ -148,13 +148,13 @@ The same run also prunes expired sessions and stale rate-limit counters.
 ## Restoring
 
 ```bash
-npm run backup:restore -- data/backups/menuland-backup-….tar.gz
+npm run backup:restore -- data/backups/restokar-backup-….tar.gz
 ```
 
 Reports what it would do and changes nothing. To actually apply it:
 
 ```bash
-npm run backup:restore -- data/backups/menuland-backup-….tar.gz --yes
+npm run backup:restore -- data/backups/restokar-backup-….tar.gz --yes
 ```
 
 **This truncates and refills every table in the archive.** It warns when the

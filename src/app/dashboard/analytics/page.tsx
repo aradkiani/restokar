@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Receipt, ShoppingBag, TrendingUp, Wallet } from "lucide-react";
+import { QrCode, Receipt, ShoppingBag, TrendingUp, Wallet } from "lucide-react";
 import { requirePageTab } from "@/lib/auth/guards";
 import { getI18n } from "@/lib/i18n";
 import {
@@ -16,6 +16,8 @@ import { getSalesInsights } from "@/lib/sales-insights-server";
 import { prisma } from "@/lib/prisma";
 import { isComparisonPreset, type ComparisonPreset } from "@/lib/insight-periods";
 import { SalesInsightsSection } from "./insights";
+import { ProductPerformanceTable } from "./performance";
+import { ExportButton } from "@/components/export-button";
 import {
   formatDateShort,
   formatMoney,
@@ -138,6 +140,37 @@ export default async function AnalyticsPage({
             </Link>
           ))}
         </nav>
+
+        {/*
+          Beside the range selector, so "the period I am looking at" is what
+          gets exported — the `days` passed here is the same value the reports
+          above were built with.
+
+          Three datasets rather than one because this page shows three distinct
+          reports; each button exports the one it sits nearest in the page.
+        */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/*
+            The way into the table report.
+
+            Here rather than in the sidebar because it is part of this section
+            rather than a section of its own — it answers "where did this
+            revenue happen?", which is only a question once the revenue on this
+            page has been read. It also inherits the `analytics` grant that way,
+            with no second permission to keep in step.
+          */}
+          <Link
+            href="/dashboard/analytics/tables"
+            className="tap-safe inline-flex min-h-10 items-center gap-1.5 rounded-full bg-ink-100 px-3.5 text-xs font-bold text-ink-600 transition-colors hover:text-ink-900"
+          >
+            <QrCode className="size-4" aria-hidden />
+            {t.tableIntel.navLabel}
+          </Link>
+
+          <ExportButton dataset="sales" days={days} />
+          <ExportButton dataset="products" days={days} />
+          <ExportButton dataset="order-items" days={days} variant="ghost" />
+        </div>
       </header>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -176,6 +209,15 @@ export default async function AnalyticsPage({
         result={insightResult}
         preset={preset}
         range={days}
+        locale={locale}
+        t={t}
+      />
+
+      {/* Under the insights that name individual dishes, so "this sells well
+          but earns little" is followed immediately by the table it came from. */}
+      <ProductPerformanceTable
+        rows={insightResult.profitability.products}
+        benchmark={insightResult.profitability.benchmark}
         locale={locale}
         t={t}
       />
@@ -364,7 +406,7 @@ export default async function AnalyticsPage({
                       {t.recommendations.purchases}
                     </th>
                     <th className="py-2 text-start font-semibold">
-                      {t.recommendations.conversion}
+                      {t.recommendations.revenuePerView}
                     </th>
                     <th className="py-2 text-start font-semibold">
                       {t.recommendations.revenue}
@@ -395,7 +437,7 @@ export default async function AnalyticsPage({
                         {formatNumber(row.purchases, locale)}
                       </td>
                       <td className="py-2.5 tabular-nums">
-                        {formatPercent(row.conversionRate, locale)}
+                        {formatMoney(row.revenuePerImpression, locale)}
                       </td>
                       <td className="py-2.5 font-semibold tabular-nums">
                         {formatMoney(row.revenue, locale)}

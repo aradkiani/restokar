@@ -23,7 +23,7 @@ export const THEMES = ["system", "light", "dark"] as const;
 export type ThemePreference = (typeof THEMES)[number];
 
 export const DEFAULT_THEME: ThemePreference = "system";
-export const THEME_COOKIE = "menuland_theme";
+export const THEME_COOKIE = "restokar_theme";
 
 export function isThemePreference(value: unknown): value is ThemePreference {
   return typeof value === "string" && (THEMES as readonly string[]).includes(value);

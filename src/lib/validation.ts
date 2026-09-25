@@ -10,7 +10,12 @@ import { MAX_SOCIAL_LINKS, SOCIAL_PLATFORM_IDS } from "./socials";
 import { MAX_BULK_PERCENT, MIN_BULK_PERCENT, PRICE_ROUNDING_STEPS } from "./bulk-pricing";
 import { MAX_SCHEDULE_WINDOWS, parseTimeOfDay } from "./availability";
 import { FEATURED_LABELS, MAX_CUSTOM_LABEL_LENGTH } from "./featured";
+import { UNIT_CODES, isUnitCode, sameDimension } from "./units";
+import { MAX_BROADCAST_TEXT_LENGTH, SMS_AUDIENCES } from "./sms-broadcast";
+import { MAX_BUNDLE_COMPONENTS } from "./bundles";
 import { CUSTOMER_SEGMENTS, MAX_PAGE_SIZE } from "./customers";
+import { VALUE_TIERS } from "./retention";
+import { EXPORT_DATASETS } from "./export/dataset-names";
 import { CAMPAIGN_STATUSES, MAX_CAMPAIGN_PAGE_SIZE, scheduleIssue } from "./campaigns";
 import { MINUTES_PER_DAY, instantFromZonedWallClock } from "./time";
 
@@ -241,6 +246,7 @@ export const OptionGroupSchema = z
     isRequired: z.boolean().default(false),
     minSelect: z.coerce.number().int().min(0).max(20).default(1),
     maxSelect: z.coerce.number().int().min(1).max(20).default(1),
+    isUpgrade: z.boolean().default(false),
     choices: z
       .array(OptionChoiceSchema)
       .min(1, "هر گروه حداقل یک گزینه لازم دارد")
@@ -255,6 +261,18 @@ export const OptionGroupSchema = z
   .refine((g) => g.minSelect <= g.maxSelect, {
     message: "حداقل انتخاب از حداکثر بیشتر است",
     path: ["minSelect"],
+  })
+  /*
+    An upgrade ladder replaces a choice, so it has to be single-select.
+
+    Refused here rather than tolerated and ignored at render: `resolveUpgrade`
+    already declines a multi-select group, but an owner who ticked both would
+    get silence instead of a reason. The quoted difference would be wrong in a
+    way the guest only discovers at the total.
+  */
+  .refine((g) => !g.isUpgrade || g.maxSelect === 1, {
+    message: "گروه ارتقا باید تک‌انتخابی باشد",
+    path: ["isUpgrade"],
   });
 
 // -------------------------- recommendations --------------------------------
@@ -294,6 +312,44 @@ export const RecommendationListSchema = z
   );
 
 export type RecommendationInput = z.infer<typeof RecommendationSchema>;
+
+// ------------------------------- bundles -----------------------------------
+
+/**
+ * One dish inside a meal deal.
+ *
+ * `quantity` is capped rather than merely positive: a combo listing twenty
+ * burgers is a typo, and a cap keeps the saving arithmetic away from figures
+ * that would overflow a card. The positive floor is also a CHECK, so it holds
+ * whichever path writes the row.
+ */
+export const BundleComponentSchema = z.object({
+  componentProductId: z.string().min(1, "محصول را انتخاب کنید"),
+  quantity: z.coerce
+    .number()
+    .int("تعداد باید عدد صحیح باشد")
+    .min(1, "تعداد باید حداقل ۱ باشد")
+    .max(20, "تعداد بیش از حد مجاز است")
+    .default(1),
+});
+
+/**
+ * A bundle's contents, in the owner's display order.
+ *
+ * Position is the order, the same convention every other child collection here
+ * uses. Duplicates are *not* refused — `normaliseComponents` folds them into a
+ * quantity, because an owner adding the same dish twice means "two of these" —
+ * so unlike the recommendation list there is no uniqueness refinement.
+ *
+ * Self-reference cannot be checked at this layer, since the schema does not
+ * know which product is being edited. `replaceBundleItems` does it, and a CHECK
+ * constraint backs both.
+ */
+export const BundleComponentListSchema = z
+  .array(BundleComponentSchema)
+  .max(MAX_BUNDLE_COMPONENTS, "تعداد اجزای پیشنهاد ویژه بیش از حد مجاز است");
+
+export type BundleComponentInput = z.infer<typeof BundleComponentSchema>;
 
 // ------------------------- featured / merchandising ------------------------
 
@@ -353,6 +409,17 @@ const ProductFields = z.object({
    * `schedule` follows, so a caller changing only a price cannot wipe them.
    */
   recommendations: RecommendationListSchema.optional(),
+  /**
+   * What this dish contains, when it is a meal deal.
+   *
+   * Optional for the same reason, and with the same consequence: absent leaves
+   * the contents alone, while an empty array is the owner saying this is no
+   * longer a bundle. Note it is deliberately **not** given a `.default([])` —
+   * that is precisely the Zod 4 trap documented on `ProductPatchSchema` below,
+   * and a default here would silently un-bundle a product on any patch that
+   * did not mention it.
+   */
+  bundleItems: BundleComponentListSchema.optional(),
   categoryId: z.string().min(1, "دسته‌بندی را انتخاب کنید"),
   name: z.string().trim().min(1, "نام محصول الزامی است").max(80),
   nameEn: z.string().trim().max(80).optional().or(z.literal("")),
@@ -484,8 +551,48 @@ export const ProductPatchSchema = ProductFields.omit({
  * an unparsed page size or an unrecognised segment is refused rather than
  * coerced into something that happens to work.
  */
+/**
+ * What an export request may ask for.
+ *
+ * Deliberately narrow, and deliberately carries **no tenant**: the restaurant
+ * comes from the session, so there is nothing here a caller could point at
+ * another venue.
+ *
+ * `days` and `from`/`to` are the same two window shapes every report already
+ * accepts — a rolling count for the dashboards, an explicit range for the
+ * report generator. Both are bounded: an unbounded `from` would let one request
+ * ask for every order a venue has ever taken.
+ */
+export const ExportQuerySchema = z
+  .object({
+    dataset: z.enum(EXPORT_DATASETS),
+    days: z.coerce.number().int().min(1).max(366).optional(),
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  })
+  // Half a range is not a range. Silently ignoring the half that arrived would
+  // export a different period from the one the owner is looking at.
+  .refine((q) => Boolean(q.from) === Boolean(q.to), {
+    message: "هر دو تاریخ شروع و پایان لازم است",
+    path: ["from"],
+  })
+  .refine((q) => !q.from || !q.to || q.to >= q.from, {
+    message: "تاریخ پایان باید بعد از تاریخ شروع باشد",
+    path: ["to"],
+  });
+
+export type ExportQuery = z.infer<typeof ExportQuerySchema>;
+
 export const CustomerQuerySchema = z.object({
   segment: z.enum(CUSTOMER_SEGMENTS).optional(),
+  /**
+   * Spending band, relative to this venue's own customers.
+   *
+   * A second, independent axis rather than more segment values: a guest can be
+   * both high value and at risk, and that combination is the whole reason the
+   * retention screen exists. One enum cannot hold two orthogonal facts.
+   */
+  valueTier: z.enum(VALUE_TIERS).optional(),
   /** Matched against the name or the phone. Bounded so it cannot be a payload. */
   search: z.string().trim().max(60).optional(),
   minOrders: z.coerce.number().int().min(0).max(10_000).optional(),
@@ -582,6 +689,35 @@ export const AudienceQuerySchema = z.object({
   segment: z.enum(CUSTOMER_SEGMENTS, { error: "گروه هدف را انتخاب کنید" }),
   productId: z.string().trim().min(1).max(40).optional(),
   categoryId: z.string().trim().min(1).max(40).optional(),
+});
+
+// ---------------------------- SMS broadcasts -------------------------------
+
+/**
+ * A promotional SMS a venue wants priced or bought.
+ *
+ * The same schema for the quote and the purchase, so the figure an owner is
+ * shown and the figure they pay are computed from identical input. Length is
+ * bounded loosely here; the real ceiling is in SMS parts, which depends on the
+ * encoding and is decided by `quoteBroadcast`.
+ *
+ * An empty text is accepted *here* and refused by `quoteBroadcast` as `EMPTY`:
+ * the composer asks for a quote before anything is typed, so it can show how
+ * many customers the message would reach, and the purchase path refuses the
+ * same issue with the same code.
+ */
+export const SmsBroadcastSchema = z.object({
+  text: z
+    .string({ error: "متن پیامک را بنویسید" })
+    .trim()
+    .max(MAX_BROADCAST_TEXT_LENGTH, "متن پیامک طولانی است"),
+  audience: z.enum(SMS_AUDIENCES).optional(),
+  campaignId: z.string().trim().min(1).max(40).nullish(),
+});
+
+/** Platform staff's only moves: sent, or refused. PAID comes from the gateway. */
+export const SmsBroadcastStatusSchema = z.object({
+  status: z.enum(["SENT", "CANCELED"]),
 });
 
 // ------------------------------ design -------------------------------------
@@ -729,13 +865,6 @@ export const BulkPriceSchema = z.object({
     .number()
     .min(MIN_BULK_PERCENT, "درصد خارج از محدوده مجاز است")
     .max(MAX_BULK_PERCENT, "درصد خارج از محدوده مجاز است"),
-  roundTo: z.coerce
-    .number()
-    .int()
-    .refine(
-      (value) => (PRICE_ROUNDING_STEPS as readonly number[]).includes(value),
-      "مقدار رُند کردن معتبر نیست",
-    ),
   apply: z.boolean().default(false),
 });
 
@@ -791,6 +920,28 @@ export const PricingOptionsSchema = z.object({
     .optional(),
   roundingDirection: z.enum(["up", "down", "nearest"]).optional(),
 
+  /**
+   * The step menu prices are shown and charged at. One of the bulk tool's
+   * steps, so the two screens offer the same choices.
+   */
+  menuPriceStep: z.coerce
+    .number()
+    .int()
+    .refine(
+      (value) => (PRICE_ROUNDING_STEPS as readonly number[]).includes(value),
+      "مقدار رُند کردن معتبر نیست",
+    )
+    .optional(),
+  /** Whether an ingredient's price change moves the dishes that use it. */
+  autoRepriceFromCost: z.boolean().optional(),
+  /** Warn below this gross margin over ingredient cost. 0 turns it off. */
+  lowMarginPercent: z.coerce
+    .number()
+    .int()
+    .min(0, "درصد حاشیه سود نمی‌تواند منفی باشد")
+    .max(95, "درصد حاشیه سود بیش از حد زیاد است")
+    .optional(),
+
   minimumOrderAmount: z.coerce
     .number()
     .int()
@@ -833,16 +984,92 @@ export type PricingOptionsInput = z.infer<typeof PricingOptionsSchema>;
  * a request body says what a human would say, and there is exactly one place
  * that knows about the scaling.
  */
-export const InventoryItemSchema = z.object({
+const unitCode = z.enum(UNIT_CODES, { error: "واحد را انتخاب کنید" });
+
+/**
+ * What the venue pays for one `priceUnit` of the item, in whole Toman. Null
+ * clears it. Owners type invoice figures, which are whole Toman.
+ */
+const purchasePrice = z.coerce
+  .number()
+  .int("قیمت خرید باید عدد صحیح باشد")
+  .min(1, "قیمت خرید باید بیشتر از صفر باشد")
+  .max(1_000_000_000, "قیمت خرید بیش از حد بزرگ است")
+  .nullable();
+
+const inventoryFields = {
   name: z.string().trim().min(1, "نام ماده را وارد کنید").max(80),
-  unit: z.string().trim().min(1, "واحد را وارد کنید").max(20),
+  unit: unitCode,
   quantity: z.coerce.number().min(0, "مقدار نمی‌تواند منفی باشد").max(1_000_000),
   /** 0 means "do not watch this item" rather than "warn always". */
   lowStock: z.coerce.number().min(0, "سقف هشدار نمی‌تواند منفی باشد").max(1_000_000),
-});
+  purchasePrice,
+  priceUnit: unitCode.nullable(),
+};
 
-/** Editing an item: every field optional, so one change cannot blank the rest. */
-export const InventoryItemPatchSchema = InventoryItemSchema.partial();
+/**
+ * A price needs both halves, quoted in a unit of the same kind as the stock.
+ * The database enforces the same rule; this is the copy that answers in words.
+ */
+function pricedConsistently(
+  value: { unit?: string; purchasePrice?: number | null; priceUnit?: string | null },
+  ctx: z.RefinementCtx,
+): void {
+  const hasPrice = value.purchasePrice !== undefined && value.purchasePrice !== null;
+  const hasUnit = value.priceUnit !== undefined && value.priceUnit !== null;
+
+  if (
+    hasPrice !== hasUnit &&
+    value.purchasePrice !== undefined &&
+    value.priceUnit !== undefined
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["priceUnit"],
+      message: "قیمت خرید و واحد آن باید با هم وارد شوند",
+    });
+  }
+
+  if (
+    hasUnit &&
+    value.unit !== undefined &&
+    isUnitCode(value.unit) &&
+    isUnitCode(value.priceUnit) &&
+    !sameDimension(value.unit, value.priceUnit)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["priceUnit"],
+      message: "واحد قیمت باید از همان نوع واحد موجودی باشد",
+    });
+  }
+}
+
+export const InventoryItemSchema = z
+  .object({
+    ...inventoryFields,
+    purchasePrice: purchasePrice.optional(),
+    priceUnit: inventoryFields.priceUnit.optional(),
+  })
+  .superRefine(pricedConsistently);
+
+/**
+ * Editing an item: every field optional, so one change cannot blank the rest.
+ *
+ * Built from the field list rather than with `.partial()` on the schema above:
+ * none of these carries a default today, and constructing it this way keeps it
+ * that way — `.partial()` would not suppress one if it were ever added.
+ */
+export const InventoryItemPatchSchema = z
+  .object({
+    name: inventoryFields.name.optional(),
+    unit: inventoryFields.unit.optional(),
+    quantity: inventoryFields.quantity.optional(),
+    lowStock: inventoryFields.lowStock.optional(),
+    purchasePrice: inventoryFields.purchasePrice.optional(),
+    priceUnit: inventoryFields.priceUnit.optional(),
+  })
+  .superRefine(pricedConsistently);
 
 /**
  * A dish's whole recipe, replaced in one call.
@@ -856,7 +1083,17 @@ export const ProductRecipeSchema = z.object({
     .array(
       z.object({
         itemId: z.string().min(1),
-        perUnit: z.coerce.number().positive("مقدار مصرف باید بیشتر از صفر باشد"),
+        /** How much one of the dish uses, in `unit`. */
+        amount: z.coerce
+          .number()
+          .positive("مقدار مصرف باید بیشتر از صفر باشد")
+          .max(1_000_000, "مقدار مصرف بیش از حد بزرگ است"),
+        /**
+         * The unit the amount is typed in — "230 g" of a kilogram item. Absent
+         * means the item's own unit. Converted by the route, which knows the
+         * item's unit and refuses one of a different kind.
+         */
+        unit: unitCode.optional(),
       }),
     )
     .max(50, "تعداد مواد اولیه بیش از حد زیاد است"),

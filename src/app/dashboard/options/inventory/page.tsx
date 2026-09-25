@@ -34,6 +34,8 @@ export default async function InventoryPage() {
         unit: true,
         quantityMilli: true,
         lowStockMilli: true,
+        purchasePrice: true,
+        priceUnit: true,
       },
     }),
     prisma.product.findMany({
@@ -43,7 +45,7 @@ export default async function InventoryPage() {
       select: {
         id: true,
         name: true,
-        ingredients: { select: { itemId: true, perUnitMilli: true } },
+        ingredients: { select: { itemId: true, perUnitMilli: true, unit: true } },
       },
     }),
   ]);

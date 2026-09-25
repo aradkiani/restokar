@@ -7,7 +7,7 @@ import { env, isProd } from "@/lib/env";
 import { DAY_MS, SESSION_DAYS } from "@/lib/constants";
 import type { Role } from "@/generated/prisma/enums";
 
-export const SESSION_COOKIE = "menuland_session";
+export const SESSION_COOKIE = "restokar_session";
 
 const secret = new TextEncoder().encode(env.AUTH_SECRET);
 
@@ -45,8 +45,8 @@ async function signToken(claims: {
   return new SignJWT({ ...claims })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setIssuer("menuland")
-    .setAudience("menuland-app")
+    .setIssuer("restokar")
+    .setAudience("restokar-app")
     .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(secret);
 }
@@ -55,8 +55,8 @@ async function signToken(claims: {
 export async function verifyToken(token: string): Promise<SessionClaims | null> {
   try {
     const { payload } = await jwtVerify<SessionClaims>(token, secret, {
-      issuer: "menuland",
-      audience: "menuland-app",
+      issuer: "restokar",
+      audience: "restokar-app",
     });
     return payload;
   } catch {

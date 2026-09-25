@@ -52,22 +52,22 @@ export interface OrderEventPayload {
  * for — and un-listening as they disconnect. At a hundred venues that is a lot
  * of session churn to save a filter that costs a string comparison.
  */
-const CHANNEL = "menuland_events";
+const CHANNEL = "restokar_events";
 
 const globalForBus = globalThis as unknown as {
-  menulandBus?: EventEmitter;
-  menulandListener?: Promise<Client | null>;
+  restokarBus?: EventEmitter;
+  restokarListener?: Promise<Client | null>;
 };
 
 function getBus(): EventEmitter {
-  if (!globalForBus.menulandBus) {
+  if (!globalForBus.restokarBus) {
     const bus = new EventEmitter();
     // A busy venue can have many kitchen tabs plus every guest tracking an
     // order; the default limit of 10 would log spurious leak warnings.
     bus.setMaxListeners(0);
-    globalForBus.menulandBus = bus;
+    globalForBus.restokarBus = bus;
   }
-  return globalForBus.menulandBus;
+  return globalForBus.restokarBus;
 }
 
 const channelKey = (restaurantId: string) => `restaurant:${restaurantId}`;
@@ -81,8 +81,8 @@ const channelKey = (restaurantId: string) => `restaurant:${restaurantId}`;
  * an SSE stream never opens it.
  */
 function getListener(): Promise<Client | null> {
-  globalForBus.menulandListener ??= connectListener();
-  return globalForBus.menulandListener;
+  globalForBus.restokarListener ??= connectListener();
+  return globalForBus.restokarListener;
 }
 
 async function connectListener(): Promise<Client | null> {
@@ -102,7 +102,7 @@ async function connectListener(): Promise<Client | null> {
     client.on("error", () => {
       // Drop the memoised promise so the next subscriber reconnects. Polling
       // covers the gap in the meantime.
-      globalForBus.menulandListener = undefined;
+      globalForBus.restokarListener = undefined;
       client.end().catch(() => {});
     });
 
@@ -110,7 +110,7 @@ async function connectListener(): Promise<Client | null> {
     await client.query(`LISTEN ${CHANNEL}`);
     return client;
   } catch {
-    globalForBus.menulandListener = undefined;
+    globalForBus.restokarListener = undefined;
     return null;
   }
 }

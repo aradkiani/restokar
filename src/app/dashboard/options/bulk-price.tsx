@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Input } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
@@ -15,7 +15,6 @@ import { formatMoneyWithUnit, formatNumber, parseAmount } from "@/lib/format";
 import {
   MAX_BULK_PERCENT,
   MIN_BULK_PERCENT,
-  PRICE_ROUNDING_STEPS,
   type BulkPriceSummary,
 } from "@/lib/bulk-pricing";
 
@@ -32,6 +31,8 @@ interface BulkPriceResponse {
   applied: boolean;
   summary: BulkPriceSummary;
   preview: PreviewRow[];
+  /** How many dishes the change leaves below cost or under the margin floor. */
+  warnings?: { belowCost: number; lowMargin: number };
 }
 
 /**
@@ -46,14 +47,18 @@ interface BulkPriceResponse {
  * The preview is deliberately server-side rather than recomputed here. A
  * preview calculated in the browser is a second implementation of the pricing
  * rule, and the moment the two disagree the preview is worse than none.
+ *
+ * There is no rounding choice here any more. The percentage applies to each
+ * dish's exact price and the menu shows it at the venue's one step, set under
+ * "Menu pricing" — rounding per run was what made repeated increases compound
+ * on figures that were never the real price.
  */
-export function BulkPriceCard() {
+export function BulkPriceCard({ step }: { step: number }) {
   const { t, locale } = useI18n();
   const toast = useToast();
   const router = useRouter();
 
   const [percent, setPercent] = React.useState("10");
-  const [roundTo, setRoundTo] = React.useState(String(10_000));
   const [preview, setPreview] = React.useState<BulkPriceResponse | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
@@ -69,7 +74,6 @@ export function BulkPriceCard() {
     setBusy(true);
     const result = await api.post<BulkPriceResponse>("/api/products/bulk-price", {
       percent: parsedPercent,
-      roundTo: Number(roundTo),
       apply,
     });
     setBusy(false);
@@ -121,24 +125,14 @@ export function BulkPriceCard() {
             />
           </Field>
 
-          <Field label={t.options.bulkRoundTo} htmlFor="bulkRoundTo">
-            <Select
-              id="bulkRoundTo"
-              value={roundTo}
-              onChange={(event) => {
-                setRoundTo(event.target.value);
-                setPreview(null);
-              }}
-            >
-              {PRICE_ROUNDING_STEPS.map((step) => (
-                <option key={step} value={step}>
-                  {step === 0
-                    ? t.options.bulkNoRounding
-                    : formatMoneyWithUnit(step, locale)}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <p className="self-end pb-2 text-xs leading-6 text-ink-500">
+            {step > 0
+              ? t.costing.bulkStepNote.replace(
+                  "{step}",
+                  formatMoneyWithUnit(step, locale),
+                )
+              : t.costing.bulkStepNone}
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -214,6 +208,33 @@ export function BulkPriceCard() {
                     </li>
                   ))}
                 </ul>
+
+                {preview.warnings &&
+                  (preview.warnings.belowCost > 0 || preview.warnings.lowMargin > 0) && (
+                    <div
+                      role="alert"
+                      className="mt-3 space-y-1 rounded-[var(--radius-sm)] bg-amber-50 p-2.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
+                    >
+                      {preview.warnings.belowCost > 0 && (
+                        <p className="flex items-center gap-1.5 text-red-800">
+                          <AlertTriangle className="size-3.5 shrink-0" />
+                          {t.costing.bulkBelowCost.replace(
+                            "{n}",
+                            formatNumber(preview.warnings.belowCost, locale),
+                          )}
+                        </p>
+                      )}
+                      {preview.warnings.lowMargin > 0 && (
+                        <p className="flex items-center gap-1.5">
+                          <AlertTriangle className="size-3.5 shrink-0" />
+                          {t.costing.bulkLowMargin.replace(
+                            "{n}",
+                            formatNumber(preview.warnings.lowMargin, locale),
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                 {preview.summary.changed > preview.preview.length && (
                   <p className="mt-2 text-xs text-ink-500">

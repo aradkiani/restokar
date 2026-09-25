@@ -5,7 +5,7 @@ import { LoginForm } from "./form";
 
 export const metadata: Metadata = {
   title: "ورود",
-  description: "ورود به پنل مدیریت رستوران در منولند",
+  description: "ورود به پنل مدیریت رستوران در رستوکار",
   robots: { index: false, follow: true },
 };
 

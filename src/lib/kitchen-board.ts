@@ -1,5 +1,5 @@
 import "server-only";
-import { deliveredVisibleSince } from "./constants";
+import { finishedVisibleSince } from "./order-retirement";
 import type { OrderStatus } from "@/generated/prisma/enums";
 
 /**
@@ -31,7 +31,22 @@ export function boardWhere(restaurantId: string) {
       { status: { in: ACTIVE } },
       {
         status: "DELIVERED" as OrderStatus,
-        deliveredAt: { gte: deliveredVisibleSince() },
+        /*
+          A delivered order stays until it has been paid for an hour.
+
+          `max(deliveredAt, paidAt) >= cutoff` is what the rule says, and
+          `a >= cutoff OR b >= cutoff` is the same question in the form Prisma
+          can express — `order-retirement.test.ts` pins that equivalence.
+
+          The unpaid branch comes first and has no time bound at all: an order
+          handed over and never settled must never leave the pass, which the
+          previous rule got wrong by measuring from delivery alone.
+        */
+        OR: [
+          { paymentStatus: { not: "PAID" as const } },
+          { deliveredAt: { gte: finishedVisibleSince() } },
+          { paidAt: { gte: finishedVisibleSince() } },
+        ],
       },
       {
         status: "CANCELED" as OrderStatus,
@@ -60,6 +75,8 @@ interface BoardRow {
   total: number;
   placedAt: Date;
   deliveredAt: Date | null;
+  /** Needed on the client so its live re-filter applies the same rule. */
+  paidAt: Date | null;
   canceledAt: Date | null;
   refundedAt: Date | null;
   items: { id: string; nameSnapshot: string; quantity: number; note: string | null }[];
@@ -86,6 +103,7 @@ export function toBoardOrder(order: BoardRow) {
     total: order.total,
     placedAt: order.placedAt.toISOString(),
     deliveredAt: order.deliveredAt?.toISOString() ?? null,
+    paidAt: order.paidAt?.toISOString() ?? null,
     canceledAt: order.canceledAt?.toISOString() ?? null,
     refundedAt: order.refundedAt?.toISOString() ?? null,
     items: order.items.map((item) => ({

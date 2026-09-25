@@ -1,4 +1,4 @@
-# Deploying Menuland on a Linux server
+# Deploying Restokar on a Linux server
 
 A complete walkthrough, from "I have nothing" to "restaurants are scanning QR
 codes". No prior server experience assumed. Every command is meant to be run in
@@ -12,8 +12,8 @@ Budget about **60–90 minutes** for the first deployment.
 
 ```
 your-server
-├── /srv/menuland/            the application   ← replaced on every update
-├── /var/lib/menuland/        customer data     ← NEVER replaced
+├── /srv/restokar/            the application   ← replaced on every update
+├── /var/lib/restokar/        customer data     ← NEVER replaced
 │   ├── uploads/  backups/  snapshots/  logs/
 └── PostgreSQL                menus, orders, accounts
 ```
@@ -21,8 +21,8 @@ your-server
 Two rules follow from this and they are the whole reason the project is laid
 out the way it is:
 
-1. Updating the site means replacing `/srv/menuland/`. Nothing else.
-2. `/var/lib/menuland/` and the database are the customers'. They survive every
+1. Updating the site means replacing `/srv/restokar/`. Nothing else.
+2. `/var/lib/restokar/` and the database are the customers'. They survive every
    update, and they are what the twice-daily backup protects.
 
 ---
@@ -124,11 +124,11 @@ Running a web app as root means any bug in it is a bug with total control of the
 machine.
 
 ```bash
-adduser menuland
+adduser restokar
 ```
 
 ```bash
-usermod -aG sudo menuland
+usermod -aG sudo restokar
 ```
 
 ### Turn on the firewall
@@ -163,11 +163,11 @@ node -v
 ## 4. Create the database
 
 ```bash
-sudo -u postgres psql -c "CREATE USER menuland WITH PASSWORD 'PUT-A-LONG-RANDOM-PASSWORD-HERE';"
+sudo -u postgres psql -c "CREATE USER restokar WITH PASSWORD 'PUT-A-LONG-RANDOM-PASSWORD-HERE';"
 ```
 
 ```bash
-sudo -u postgres psql -c "CREATE DATABASE menuland OWNER menuland;"
+sudo -u postgres psql -c "CREATE DATABASE restokar OWNER restokar;"
 ```
 
 Generate that password rather than inventing one, and keep it — it goes in
@@ -184,40 +184,40 @@ openssl rand -base64 24
 This is the folder that must outlive every update.
 
 ```bash
-sudo mkdir -p /var/lib/menuland/{uploads,backups,snapshots,logs}
+sudo mkdir -p /var/lib/restokar/{uploads,backups,snapshots,logs}
 ```
 
 ```bash
-sudo chown -R menuland:menuland /var/lib/menuland
+sudo chown -R restokar:restokar /var/lib/restokar
 ```
 
 ---
 
 ## 6. Upload the application
 
-On **your own computer**, in the folder containing `menuland-core.tar.gz`:
+On **your own computer**, in the folder containing `restokar-core.tar.gz`:
 
 ```bash
-scp menuland-core.tar.gz menuland@YOUR_SERVER_IP:/tmp/
+scp restokar-core.tar.gz restokar@YOUR_SERVER_IP:/tmp/
 ```
 
 Back on the **server**:
 
 ```bash
-sudo mkdir -p /srv/menuland && sudo chown menuland:menuland /srv/menuland
+sudo mkdir -p /srv/restokar && sudo chown restokar:restokar /srv/restokar
 ```
 
 ```bash
-sudo -u menuland tar -xzf /tmp/menuland-core.tar.gz -C /srv/menuland --strip-components=1
+sudo -u restokar tar -xzf /tmp/restokar-core.tar.gz -C /srv/restokar --strip-components=1
 ```
 
 `--strip-components=1` unwraps the `core/` folder inside the archive so the
-files land directly in `/srv/menuland`.
+files land directly in `/srv/restokar`.
 
 Confirm:
 
 ```bash
-ls /srv/menuland
+ls /srv/restokar
 ```
 
 You should see `package.json`, `src`, `prisma`, `public`, `scripts`, `docs`.
@@ -227,7 +227,7 @@ You should see `package.json`, `src`, `prisma`, `public`, `scripts`, `docs`.
 ## 7. Configure
 
 ```bash
-cd /srv/menuland && cp .env.example .env
+cd /srv/restokar && cp .env.example .env
 ```
 
 Generate an auth secret — this signs every login session:
@@ -245,11 +245,11 @@ nano .env
 Set these. The rest can keep their defaults for now:
 
 ```ini
-DATABASE_URL="postgresql://menuland:THE-DB-PASSWORD@localhost:5432/menuland?schema=public"
+DATABASE_URL="postgresql://restokar:THE-DB-PASSWORD@localhost:5432/restokar?schema=public"
 AUTH_SECRET="THE-48-BYTE-VALUE-YOU-JUST-GENERATED"
 NEXT_PUBLIC_APP_URL="https://yourdomain.com"
 NODE_ENV="production"
-DATA_DIR="/var/lib/menuland"
+DATA_DIR="/var/lib/restokar"
 TRUSTED_PROXY_HOPS="1"
 ```
 
@@ -272,7 +272,7 @@ chmod 600 .env
 ## 8. Install, migrate, build
 
 ```bash
-cd /srv/menuland && npm ci
+cd /srv/restokar && npm ci
 ```
 
 ```bash
@@ -293,19 +293,19 @@ npm run build
 Create the service:
 
 ```bash
-sudo nano /etc/systemd/system/menuland.service
+sudo nano /etc/systemd/system/restokar.service
 ```
 
 ```ini
 [Unit]
-Description=Menuland
+Description=Restokar
 After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=menuland
-WorkingDirectory=/srv/menuland
-EnvironmentFile=/srv/menuland/.env
+User=restokar
+WorkingDirectory=/srv/restokar
+EnvironmentFile=/srv/restokar/.env
 Environment=NODE_ENV=production
 Environment=TZ=Asia/Tehran
 ExecStart=/usr/bin/npm start
@@ -317,19 +317,19 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now menuland
+sudo systemctl daemon-reload && sudo systemctl enable --now restokar
 ```
 
 Check it started:
 
 ```bash
-sudo systemctl status menuland
+sudo systemctl status restokar
 ```
 
 If it failed, read why:
 
 ```bash
-sudo journalctl -u menuland -n 50 --no-pager
+sudo journalctl -u restokar -n 50 --no-pager
 ```
 
 ---
@@ -337,7 +337,7 @@ sudo journalctl -u menuland -n 50 --no-pager
 ## 10. Put nginx in front
 
 ```bash
-sudo nano /etc/nginx/sites-available/menuland
+sudo nano /etc/nginx/sites-available/restokar
 ```
 
 ```nginx
@@ -351,7 +351,7 @@ server {
     # but nginx does it without waking Node. The /uploads/ path is stored in the
     # database on every product and logo — do not change it.
     location /uploads/ {
-        alias /var/lib/menuland/uploads/;
+        alias /var/lib/restokar/uploads/;
         access_log off;
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -379,7 +379,7 @@ server {
 Enable it:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/menuland /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/restokar /etc/nginx/sites-enabled/
 ```
 
 ```bash
@@ -462,7 +462,7 @@ register normally, then promote yourself.
 Temporarily allow registration:
 
 ```bash
-cd /srv/menuland && echo 'ENABLE_PUBLIC_REGISTRATION="true"' >> .env && sudo systemctl restart menuland
+cd /srv/restokar && echo 'ENABLE_PUBLIC_REGISTRATION="true"' >> .env && sudo systemctl restart restokar
 ```
 
 Visit `https://yourdomain.com/register` and sign up with your own email and a
@@ -471,13 +471,13 @@ strong password.
 Promote that account to platform admin:
 
 ```bash
-sudo -u postgres psql -d menuland -c "UPDATE \"User\" SET role='SUPER_ADMIN', \"restaurantId\"=NULL WHERE email='you@yourdomain.com';"
+sudo -u postgres psql -d restokar -c "UPDATE \"User\" SET role='SUPER_ADMIN', \"restaurantId\"=NULL WHERE email='you@yourdomain.com';"
 ```
 
 Then close registration again — customers are onboarded from the admin console:
 
 ```bash
-cd /srv/menuland && sed -i '/ENABLE_PUBLIC_REGISTRATION/d' .env && sudo systemctl restart menuland
+cd /srv/restokar && sed -i '/ENABLE_PUBLIC_REGISTRATION/d' .env && sudo systemctl restart restokar
 ```
 
 Sign in at `https://yourdomain.com/login`. You should land on `/admin`, where
@@ -495,7 +495,7 @@ every uploaded photo — is archived and emailed to you.
 Any mailbox you already own works. There is no paid service involved.
 
 ```bash
-cd /srv/menuland && nano .env
+cd /srv/restokar && nano .env
 ```
 
 ```ini
@@ -516,32 +516,32 @@ server.
 ### The schedule
 
 ```bash
-sudo nano /etc/systemd/system/menuland-backup.service
+sudo nano /etc/systemd/system/restokar-backup.service
 ```
 
 ```ini
 [Unit]
-Description=Menuland customer-data backup
+Description=Restokar customer-data backup
 After=network-online.target postgresql.service
 
 [Service]
 Type=oneshot
-User=menuland
-WorkingDirectory=/srv/menuland
-EnvironmentFile=/srv/menuland/.env
+User=restokar
+WorkingDirectory=/srv/restokar
+EnvironmentFile=/srv/restokar/.env
 Environment=TZ=Asia/Tehran
 ExecStart=/usr/bin/npm run backup
-StandardOutput=append:/var/lib/menuland/logs/backup.log
-StandardError=append:/var/lib/menuland/logs/backup.log
+StandardOutput=append:/var/lib/restokar/logs/backup.log
+StandardError=append:/var/lib/restokar/logs/backup.log
 ```
 
 ```bash
-sudo nano /etc/systemd/system/menuland-backup.timer
+sudo nano /etc/systemd/system/restokar-backup.timer
 ```
 
 ```ini
 [Unit]
-Description=Run the Menuland backup every 12 hours
+Description=Run the Restokar backup every 12 hours
 
 [Timer]
 OnCalendar=*-*-* 03,15:00:00
@@ -553,13 +553,13 @@ WantedBy=timers.target
 ```
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now menuland-backup.timer
+sudo systemctl daemon-reload && sudo systemctl enable --now restokar-backup.timer
 ```
 
 **Test it immediately** — a backup you have never seen run is not a backup:
 
 ```bash
-sudo systemctl start menuland-backup.service && sudo journalctl -u menuland-backup -n 30 --no-pager
+sudo systemctl start restokar-backup.service && sudo journalctl -u restokar-backup -n 30 --no-pager
 ```
 
 Check your inbox. Then check the admin console at `/admin/settings`, which shows
@@ -572,40 +572,40 @@ the outcome of the last run and the error text if it failed.
 This is the procedure the whole folder layout exists to make safe.
 
 ```bash
-cd /srv/menuland && npm run backup
+cd /srv/restokar && npm run backup
 ```
 
 ```bash
-sudo systemctl stop menuland
+sudo systemctl stop restokar
 ```
 
 Keep your configuration, then replace the application:
 
 ```bash
-cp /srv/menuland/.env /tmp/menuland.env
+cp /srv/restokar/.env /tmp/restokar.env
 ```
 
 ```bash
-sudo rm -rf /srv/menuland && sudo mkdir -p /srv/menuland && sudo chown menuland:menuland /srv/menuland
+sudo rm -rf /srv/restokar && sudo mkdir -p /srv/restokar && sudo chown restokar:restokar /srv/restokar
 ```
 
 ```bash
-sudo -u menuland tar -xzf /tmp/menuland-core-NEW.tar.gz -C /srv/menuland --strip-components=1
+sudo -u restokar tar -xzf /tmp/restokar-core-NEW.tar.gz -C /srv/restokar --strip-components=1
 ```
 
 ```bash
-cp /tmp/menuland.env /srv/menuland/.env && chmod 600 /srv/menuland/.env
+cp /tmp/restokar.env /srv/restokar/.env && chmod 600 /srv/restokar/.env
 ```
 
 ```bash
-cd /srv/menuland && npm ci && npx prisma migrate deploy && npm run build
+cd /srv/restokar && npm ci && npx prisma migrate deploy && npm run build
 ```
 
 ```bash
-sudo systemctl start menuland
+sudo systemctl start restokar
 ```
 
-`/var/lib/menuland/` was never mentioned, and the database was never dropped.
+`/var/lib/restokar/` was never mentioned, and the database was never dropped.
 That is the point.
 
 ---
@@ -614,13 +614,13 @@ That is the point.
 
 | Symptom            | Command                                            |
 | ------------------ | -------------------------------------------------- |
-| Site is down       | `sudo systemctl status menuland`                   |
-| Why did it crash   | `sudo journalctl -u menuland -n 100 --no-pager`    |
+| Site is down       | `sudo systemctl status restokar`                   |
+| Why did it crash   | `sudo journalctl -u restokar -n 100 --no-pager`    |
 | nginx complains    | `sudo nginx -t`                                    |
-| Database reachable | `sudo -u postgres psql -d menuland -c "\dt"`       |
-| Backup failed      | `cat /var/lib/menuland/logs/backup.log`            |
-| Disk filling up    | `df -h` then `du -sh /var/lib/menuland/*`          |
-| Restart everything | `sudo systemctl restart menuland nginx postgresql` |
+| Database reachable | `sudo -u postgres psql -d restokar -c "\dt"`       |
+| Backup failed      | `cat /var/lib/restokar/logs/backup.log`            |
+| Disk filling up    | `df -h` then `du -sh /var/lib/restokar/*`          |
+| Restart everything | `sudo systemctl restart restokar nginx postgresql` |
 
 **"It won't start in production"** is usually deliberate. The app refuses to boot
 when `AUTH_SECRET` is still the example value, when `NEXT_PUBLIC_APP_URL` is a
@@ -637,15 +637,28 @@ event stream — check that `proxy_buffering off;` is present in the config.
 Read this before promising anything to a restaurant. Everything below is
 deliberate; none of it is broken.
 
-**Campaigns — planning only, nothing is ever sent.** The Campaigns screen lets an
-owner name an audience, pick a customer segment and an optional dish or
-category, set a window and move the campaign through its states. There is **no
-SMS provider, no email sender and no push service**, and no code path in the
-application makes an outbound call for a campaign. The screen says so in Persian
-at the top, and the delivery figures render as "not available" rather than as
-zeros. Adding a gateway later is a separate piece of work; the consent
-(`Customer.marketingConsent`) and the audience arithmetic are already recorded so
-it will not need backfilling.
+**Campaigns plan; promotional SMS is sold and sent by hand.** The Campaigns
+screen lets an owner name an audience, pick a customer segment and an optional
+dish or category, set a window and move the campaign through its states. A
+campaign sends nothing by itself.
+
+To reach customers, an owner buys a **promotional SMS** from the same screen —
+for a campaign's audience or for any customer group. They see the recipient
+count, the SMS parts and the price, and pay. **The application never sends it.**
+The paid request appears at `/admin/sms`; you download the numbers (a `.txt`,
+one per line — not `.csv`, which Excel would strip the leading zeros from),
+send the text with your SMS panel, and press "Sent". Only customers with
+`Customer.marketingConsent` are ever included.
+
+Paying is **off until `ENABLE_SMS_CHECKOUT=true`**, and should stay off until
+Zarinpal is live: a request "paid" through the mock gateway would sit in your
+queue looking real, and sending it would cost you real credit. The queue marks
+mock payments in red regardless. The price is `SMS_PRICE_PER_PART` (Toman per
+SMS part per recipient) — a placeholder until you set it.
+
+The SMS **API** (`lib/sms/`) is for one-time codes only and is not yet wired to
+any screen. It is off twice over by default (`SMS_PROVIDER=mock`,
+`SMS_DRY_RUN=true`).
 
 **Customer records need phone numbers to exist.** A guest is only recognised when
 they type a phone number at checkout, which has never been required. Until real
@@ -679,7 +692,7 @@ blocks a launch; all of them are worth revisiting once real traffic exists.
 - [ ] `https://yourdomain.com` loads with a padlock
 - [ ] `NEXT_PUBLIC_APP_URL` is the real domain — **before any QR code is printed**
 - [ ] No `password123` account exists anywhere
-- [ ] `DATA_DIR=/var/lib/menuland` and it is outside `/srv/menuland`
+- [ ] `DATA_DIR=/var/lib/restokar` and it is outside `/srv/restokar`
 - [ ] One backup has arrived in your inbox
 - [ ] One restore has been rehearsed: `npm run backup:restore -- <archive>`
 - [ ] `timedatectl` shows `Asia/Tehran`

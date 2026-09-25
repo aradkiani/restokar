@@ -135,7 +135,7 @@ async function checkBackup(): Promise<BackupHealth> {
     (async () => {
       const names = await readdir(BACKUPS_ROOT);
       const archives = names
-        .filter((n) => n.startsWith("menuland-backup-") && n.endsWith(".tar.gz"))
+        .filter((n) => n.startsWith("restokar-backup-") && n.endsWith(".tar.gz"))
         .sort();
 
       const newest = archives.at(-1);

@@ -8,6 +8,7 @@ import {
   Clock,
   LayoutDashboard,
   LifeBuoy,
+  MessageSquareText,
   Settings,
   UserPlus,
 } from "lucide-react";
@@ -30,6 +31,7 @@ export function AdminNav() {
     { href: "/admin/revenue", label: t.admin.revenueTitle, icon: BarChart3 },
     { href: "/admin/expiring", label: t.admin.expiringSoon, icon: Clock },
     { href: "/admin/support", label: t.admin.support, icon: LifeBuoy },
+    { href: "/admin/sms", label: t.admin.smsQueue, icon: MessageSquareText },
     { href: "/admin/settings", label: t.admin.settings, icon: Settings },
   ];
 

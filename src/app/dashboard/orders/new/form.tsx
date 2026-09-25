@@ -72,7 +72,7 @@ interface OrderLine {
 /** How the dishes are listed. Remembered per browser, not per venue. */
 type BrowseMode = "list" | "menu";
 
-const MODE_STORAGE_KEY = "menuland:manual-order-mode";
+const MODE_STORAGE_KEY = "restokar:manual-order-mode";
 
 /** "Burger (large, no onion)" — what the basket line reads as. */
 function labelFor(product: ProductRow, choiceIds: string[]): string {

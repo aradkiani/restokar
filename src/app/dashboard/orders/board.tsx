@@ -9,6 +9,7 @@ import {
   CircleAlert,
   Clock,
   HandCoins,
+  Info,
   Radio,
   Volume2,
   VolumeX,
@@ -30,12 +31,13 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
-  DELIVERED_VISIBLE_MS,
   ORDER_POLL_MS,
   ORDER_URGENT_MINUTES,
   REFUND_CLEAR_AFTER_MS,
   needsRefund,
 } from "@/lib/constants";
+import { isRetired } from "@/lib/order-retirement";
+import { OrderDetailDialog } from "./order-detail";
 import type { Locale } from "@/lib/i18n";
 
 type Status = "RECEIVED" | "PREPARING" | "READY" | "DELIVERED" | "CANCELED";
@@ -61,6 +63,8 @@ export interface KitchenOrder {
   total: number;
   placedAt: string;
   deliveredAt: string | null;
+  /** When the money arrived. With `deliveredAt`, starts the retirement clock. */
+  paidAt: string | null;
   canceledAt: string | null;
   /** Set once the owner confirms a cancelled, paid order was refunded. */
   refundedAt: string | null;
@@ -98,6 +102,8 @@ export function KitchenBoard({
   const [soundOn, setSoundOn] = React.useState(true);
   const [cancelId, setCancelId] = React.useState<string | null>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
+  /** The order whose full detail is open, if any. */
+  const [detailId, setDetailId] = React.useState<string | null>(null);
   // Re-render on a timer so the "5 minutes ago" ages and cards turn urgent
   // without needing a data refetch. Holding the clock reading in state rather
   // than calling Date.now() while rendering keeps the render pure and gives the
@@ -258,9 +264,18 @@ export function KitchenBoard({
    */
   async function togglePaid(orderId: string, paid: boolean) {
     setBusyId(orderId);
+    /*
+      `paidAt` moves with the status here too, mirroring what the server writes.
+
+      Without it the optimistic row would claim to be paid with no payment time,
+      and the retirement rule would fall back to `deliveredAt` — so settling a
+      bill for an order handed over two hours ago would make the card vanish
+      under the waiter's finger, before the server had even replied.
+    */
+    const paidAt = paid ? new Date().toISOString() : null;
     setOrders((prev) =>
       prev.map((o) =>
-        o.id === orderId ? { ...o, paymentStatus: paid ? "PAID" : "PENDING" } : o,
+        o.id === orderId ? { ...o, paymentStatus: paid ? "PAID" : "PENDING", paidAt } : o,
       ),
     );
 
@@ -285,15 +300,16 @@ export function KitchenBoard({
     const rows = orders.filter((order) => order.status === status);
     if (status !== "DELIVERED") return rows;
 
-    // Before the mount effect runs, `now` is 0 and nothing is filtered — the
-    // server already returned only orders inside the window.
-    const visible =
-      now === 0
-        ? rows
-        : rows.filter((order) => {
-            const cutoff = now - DELIVERED_VISIBLE_MS;
-            return !order.deliveredAt || new Date(order.deliveredAt).getTime() >= cutoff;
-          });
+    /*
+      Before the mount effect runs, `now` is 0 and nothing is filtered — the
+      server already returned only orders inside the window.
+
+      The rule itself lives in `order-retirement.ts`, shared with the query that
+      fetched these rows. This used to test `deliveredAt` against its own
+      inlined cutoff, which meant an unpaid order was dropped here even though
+      the server had deliberately kept it.
+    */
+    const visible = now === 0 ? rows : rows.filter((order) => !isRetired(order, now));
 
     /*
      * Unpaid bills float to the top of the delivered column.
@@ -542,15 +558,34 @@ export function KitchenBoard({
                           </p>
                         </div>
 
-                        <span
-                          className={cn(
-                            "flex shrink-0 items-center gap-1 text-[11px] font-bold tabular-nums",
-                            urgent ? "text-red-600" : "text-ink-500",
-                          )}
-                        >
-                          <Clock className="size-3" />
-                          {formatTime(order.placedAt, locale)}
-                        </span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "flex items-center gap-1 text-[11px] font-bold tabular-nums",
+                              urgent ? "text-red-600" : "text-ink-500",
+                            )}
+                          >
+                            <Clock className="size-3" />
+                            {formatTime(order.placedAt, locale)}
+                          </span>
+
+                          {/*
+                            Its own control rather than a clickable card. The
+                            card already carries the paid toggle, the advance
+                            button and cancel; wrapping all of that in a button
+                            nests interactive elements and turns every mis-aimed
+                            tap on a busy pass into an opened dialog.
+                          */}
+                          <button
+                            type="button"
+                            onClick={() => setDetailId(order.id)}
+                            aria-label={`${t.orderDetail.open} #${order.orderNumber}`}
+                            title={t.orderDetail.open}
+                            className="tap-safe rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
+                          >
+                            <Info className="size-4" aria-hidden />
+                          </button>
+                        </div>
                       </div>
 
                       <ul className="my-2.5 space-y-1 border-y border-ink-100 py-2">
@@ -711,6 +746,13 @@ export function KitchenBoard({
         title={t.kitchen.cancelConfirm}
         confirmLabel={t.kitchen.cancelOrder}
         cancelLabel={t.common.cancel}
+      />
+
+      <OrderDetailDialog
+        orderId={detailId}
+        onClose={() => setDetailId(null)}
+        locale={locale}
+        t={t}
       />
     </div>
   );

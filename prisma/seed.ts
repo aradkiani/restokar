@@ -367,6 +367,7 @@ async function refreshDemoContent(
           shortDescriptionEn: copy.short,
           fullDescriptionEn: copy.full,
           price: product.price,
+          priceExact: product.price,
           costPrice: product.cost,
           prepMinutes: product.prep ?? null,
           isFeatured: product.featured ?? false,
@@ -585,6 +586,7 @@ async function seedRestaurant(options: {
           shortDescriptionEn: englishCopy(product.name).short,
           fullDescriptionEn: englishCopy(product.name).full,
           price: product.price,
+          priceExact: product.price,
           costPrice: product.cost,
           prepMinutes: product.prep ?? null,
           isFeatured: product.featured ?? false,
@@ -908,7 +910,7 @@ async function seedExpenses(restaurantId: string) {
 }
 
 async function seedAdmin() {
-  const email = "admin@menuland.ir";
+  const email = "admin@restokar.ir";
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     console.log("• platform admin already exists — skipped");
@@ -979,7 +981,7 @@ async function main() {
   console.log(`  owner   → owner@cafe-nabsh.ir / ${password}`);
   console.log(`  owner   → owner@burger-lab.ir / ${password}`);
   console.log(`  kitchen → kitchen@cafe-nabsh.ir / ${password}`);
-  console.log(`  admin   → admin@menuland.ir / ${password}`);
+  console.log(`  admin   → admin@restokar.ir / ${password}`);
   console.log("\nTenant menus: /menu/cafe-nabsh · /menu/burger-lab");
   console.log(
     "Homepage demos: /menu/demo-aurora · /menu/demo-ember · /menu/demo-linen · " +
@@ -1005,7 +1007,7 @@ async function seedDemos() {
     taglineEn: "Single-origin coffee and daily brunch",
     description: "نمونه‌ی قالب آورا — روشن، شیشه‌ای و مناسب کافه‌های مدرن.",
     ownerName: "نمونه آورا",
-    ownerEmail: "demo@demo-aurora.menuland.ir",
+    ownerEmail: "demo@demo-aurora.restokar.ir",
     templateId: "aurora",
     theme: { primary: "#0f766e", secondary: "#c2410c", surfaceStyle: "glass" },
     planCode: "pro",
@@ -1025,7 +1027,7 @@ async function seedDemos() {
     taglineEn: "Charcoal-grilled burgers, hand-cut fries",
     description: "نمونه‌ی قالب امبر — گرم، پرانرژی و مناسب فست‌فود.",
     ownerName: "نمونه امبر",
-    ownerEmail: "demo@demo-ember.menuland.ir",
+    ownerEmail: "demo@demo-ember.restokar.ir",
     templateId: "ember",
     theme: { primary: "#dc2626", secondary: "#f59e0b" },
     planCode: "pro",
@@ -1045,7 +1047,7 @@ async function seedDemos() {
     taglineEn: "Authentic Iranian food, cooked fresh daily",
     description: "نمونه‌ی قالب کتان — آرام و کلاسیک، مناسب رستوران‌های سنتی.",
     ownerName: "نمونه کتان",
-    ownerEmail: "demo@demo-linen.menuland.ir",
+    ownerEmail: "demo@demo-linen.restokar.ir",
     templateId: "linen",
     theme: { primary: "#78350f", secondary: "#4d7c0f", surfaceStyle: "flat" },
     planCode: "starter",
@@ -1065,7 +1067,7 @@ async function seedDemos() {
     taglineEn: "Fine dining, seasonal menu",
     description: "نمونه‌ی قالب نوآر — تیره، مینیمال و مناسب رستوران‌های لوکس.",
     ownerName: "نمونه نوآر",
-    ownerEmail: "demo@demo-noir.menuland.ir",
+    ownerEmail: "demo@demo-noir.restokar.ir",
     templateId: "noir",
     theme: {
       primary: "#a16207",
@@ -1095,7 +1097,7 @@ async function seedDemos() {
     taglineEn: "Traditional food and Isfahan souvenirs",
     description: "نمونه‌ی قالب بازار — شبکه‌ای و گرم، با بخش سوغاتی در انتهای منو.",
     ownerName: "نمونه بازار",
-    ownerEmail: "demo@demo-bazaar.menuland.ir",
+    ownerEmail: "demo@demo-bazaar.restokar.ir",
     templateId: "bazaar",
     theme: { primary: "#b4532a", secondary: "#2f6f6b", surfaceStyle: "flat" },
     planCode: "pro",
@@ -1115,7 +1117,7 @@ async function seedDemos() {
     taglineEn: "Specialty coffee, breakfast and brunch",
     description: "نمونه‌ی قالب اطلس — شبکه‌بندی دقیق و پرکنتراست، مناسب کافه‌های مدرن.",
     ownerName: "نمونه اطلس",
-    ownerEmail: "demo@demo-atlas.menuland.ir",
+    ownerEmail: "demo@demo-atlas.restokar.ir",
     templateId: "atlas",
     theme: {
       primary: "#c63a1e",
@@ -1146,7 +1148,7 @@ async function seedDemos() {
     taglineEn: "Burgers, pizza and dessert — row by row",
     description: "نمونه‌ی قالب ریل — هر دسته یک ردیف افقی، مناسب منوهای پرعکس.",
     ownerName: "نمونه ریل",
-    ownerEmail: "demo@demo-reel.menuland.ir",
+    ownerEmail: "demo@demo-reel.restokar.ir",
     templateId: "reel",
     theme: {
       primary: "#0e7490",
@@ -1173,7 +1175,7 @@ async function seedDemos() {
     taglineEn: "Ice cream, juice and fresh pastries",
     description: "نمونه‌ی قالب شکوفه — مدال‌های دایره‌ای و کپسولی، بدون هیچ مستطیلی.",
     ownerName: "نمونه شکوفه",
-    ownerEmail: "demo@demo-bloom.menuland.ir",
+    ownerEmail: "demo@demo-bloom.restokar.ir",
     templateId: "bloom",
     theme: {
       primary: "#a0521a",
@@ -1203,7 +1205,7 @@ async function seedDemos() {
     taglineEn: "A tea house serving authentic Iranian food",
     description: "نمونه‌ی قالب کاشی — طاق، ستاره هشت‌پر و کاشی‌کاری اصفهان.",
     ownerName: "نمونه کاشی",
-    ownerEmail: "demo@demo-kashi.menuland.ir",
+    ownerEmail: "demo@demo-kashi.restokar.ir",
     templateId: "kashi",
     theme: {
       primary: "#0e7c72",
@@ -1234,7 +1236,7 @@ async function seedDemos() {
     taglineEn: "A seasonal menu, new every week",
     description: "نمونه‌ی قالب ترنج — تایپوگرافی آرام، بدون کارت و بدون سایه.",
     ownerName: "نمونه ترنج",
-    ownerEmail: "demo@demo-qalam.menuland.ir",
+    ownerEmail: "demo@demo-qalam.restokar.ir",
     templateId: "qalam",
     theme: {
       primary: "#6d2c34",
@@ -1264,7 +1266,7 @@ async function seedDemos() {
     taglineEn: "A few dishes each day, and only those",
     description: "نمونه‌ی قالب ویترین — هر بار یک غذا، تمام‌صفحه و کارت‌به‌کارت.",
     ownerName: "نمونه ویترین",
-    ownerEmail: "demo@demo-vitrin.menuland.ir",
+    ownerEmail: "demo@demo-vitrin.restokar.ir",
     templateId: "vitrin",
     theme: {
       primary: "#d6f84c",

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { EXPIRY_WARNING_DAYS } from "./constants";
+import { COUNTED_ORDER } from "./order-status";
 
 /**
  * Platform-wide queries for the admin console.
@@ -362,7 +363,7 @@ export async function getRestaurantForAdmin(restaurantId: string) {
       _sum: { amount: true },
     }),
     prisma.order.aggregate({
-      where: { restaurantId, status: { not: "CANCELED" } },
+      where: { restaurantId, ...COUNTED_ORDER },
       _sum: { total: true },
       _count: true,
     }),

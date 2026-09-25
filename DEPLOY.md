@@ -13,9 +13,9 @@ systemd, connecting a domain, HTTPS, backups, and the update procedure.
 
 ## Related
 
-| Document                                       | Covers                                         |
-| ---------------------------------------------- | ---------------------------------------------- |
-| [README.md](README.md)                         | Architecture and running it locally            |
-| [docs/DATA-BOUNDARY.md](docs/DATA-BOUNDARY.md) | What an update may replace and what it may not |
-| [docs/BACKUPS.md](docs/BACKUPS.md)             | The twice-daily backup, and restoring from one |
-| [HANDOFF.md](HANDOFF.md)                       | Current state, conventions, known issues       |
+| Document                                       | Covers                                             |
+| ---------------------------------------------- | -------------------------------------------------- |
+| [README.md](README.md)                         | Architecture and running it locally                |
+| [docs/DATA-BOUNDARY.md](docs/DATA-BOUNDARY.md) | What an update may replace and what it may not     |
+| [docs/BACKUPS.md](docs/BACKUPS.md)             | The twice-daily backup, and restoring from one     |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | How the code fits together, and where to change it |

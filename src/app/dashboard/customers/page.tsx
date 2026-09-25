@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requirePageOwner } from "@/lib/auth/guards";
 import { getI18n } from "@/lib/i18n";
-import { getSegmentCounts, listCustomers } from "@/lib/customers-server";
+import { getRetentionOverview, listCustomers } from "@/lib/customers-server";
 import { CustomerList } from "./list";
 
 export const metadata: Metadata = { title: "مشتریان" };
@@ -21,9 +21,9 @@ export default async function CustomersPage() {
   const { restaurantId } = await requirePageOwner("/dashboard");
   const { locale } = await getI18n();
 
-  const [initial, segments] = await Promise.all([
+  const [initial, overview] = await Promise.all([
     listCustomers(restaurantId, {}),
-    getSegmentCounts(restaurantId),
+    getRetentionOverview(restaurantId),
   ]);
 
   return (
@@ -38,8 +38,10 @@ export default async function CustomersPage() {
           firstOrderAt: customer.firstOrderAt?.toISOString() ?? null,
           lastOrderAt: customer.lastOrderAt?.toISOString() ?? null,
         })),
+        summary: overview.summary,
+        opportunities: overview.opportunities,
       }}
-      segments={segments}
+      segments={overview.segments}
     />
   );
 }

@@ -2,12 +2,21 @@ import "server-only";
 import { prisma } from "./prisma";
 import {
   getCategoryBreakdown,
+  getProductSales,
   getRangeSummary,
   getTopProducts,
   type DateRange,
 } from "./analytics";
+import {
+  assessCostCoverage,
+  menuConcentration,
+  rankPerformance,
+  type MenuBenchmark,
+  type ProductPerformance,
+} from "./profitability";
 import { getFeaturedPerformance } from "./featured-server";
 import { getRecommendationPerformance } from "./recommendations-server";
+import { countedOrderSql } from "./order-status";
 import {
   resolveComparison,
   type ComparisonPreset,
@@ -43,6 +52,11 @@ import {
 
 export interface SalesInsightResult extends SalesInsightReport {
   windows: ComparisonWindows;
+  /** The classified menu the profitability insights were drawn from. */
+  profitability: {
+    products: ProductPerformance[];
+    benchmark: MenuBenchmark;
+  };
 }
 
 /** `getTopProducts` groups deleted products under their snapshot name; mirror that key. */
@@ -79,7 +93,7 @@ async function getCustomerActivity(
       SELECT o."customerId", COUNT(*)::int AS orders
         FROM "Order" o
        WHERE o."restaurantId" = ${restaurantId}
-         AND o."status" <> 'CANCELED'
+         AND ${countedOrderSql("o")}
          AND o."customerId" IS NOT NULL
          AND o."placedAt" >= ${range.from}
          AND o."placedAt" <= ${range.to}
@@ -89,7 +103,7 @@ async function getCustomerActivity(
       SELECT o."customerId", MIN(o."placedAt") AS first_at
         FROM "Order" o
        WHERE o."restaurantId" = ${restaurantId}
-         AND o."status" <> 'CANCELED'
+         AND ${countedOrderSql("o")}
          AND o."customerId" IN (SELECT "customerId" FROM period)
        GROUP BY o."customerId"
     )
@@ -199,6 +213,7 @@ export async function getSalesInsights(
     previousCustomers,
     featured,
     recommendations,
+    productSales,
   ] = await Promise.all([
     getRangeSummary(restaurantId, windows.current),
     getRangeSummary(restaurantId, windows.previous),
@@ -212,7 +227,26 @@ export async function getSalesInsights(
     ownsItsMenu
       ? getRecommendationPerformance(restaurantId, windows.current)
       : Promise.resolve([]),
+    /*
+      Realised per-dish economics for the current window.
+
+      Reads the same request-cached order items `entitiesFor` already loaded, so
+      it adds no query. Only the current window: margin is a statement about how
+      the menu earns *now*, and comparing it against a previous period would be a
+      different insight needing its own thresholds.
+    */
+    getProductSales(restaurantId, windows.current),
   ]);
+
+  /*
+    Placement happens here, once, and the result is shared.
+
+    The same classified rows feed the insight engine below and the analytics
+    table on screen, so a dish the table shows as "review pricing" is exactly the
+    dish the insight names. Deriving them twice is how those two come to
+    disagree.
+  */
+  const { rows: profitabilityRows, benchmark } = rankPerformance(productSales);
 
   const report = buildSalesInsights({
     current: { revenue: currentSummary.revenue, orders: currentSummary.orders },
@@ -231,7 +265,19 @@ export async function getSalesInsights(
         row.recommendedName,
       ),
     ),
+    profitability: {
+      products: profitabilityRows,
+      benchmark,
+      coverage: assessCostCoverage(productSales),
+      concentration: menuConcentration(productSales),
+    },
   });
 
-  return { ...report, windows };
+  return {
+    ...report,
+    windows,
+    // Carried out so the analytics page can render the same classified rows the
+    // insights were drawn from, rather than asking for them a second time.
+    profitability: { products: profitabilityRows, benchmark },
+  };
 }

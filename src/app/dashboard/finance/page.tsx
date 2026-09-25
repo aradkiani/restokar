@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { ExpensesPanel } from "./expenses";
 import { FinancialReportCard } from "./report-card";
 import { ProfitTable } from "./profit-table";
+import { ExportButton } from "@/components/export-button";
 
 export const metadata: Metadata = { title: "مدیریت مالی" };
 export const dynamic = "force-dynamic";
@@ -80,6 +81,13 @@ export default async function FinancePage({
             </Link>
           ))}
         </nav>
+
+        {/* The P&L an accountant asks for, and the order rows to reconcile it
+            against — both over the period currently selected. */}
+        <div className="flex flex-wrap gap-2">
+          <ExportButton dataset="pnl" days={days} />
+          <ExportButton dataset="orders" days={days} variant="ghost" />
+        </div>
       </header>
 
       {/* Headline P&L — the number an owner actually opens this page for. */}

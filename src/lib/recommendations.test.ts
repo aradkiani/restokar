@@ -174,39 +174,58 @@ describe("derivePerformance", () => {
     revenue: 12_750_000,
   };
 
-  it("computes the two documented rates", () => {
+  it("computes the two documented figures", () => {
     const row = derivePerformance(base);
 
     expect(row.addRate).toBeCloseTo(190 / 1250);
-    expect(row.conversionRate).toBeCloseTo(150 / 1250);
+    expect(row.revenuePerImpression).toBe(Math.round(12_750_000 / 1250));
   });
 
   it("reports zero rather than dividing by zero", () => {
     const row = derivePerformance({ ...base, impressions: 0 });
 
     expect(row.addRate).toBe(0);
-    expect(row.conversionRate).toBe(0);
+    expect(row.revenuePerImpression).toBe(0);
   });
 
   /**
-   * The two ratios mix units — sessions below, order lines above — so they can
-   * genuinely exceed 1: a guest shown a suggestion once may buy the dish across
-   * several orders, and a phone order is attributed with no impression at all.
-   * The counts stay exact; only the unreadable percentage is capped.
+   * `addRate` is sessions over sessions, so it is a genuine proportion. The cap
+   * guards the one way it can still exceed 1 — an add whose impression report
+   * never arrived — rather than concealing a unit error, which is what the old
+   * `purchases / impressions` did.
    */
-  it("caps a rate at 100% rather than reporting 300%", () => {
+  it("caps the add rate at 100%", () => {
+    const row = derivePerformance({ ...base, impressions: 1, addedToCart: 3 });
+
+    expect(row.addRate).toBe(1);
+    // …and the underlying counts are untouched, so the discrepancy stays visible.
+    expect(row.addedToCart).toBe(3);
+    expect(row.impressions).toBe(1);
+  });
+
+  /**
+   * The replacement for the old conversion rate, and the reason it is money per
+   * session rather than a percentage: order lines and guest sessions are
+   * different populations, so their quotient is not a proportion of anything.
+   * Three purchases from one impression is a real, reportable outcome.
+   */
+  it("does not cap revenue per impression, because it is not a proportion", () => {
     const row = derivePerformance({
       ...base,
       impressions: 1,
-      addedToCart: 1,
       purchases: 3,
+      revenue: 255_000,
     });
 
-    expect(row.conversionRate).toBe(1);
-    expect(row.addRate).toBe(1);
-    // …and the underlying counts are untouched, so the discrepancy stays visible.
+    expect(row.revenuePerImpression).toBe(255_000);
     expect(row.purchases).toBe(3);
-    expect(row.impressions).toBe(1);
+  });
+
+  it("keeps revenue per impression a whole number of Toman", () => {
+    const row = derivePerformance({ ...base, impressions: 3, revenue: 10_000 });
+
+    expect(Number.isInteger(row.revenuePerImpression)).toBe(true);
+    expect(row.revenuePerImpression).toBe(3333);
   });
 
   it("passes the counts through untouched", () => {

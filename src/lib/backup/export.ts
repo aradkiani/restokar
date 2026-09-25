@@ -56,6 +56,9 @@ const TABLE_ORDER = [
   // Both are referenced by Order, so they precede it.
   "Customer",
   "Campaign",
+  // After Campaign, which it references; before Payment, which references it.
+  // A record of money a venue paid, so it is customer data like any order.
+  "SmsBroadcast",
   "Order",
   "OrderItem",
   "OrderItemOption",
@@ -72,6 +75,9 @@ const TABLE_ORDER = [
   "ProductIngredient",
   "ProductRecommendation",
   "RecommendationEvent",
+  // Both reference Product twice over, so they follow it.
+  "ProductBundleItem",
+  "ProductPairStat",
   "StockMovement",
   "SupportTicket",
   "MenuDailyView",
@@ -186,7 +192,7 @@ export async function createBackup(): Promise<BackupResult> {
   await mkdir(BACKUPS_ROOT, { recursive: true });
 
   const stamp = startedAt.toISOString().replace(/[:.]/g, "-");
-  const fileName = `menuland-backup-${stamp}.tar.gz`;
+  const fileName = `restokar-backup-${stamp}.tar.gz`;
   const filePath = path.join(BACKUPS_ROOT, fileName);
 
   const tableCounts: Record<string, number> = {};
@@ -199,7 +205,7 @@ export async function createBackup(): Promise<BackupResult> {
     yield {
       name: "manifest.json",
       content: toJsonBuffer({
-        product: "menuland",
+        product: "restokar",
         createdAt: startedAt.toISOString(),
         // Recorded so a restore can refuse a dump taken against a different
         // schema rather than failing halfway through with a column error.

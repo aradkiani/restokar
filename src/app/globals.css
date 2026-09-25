@@ -67,7 +67,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Menuland design tokens — the *product chrome* (marketing site, dashboard).
+   Restokar design tokens — the *product chrome* (marketing site, dashboard).
    Tenant menus are themed separately at runtime via the --m-* custom
    properties emitted by src/lib/theme.ts, so an owner's brand colours can
    never leak into the admin UI or vice versa.

@@ -46,6 +46,19 @@ export const SUBSCRIPTION_CHECKOUT_ENABLED = featureEnabled(
 );
 
 /**
+ * A venue paying *us* for a promotional SMS broadcast. Its own switch, for the
+ * same reason subscription checkout has one — and a sharper one.
+ *
+ * A paid broadcast lands in the admin queue, where platform staff send it with
+ * a separate tool and pay the SMS line out of pocket. Were this to follow
+ * `ENABLE_PAYMENTS`, a demo against the mock gateway would put a "paid" request
+ * in that queue that nobody paid for, and sending it would cost real money. So
+ * it stays off until a real merchant id exists, and the admin queue marks any
+ * request settled through the mock gateway as unpaid regardless.
+ */
+export const SMS_CHECKOUT_ENABLED = featureEnabled(process.env.ENABLE_SMS_CHECKOUT);
+
+/**
  * Self-service signup. Off while onboarding runs through platform staff, who
  * create accounts from the admin console instead.
  */

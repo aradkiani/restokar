@@ -19,6 +19,7 @@ import {
 } from "@/lib/campaigns";
 import { zonedWallClockOf } from "@/lib/time";
 import type { Locale } from "@/lib/i18n";
+import { SmsComposer, SmsHistory, SmsPaymentNotice, type BroadcastRow } from "./sms";
 
 /**
  * The owner's campaign planner.
@@ -26,9 +27,11 @@ import type { Locale } from "@/lib/i18n";
  * Deliberately a list and one dialog, not a visual builder. A campaign is a
  * name, an audience, an optional bit of menu context and a window — a form.
  *
- * **Nothing on this screen sends anything.** The notice at the top says so, and
- * the delivery figures are rendered as "not available" rather than as zeros,
- * because a zero reads as "nobody opened it" instead of "nothing was ever sent".
+ * **Nothing on this screen sends anything by itself.** An owner who wants a
+ * message delivered buys a promotional SMS (`sms.tsx`), which the Restokar team
+ * sends by hand once it is paid. The notice at the top says so, and the delivery
+ * figures are rendered as "not available" rather than as zeros, because a zero
+ * reads as "nobody opened it" instead of "nothing was measured".
  */
 
 interface CampaignRow {
@@ -84,11 +87,16 @@ export function CampaignManager({
   initial,
   products,
   categories,
+  broadcasts,
+  paymentOutcome,
 }: {
   locale: Locale;
   initial: ListPayload;
   products: MenuRef[];
   categories: MenuRef[];
+  broadcasts: BroadcastRow[];
+  /** Set once, when the gateway returns the owner here after an SMS payment. */
+  paymentOutcome: "success" | "failed" | null;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -98,6 +106,9 @@ export function CampaignManager({
   const [status, setStatus] = React.useState<CampaignStatus | "">("");
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState<CampaignDetailRow | "new" | null>(null);
+  const [composer, setComposer] = React.useState<{
+    campaign: { id: string; name: string } | null;
+  } | null>(null);
 
   const load = React.useCallback(
     async (next: { status?: string; page?: number }) => {
@@ -139,10 +150,21 @@ export function CampaignManager({
           <h1 className="text-2xl font-black text-ink-900">{c.title}</h1>
           <p className="mt-1 text-sm text-ink-500">{c.subtitle}</p>
         </div>
-        <Button type="button" onClick={() => setOpen("new")}>
-          {c.create}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setComposer({ campaign: null })}
+          >
+            {t.smsBroadcast.open}
+          </Button>
+          <Button type="button" onClick={() => setOpen("new")}>
+            {c.create}
+          </Button>
+        </div>
       </header>
+
+      {paymentOutcome && <SmsPaymentNotice outcome={paymentOutcome} />}
 
       {/* Stated once, at the top, rather than left for the owner to infer from
           the absence of a send button. */}
@@ -287,6 +309,22 @@ export function CampaignManager({
             setOpen(next);
             refresh();
           }}
+          onSendSms={(target) => {
+            setOpen(null);
+            setComposer({ campaign: target });
+          }}
+        />
+      )}
+
+      <SmsHistory broadcasts={broadcasts} locale={locale} />
+
+      {composer && (
+        <SmsComposer
+          // Remounted per target, so the composer starts empty for each one.
+          key={composer.campaign?.id ?? "standalone"}
+          campaign={composer.campaign}
+          locale={locale}
+          onClose={() => setComposer(null)}
         />
       )}
     </div>
@@ -307,6 +345,7 @@ function CampaignDialog({
   categories,
   onClose,
   onChanged,
+  onSendSms,
 }: {
   campaign: CampaignDetailRow | null;
   locale: Locale;
@@ -314,6 +353,7 @@ function CampaignDialog({
   categories: MenuRef[];
   onClose: () => void;
   onChanged: (next: CampaignDetailRow | null) => void;
+  onSendSms: (campaign: { id: string; name: string }) => void;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -588,7 +628,18 @@ function CampaignDialog({
             ))}
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {campaign && campaign.status !== "CANCELED" && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => onSendSms({ id: campaign.id, name: campaign.name })}
+              >
+                {c.sendSms}
+              </Button>
+            )}
             {campaign?.status === "DRAFT" && (
               <Button
                 type="button"

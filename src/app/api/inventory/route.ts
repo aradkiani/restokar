@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/auth/guards";
 import { InventoryItemSchema } from "@/lib/validation";
 import { toMilli } from "@/lib/inventory";
+import { INVENTORY_ITEM_SELECT } from "@/lib/stock";
 
 export const runtime = "nodejs";
 
@@ -24,14 +25,7 @@ export const GET = route(async () => {
     where: { restaurantId },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
     take: 500,
-    select: {
-      id: true,
-      name: true,
-      unit: true,
-      quantityMilli: true,
-      lowStockMilli: true,
-      isActive: true,
-    },
+    select: INVENTORY_ITEM_SELECT,
   });
 
   return ok(items);
@@ -53,6 +47,11 @@ export const POST = route(async (request: Request) => {
     return fail(409, `«${input.name}» از قبل ثبت شده است`, "INVENTORY_ITEM_EXISTS");
   }
 
+  // A price typed without its unit is a price for one of the stock unit — the
+  // reading an owner who just chose "kilogram" above it means.
+  const purchasePrice = input.purchasePrice ?? null;
+  const priceUnit = purchasePrice === null ? null : (input.priceUnit ?? input.unit);
+
   try {
     const created = await prisma.inventoryItem.create({
       data: {
@@ -61,15 +60,11 @@ export const POST = route(async (request: Request) => {
         unit: input.unit,
         quantityMilli: toMilli(input.quantity),
         lowStockMilli: toMilli(input.lowStock),
+        purchasePrice,
+        priceUnit,
+        priceUpdatedAt: purchasePrice === null ? null : new Date(),
       },
-      select: {
-        id: true,
-        name: true,
-        unit: true,
-        quantityMilli: true,
-        lowStockMilli: true,
-        isActive: true,
-      },
+      select: INVENTORY_ITEM_SELECT,
     });
 
     return ok(created, { status: 201 });

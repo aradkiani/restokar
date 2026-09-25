@@ -1,7 +1,7 @@
 import { ok, route } from "@/lib/api";
 import { requireOwner } from "@/lib/auth/guards";
 import { CustomerQuerySchema } from "@/lib/validation";
-import { getSegmentCounts, listCustomers } from "@/lib/customers-server";
+import { getRetentionOverview, listCustomers } from "@/lib/customers-server";
 
 export const runtime = "nodejs";
 
@@ -24,10 +24,22 @@ export const GET = route(async (request: Request) => {
   const params = Object.fromEntries(new URL(request.url).searchParams);
   const query = CustomerQuerySchema.parse(params);
 
-  const [result, segments] = await Promise.all([
+  const [result, overview] = await Promise.all([
     listCustomers(restaurantId, query),
-    getSegmentCounts(restaurantId),
+    getRetentionOverview(restaurantId),
   ]);
 
-  return ok({ ...result, segments });
+  /*
+    The overview travels with every page, not just the first.
+
+    It is the same two queries the list already makes, and the tiles and action
+    cards sit above a table the owner is filtering — recomputing them alongside
+    is what stops "۱۸ at risk" going stale the moment they page or search.
+  */
+  return ok({
+    ...result,
+    segments: overview.segments,
+    summary: overview.summary,
+    opportunities: overview.opportunities,
+  });
 });

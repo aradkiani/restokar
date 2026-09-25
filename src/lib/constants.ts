@@ -300,5 +300,5 @@ export function needsRefund(order: {
 export const CONTACT = {
   phone: "021-00000000",
   phoneHref: "tel:+982100000000",
-  email: "hello@menuland.ir",
+  email: "hello@restokar.ir",
 } as const;

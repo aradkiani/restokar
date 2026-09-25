@@ -27,6 +27,20 @@ export const dynamic = "force-dynamic";
  */
 const MenuViewInput = z.object({
   slug: z.string().min(1),
+  /**
+   * The table whose QR code led here, when the link carried one.
+   *
+   * Bounded to match `CreateOrderInput.tableNumber`, because the two are joined
+   * on: a value one column would keep and the other would reject is a pair that
+   * quietly stops matching. `normaliseViewTable` files anything outside those
+   * bounds as untabled rather than refusing the beacon — a guest's menu must
+   * never depend on their telemetry being well-formed.
+   *
+   * This is the link's claim, not a verified fact, and it is only ever counted.
+   * It cannot name a table that does not exist into existence, and nothing
+   * reads it back to the guest.
+   */
+  table: z.string().trim().max(20).optional(),
 });
 
 export const POST = route(async (request: Request) => {
@@ -61,7 +75,7 @@ export const POST = route(async (request: Request) => {
   // the subscription screen that no restaurant earned.
   if (restaurant.isDemo) return ok({ recorded: false });
 
-  await recordMenuView(restaurant.id);
+  await recordMenuView(restaurant.id, { tableNumber: input.table });
 
   return ok({ recorded: true });
 });

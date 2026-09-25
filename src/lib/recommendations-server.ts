@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import { HttpError } from "./auth/guards";
 import type { Prisma } from "@/generated/prisma/client";
 import type { RecommendationInput } from "./validation";
+import { COUNTED_ORDER } from "./order-status";
 import {
   derivePerformance,
   rankByRevenue,
@@ -186,16 +187,15 @@ export async function getRecommendationPerformance(
       can sum in a single pass. Since the rows have to be fetched anyway, the
       purchase count comes from the same pass instead of a second query.
 
-      `status: { not: "CANCELED" }` is the platform's existing definition of a
-      counted sale — the same rule every figure in `analytics.ts` applies — so
-      a suggestion can never be reported as having earned money on an order the
-      venue cancelled. Scoped by the *order's* restaurant, because that is where
-      the sale happened.
+      `COUNTED_ORDER` is the platform's one definition of a counted sale — see
+      `order-status.ts` — so a suggestion can never be reported as having earned
+      money on an order the venue cancelled. Scoped by the *order's* restaurant,
+      because that is where the sale happened.
     */
     prisma.orderItem.findMany({
       where: {
         recommendedFromProductId: { not: null },
-        order: { restaurantId, status: { not: "CANCELED" }, placedAt: window },
+        order: { restaurantId, ...COUNTED_ORDER, placedAt: window },
       },
       select: {
         productId: true,

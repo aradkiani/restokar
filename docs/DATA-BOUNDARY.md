@@ -18,7 +18,7 @@ The split is a directory boundary, so that replacing the application is one
 operation and cannot accidentally include customer data:
 
 ```
-menuland/
+restokar/
 ├── core/     ← this folder. The whole application. Delete and replace freely.
 └── data/     ← customer files. Never touched by an update.
 ```
@@ -74,7 +74,7 @@ The schema is core (it comes back with the code); the **rows are not**.
 
 Set by the `DATA_DIR` environment variable. Defaults to `../data` — the sibling
 of `core/` — and should be an absolute path on its own volume in production
-(`/var/lib/menuland` is the documented choice).
+(`/var/lib/restokar` is the documented choice).
 
 ```
 $DATA_DIR/

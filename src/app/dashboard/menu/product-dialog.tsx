@@ -10,8 +10,9 @@ import { useI18n } from "@/components/i18n-provider";
 import { ImageUploader } from "@/components/image-uploader";
 import { CATEGORY_ICON_NAMES, CategoryIcon } from "@/components/icon";
 import { api } from "@/lib/client-api";
-import { formatMoney, formatPercent, parseAmount } from "@/lib/format";
+import { formatMoney, parseAmount } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
+import { PriceHealthNote, type MenuPricing } from "./price-health";
 import type { CategoryRow, ProductRow } from "./builder";
 import { ScheduleEditor, rowsToPayload, type ScheduleRow } from "./schedule-editor";
 import {
@@ -19,6 +20,7 @@ import {
   recommendationsToPayload,
   type RecommendationRow,
 } from "./recommendation-editor";
+import { BundleEditor, bundleItemsToPayload, type BundleItemRow } from "./bundle-editor";
 import { FeaturedEditor } from "./featured-editor";
 
 export interface InfoSectionDraft {
@@ -42,6 +44,8 @@ export interface OptionGroupDraft {
   nameEn: string;
   isRequired: boolean;
   maxSelect: number;
+  /** This group is the dish's size ladder, offerable as a one-tap upgrade. */
+  isUpgrade: boolean;
   choices: OptionChoiceDraft[];
 }
 
@@ -59,8 +63,12 @@ export interface ProductDraft {
   pairingNoteEn: string;
   imageUrl: string;
   price: number;
+  /** The stored exact price. 0 for a dish not yet saved. */
+  priceExact: number;
   compareAtPrice: number | null;
   costPrice: number;
+  /** The cost comes from the recipe and is not typed here. */
+  costFromRecipe: boolean;
   prepMinutes: number | null;
   isAvailable: boolean;
   hideWhenUnavailable: boolean;
@@ -68,6 +76,8 @@ export interface ProductDraft {
   scheduleEnabled: boolean;
   schedule: ScheduleRow[];
   recommendations: RecommendationRow[];
+  /** What this dish contains, when the owner has made it a meal deal. */
+  bundleItems: BundleItemRow[];
   featuredOrder: number;
   featuredLabel: string;
   featuredLabelText: string;
@@ -94,10 +104,13 @@ export function ProductDialog({
   allProducts,
   locale,
   shortOnly = false,
+  pricing,
   onClose,
   onSaved,
 }: {
   draft: ProductDraft;
+  /** The venue's display step and margin floor, for the price warnings. */
+  pricing: MenuPricing;
   categories: CategoryRow[];
   /** The venue's whole menu, so suggestions can point anywhere in it. */
   allProducts: ProductRow[];
@@ -111,9 +124,6 @@ export function ProductDialog({
   const toast = useToast();
   const [form, setForm] = React.useState(draft);
   const [saving, setSaving] = React.useState(false);
-
-  const profit = form.price - form.costPrice;
-  const margin = form.price > 0 ? profit / form.price : 0;
 
   function setField<K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -172,7 +182,9 @@ export function ProductDialog({
       imageUrl: form.imageUrl || undefined,
       price: form.price,
       compareAtPrice: form.compareAtPrice,
-      costPrice: form.costPrice,
+      // A recipe-costed dish takes its cost from the recipe; the server
+      // ignores a typed one, and not sending it keeps the request honest.
+      costPrice: form.costFromRecipe ? undefined : form.costPrice,
       prepMinutes: form.prepMinutes,
       isAvailable: form.isAvailable,
       hideWhenUnavailable: form.hideWhenUnavailable,
@@ -180,6 +192,7 @@ export function ProductDialog({
       scheduleEnabled: form.scheduleEnabled,
       schedule: rowsToPayload(form.schedule),
       recommendations: recommendationsToPayload(form.recommendations),
+      bundleItems: bundleItemsToPayload(form.bundleItems),
       // Empty means "use the platform's phrase"; the route maps it to null.
       pairingNote: form.pairingNote,
       pairingNoteEn: form.pairingNoteEn,
@@ -228,6 +241,18 @@ export function ProductDialog({
             // demanding more picks than it offers, and blank rows were just
             // removed above.
             maxSelect: Math.min(Math.max(1, group.maxSelect), choices.length),
+            /*
+              Cleared whenever the group is not single-select.
+
+              The server refuses the combination outright, so sending it would
+              turn a stale toggle into a save failure the owner cannot explain.
+              Clamping here means raising "how many can they pick?" quietly
+              stops the group being an upgrade ladder, which is the only
+              coherent reading of that edit.
+            */
+            isUpgrade:
+              group.isUpgrade &&
+              Math.min(Math.max(1, group.maxSelect), choices.length) === 1,
             choices,
           };
         }),
@@ -407,29 +432,44 @@ export function ProductDialog({
 
             <Field
               label={t.menuBuilder.costPrice}
-              hint={t.menuBuilder.costPriceHint}
+              hint={
+                form.costFromRecipe
+                  ? t.costing.costFromRecipeHint
+                  : t.menuBuilder.costPriceHint
+              }
               htmlFor="p-cost"
             >
+              {/* Read-only when the recipe decides it: the figure is
+                  recomputed whenever an ingredient's price or the recipe
+                  changes, so a typed one would only be overwritten. */}
               <Input
                 id="p-cost"
                 inputMode="numeric"
+                readOnly={form.costFromRecipe}
+                aria-describedby={form.costFromRecipe ? "p-cost-source" : undefined}
                 value={form.costPrice ? formatMoney(form.costPrice, locale) : ""}
                 onChange={(e) => setField("costPrice", parseAmount(e.target.value))}
+                className={form.costFromRecipe ? "bg-ink-50 text-ink-600" : undefined}
               />
+              {form.costFromRecipe && (
+                <span
+                  id="p-cost-source"
+                  className="mt-1 block text-[11px] font-semibold text-emerald-700"
+                >
+                  {t.costing.costFromRecipe}
+                </span>
+              )}
             </Field>
           </div>
 
-          {form.costPrice > 0 && form.price > 0 && (
-            <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 rounded-[var(--radius-sm)] bg-emerald-50 p-3 text-xs font-bold text-emerald-800">
-              <span>
-                {t.menuBuilder.profitPreview}: {formatMoney(profit, locale)}{" "}
-                {t.common.toman}
-              </span>
-              <span>
-                {t.menuBuilder.marginPreview}: {formatPercent(margin, locale)}
-              </span>
-            </p>
-          )}
+          <PriceHealthNote
+            price={form.price}
+            cost={form.costPrice}
+            exactPrice={draft.id ? draft.priceExact : null}
+            priceTouched={form.price !== draft.price}
+            pricing={pricing}
+            locale={locale}
+          />
         </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -510,6 +550,17 @@ export function ProductDialog({
           onPairingNoteChange={(value) => setField("pairingNote", value)}
           pairingNoteEn={form.pairingNoteEn}
           onPairingNoteEnChange={(value) => setField("pairingNoteEn", value)}
+        />
+
+        {/* A meal deal is a product that lists other products, so its contents
+            belong with the other things that describe how this dish is sold. */}
+        <BundleEditor
+          rows={form.bundleItems}
+          onRowsChange={(bundleItems) => setField("bundleItems", bundleItems)}
+          allProducts={allProducts}
+          currentProductId={form.id}
+          price={form.price}
+          locale={locale}
         />
 
         {/*
@@ -719,7 +770,32 @@ export function ProductDialog({
                           className="!h-9 !w-20 text-sm"
                         />
                       </label>
+
+                      {/*
+                        Offered only on a single-select group, because that is
+                        the only shape an upgrade can take — in a multi-select
+                        group the choices accumulate, so "make it large" would
+                        add a second size rather than replace the first.
+
+                        Hidden rather than disabled: a greyed-out control an
+                        owner can never reach from here is a worse answer than
+                        one that appears when it becomes relevant, which is the
+                        same rule the info panels follow above.
+                      */}
+                      {group.maxSelect === 1 && group.choices.length > 1 && (
+                        <Toggle
+                          checked={group.isUpgrade}
+                          onChange={(v) => updateGroup(groupIndex, { isUpgrade: v })}
+                          label={t.menuBuilder.optionIsUpgrade}
+                        />
+                      )}
                     </div>
+
+                    {group.isUpgrade && group.maxSelect === 1 && (
+                      <p className="mt-2.5 rounded-[var(--radius-xs)] bg-surface p-2.5 text-[11px] leading-6 text-ink-600">
+                        {t.menuBuilder.optionIsUpgradeHint}
+                      </p>
+                    )}
 
                     <div className="mt-3 space-y-2">
                       {group.choices.map((choice, choiceIndex) => (
@@ -820,6 +896,7 @@ export function ProductDialog({
                           nameEn: "",
                           isRequired: true,
                           maxSelect: 1,
+                          isUpgrade: false,
                           choices: [emptyChoice(), emptyChoice()],
                         },
                       ],

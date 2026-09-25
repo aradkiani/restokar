@@ -5,8 +5,8 @@
  */
 export const fa = {
   common: {
-    appName: "منولند",
-    tagline: "منوی دیجیتال حرفه‌ای برای رستوران و کافه",
+    appName: "رستوکار",
+    tagline: "منوی دیجیتال، سفارش‌گیری و گزارش سود برای رستوران و کافه",
     save: "ذخیره",
     saving: "در حال ذخیره…",
     saved: "ذخیره شد",
@@ -62,11 +62,11 @@ export const fa = {
     logout: "خروج",
   },
   landing: {
-    heroBadge: "بدون نیاز به نصب اپلیکیشن",
-    heroTitle: "منوی دیجیتال رستوران شما،",
-    heroTitleAccent: "زیبا و هوشمند",
+    heroBadge: "بدون نصب اپلیکیشن، بدون سخت‌افزار خاص",
+    heroTitle: "همهٔ کارِ رستورانتان،",
+    heroTitleAccent: "از منو تا سود",
     heroSubtitle:
-      "با یک بارکد روی میز، مشتری منوی شما را می‌بیند، سفارش می‌دهد و شما فروش، سود و هزینه‌ها را دقیق مدیریت می‌کنید.",
+      "مشتری با بارکد روی میز سفارش می‌دهد، سفارش همان لحظه روی صفحهٔ آشپزخانه می‌نشیند، و شما فروش، سود و هزینه‌ها را دقیق می‌بینید.",
     heroCtaPrimary: "۱۴ روز رایگان امتحان کنید",
     /** Replaces the signup CTA while self-service registration is closed. */
     ctaContactSupport: "تماس با پشتیبانی",
@@ -77,21 +77,30 @@ export const fa = {
     heroNote: "بدون نیاز به کارت بانکی",
     statsRestaurants: "رستوران و کافه",
     statsOrders: "سفارش ثبت‌شده",
-    statsUptime: "پایداری سرویس",
-    featuresTitle: "همه چیز برای دیجیتال شدن رستوران شما",
-    featuresSubtitle: "از ساخت منو تا مدیریت آشپزخانه و گزارش سود؛ همه در یک پنل ساده.",
+    /**
+     * The third figure used to be a hard-coded «٪۹۹.۹» uptime sitting between
+     * two counts read from the database. An invented statistic beside two real
+     * ones costs more trust than it buys, so it now reports the template
+     * catalogue — a number the page can actually prove.
+     */
+    statsTemplates: "قالب آمادهٔ منو",
+    featuresTitle: "هر چیزی که برای ادارهٔ رستوران لازم دارید",
+    featuresSubtitle:
+      "از ساخت منو تا صفحهٔ آشپزخانه و گزارش سود — همه در یک پنل، بدون نرم‌افزار جداگانه.",
     howTitle: "در سه قدم راه‌اندازی کنید",
     howSubtitle: "کمتر از ۱۵ دقیقه تا اولین سفارش دیجیتال",
-    step1Title: "ثبت‌نام و ساخت منو",
-    step1Text: "دسته‌بندی‌ها و محصولات را با عکس و توضیحات وارد کنید.",
-    step2Title: "انتخاب قالب و شخصی‌سازی",
-    step2Text: "قالب دلخواه را انتخاب و رنگ، فونت و پس‌زمینه را تنظیم کنید.",
-    step3Title: "چاپ بارکد روی میزها",
-    step3Text: "بارکد اختصاصی هر میز را چاپ کنید؛ مشتری اسکن می‌کند و سفارش می‌دهد.",
+    step1Title: "منو را بسازید",
+    step1Text: "دسته‌بندی‌ها و محصولات را با عکس، قیمت و توضیح کوتاه وارد کنید.",
+    step2Title: "قالب و برند را انتخاب کنید",
+    step2Text:
+      "یکی از قالب‌های آماده را بردارید و رنگ، فونت و لوگو را مطابق برندتان تنظیم کنید.",
+    step3Title: "بارکد میزها را چاپ کنید",
+    step3Text:
+      "هر میز بارکد خودش را دارد؛ مشتری اسکن می‌کند و سفارش مستقیم به آشپزخانه می‌رسد.",
     demoTitle: "نمونه منوهای واقعی",
     demoSubtitle: "قالب‌ها را روی یک منوی واقعی ببینید",
-    benefitsTitle: "چرا رستوران‌ها منولند را انتخاب می‌کنند",
-    ctaTitle: "آماده‌اید رستورانتان را دیجیتال کنید؟",
+    benefitsTitle: "چرا رستوران‌ها رستوکار را انتخاب می‌کنند",
+    ctaTitle: "آماده‌اید کارِ رستوران را ساده‌تر کنید؟",
     ctaSubtitle: "همین حالا شروع کنید؛ ۱۴ روز اول رایگان است.",
     faqTitle: "سؤالات متداول",
     contactTitle: "با ما در تماس باشید",
@@ -188,10 +197,11 @@ export const fa = {
   },
   inventory: {
     title: "موجودی انبار",
-    hint: "مواد اولیه را با واحد دلخواه ثبت کنید؛ با هر سفارش، به اندازه‌ی نسخه‌ی هر غذا از موجودی کم می‌شود.",
+    hint: "مواد اولیه را با واحد و قیمت خرید ثبت کنید؛ با هر سفارش، به اندازهٔ نسخهٔ هر غذا از موجودی کم می‌شود و بهای تمام‌شدهٔ غذا از روی همین قیمت‌ها محاسبه می‌شود.",
     itemName: "نام ماده",
     itemUnit: "واحد",
-    unitHint: "مثلاً کیلوگرم، گرم، لیتر، عدد",
+    unitHint:
+      "واحدی که موجودی با آن شمرده می‌شود. در نسخه می‌توانید زیرواحدها را هم به کار ببرید؛ مثلاً ۲۳۰ گرم از ماده‌ای که به کیلوگرم ثبت شده.",
     quantity: "موجودی فعلی",
     lowStock: "هشدار در",
     lowStockHint:
@@ -210,6 +220,82 @@ export const fa = {
     dashboardTitle: "مواد رو به اتمام",
     dashboardBody: "این مواد به مرز هشدار رسیده‌اند و بهتر است تأمین شوند.",
     manageLink: "مدیریت موجودی",
+  },
+
+  costing: {
+    units: {
+      g: "گرم",
+      kg: "کیلوگرم",
+      mesghal: "مثقال",
+      ml: "میلی‌لیتر",
+      l: "لیتر",
+      tsp: "قاشق چای‌خوری",
+      tbsp: "قاشق غذاخوری",
+      piece: "عدد",
+      dozen: "دوجین",
+    },
+    dimensions: {
+      weight: "وزن",
+      volume: "حجم",
+      count: "تعداد",
+    },
+
+    settingsTitle: "قیمت‌گذاری منو",
+    settingsHint:
+      "قیمت دقیق هر غذا نگه داشته می‌شود و فقط برای نمایش رُند می‌شود؛ هر افزایش بعدی — دستی، گروهی یا از تغییر قیمت مواد — از همان قیمت دقیق حساب می‌شود.",
+    menuPriceStep: "رُند کردن قیمت‌های منو",
+    menuPriceStepHint:
+      "قیمت‌ها در منو به نزدیک‌ترین مضرب این عدد نمایش داده و از مشتری دریافت می‌شوند.",
+    noRounding: "بدون رُند (دقیق به تومان)",
+    autoReprice: "به‌روزرسانی خودکار قیمت با تغییر قیمت مواد اولیه",
+    autoRepriceHint:
+      "وقتی قیمت خرید یک ماده تغییر کند، قیمت هر غذا به همان اندازه‌ای که بهای مواد آن تغییر کرده بالا یا پایین می‌رود.",
+    lowMargin: "هشدار حاشیهٔ سود کم (درصد)",
+    lowMarginHint:
+      "اگر سود یک غذا نسبت به قیمتش از این درصد کمتر شود، هنگام قیمت‌گذاری هشدار داده می‌شود. صفر یعنی هشدار ندهد.",
+    save: "ذخیره",
+    saved: "تنظیمات قیمت‌گذاری ذخیره شد",
+    reRounded: "قیمت نمایشی {n} محصول با گام جدید به‌روز شد",
+    confirmStepTitle: "گام رُند تغییر کند؟",
+    confirmStepBody:
+      "قیمت نمایش‌داده‌شدهٔ همهٔ محصولات با گام جدید دوباره حساب می‌شود. قیمت‌های دقیق تغییری نمی‌کنند و با برگرداندن گام، قیمت‌ها به حالت قبل برمی‌گردند.",
+    confirmStep: "تغییر گام",
+
+    bulkStepNote:
+      "درصد روی قیمت دقیق اعمال می‌شود و قیمت در منو با گام {step} رُند می‌شود. گام را از «قیمت‌گذاری منو» تغییر دهید.",
+    bulkStepNone:
+      "درصد روی قیمت دقیق اعمال می‌شود و قیمت در منو بدون رُند، دقیق به تومان نمایش داده می‌شود.",
+    bulkBelowCost: "{n} محصول پس از این تغییر زیر بهای مواد اولیه فروخته می‌شود",
+    bulkLowMargin: "{n} محصول پس از این تغییر حاشیهٔ سود کمی خواهد داشت",
+
+    belowCost:
+      "بهای مواد اولیه ({cost}) از قیمت این غذا بیشتر است؛ با هر فروش ضرر می‌کنید.",
+    lowMarginWarn:
+      "حاشیهٔ سود این غذا {margin}٪ است که از حد هشدار شما ({floor}٪) کمتر است.",
+    marginOk: "حاشیهٔ سود: {margin}٪",
+    costFromRecipe: "از روی نسخه محاسبه می‌شود",
+    costFromRecipeHint:
+      "بهای تمام‌شدهٔ این غذا از نسخه و قیمت خرید مواد اولیه، بدون سود، خودکار محاسبه می‌شود.",
+    shownAs: "در منو: {price}",
+    exactPrice: "قیمت دقیق: {price}",
+
+    purchasePrice: "قیمت خرید (تومان)",
+    per: "به ازای هر",
+    purchasePriceHint:
+      "قیمتی که برای این ماده می‌پردازید. با هر تغییر، قیمت غذاهایی که از آن استفاده می‌کنند به همان اندازه تغییر می‌کند.",
+    unitCost: "هر {unit}: {cost}",
+    notPriced: "بدون قیمت خرید",
+    repriced: "قیمت {n} محصول خودکار به‌روز شد",
+    repricedRow: "{name}: از {before} به {after}",
+    repriceOff: "به‌روزرسانی خودکار قیمت خاموش است؛ قیمت محصولات تغییری نکرد.",
+    alertsTitle: "این محصولات را بررسی کنید:",
+    alertBelowCost: "{name} — زیر بهای مواد اولیه",
+    alertLowMargin: "{name} — حاشیهٔ سود {margin}٪",
+    recipeUnit: "واحد",
+    recipeCost: "بهای مواد اولیه هر پرس: {cost}",
+    recipeIncomplete: "برای محاسبهٔ کامل، قیمت خرید این مواد را وارد کنید: {items}",
+    recipeAmountInvalid:
+      "مقدار «{name}» در واحد انبار آن ثبت‌شدنی نیست؛ مقدار بیشتر یا واحد انبار کوچک‌تری انتخاب کنید.",
   },
   manualOrder: {
     navLabel: "سفارش دستی",
@@ -489,6 +575,10 @@ export const fa = {
     optionGroupNameEn: "نام انگلیسی گروه",
     optionRequired: "انتخاب الزامی است",
     optionMaxSelect: "حداکثر انتخاب",
+    /** Marks a single-select group as the dish's size ladder. */
+    optionIsUpgrade: "گروه ارتقا",
+    optionIsUpgradeHint:
+      "گزینه‌های گران‌تر این گروه، بالای صفحه‌ی محصول به‌صورت «بزرگ + ۴۰٬۰۰۰ تومان» به مشتری پیشنهاد می‌شود.",
     optionChoiceName: "نام گزینه",
     optionChoiceNamePlaceholder: "مثلاً مرغ",
     optionChoiceNameEn: "نام انگلیسی گزینه",
@@ -586,7 +676,14 @@ export const fa = {
     views: "بازدید",
     addedToCart: "افزودن به سبد",
     purchases: "خرید",
-    conversion: "نرخ تبدیل",
+    /**
+     * Toman earned per guest the dish was shown to.
+     *
+     * Replaces the old «نرخ تبدیل», which divided order lines by guest sessions
+     * — two different populations — and was silently clamped to 100%. See the
+     * unit note in src/lib/merchandising.ts.
+     */
+    revenuePerView: "درآمد به‌ازای نمایش",
     revenue: "درآمد منتسب",
   },
   /** The customer book: who returns, and how often. */
@@ -619,7 +716,74 @@ export const fa = {
     next: "بعدی",
     marketingConsent: "رضایت دریافت پیام",
     marketingConsentHint:
-      "فقط ثبت می‌شود؛ در حال حاضر هیچ پیامی از سمت منولند ارسال نمی‌شود.",
+      "فقط ثبت می‌شود؛ در حال حاضر هیچ پیامی از سمت رستوکار ارسال نمی‌شود.",
+
+    /** Spending band, relative to this venue's own customers. */
+    valueTier: "ارزش مشتری",
+    allValueTiers: "همه سطح‌ها",
+    valueTiers: {
+      unknown: "نامشخص",
+      standard: "معمولی",
+      high: "پرارزش",
+    },
+    /** `{amount}` is formatted money — the venue's own high-value line. */
+    highValueFrom: "پرارزش: خرید مجموع {amount} به بالا",
+
+    /** The venue-wide retention figures. */
+    retention: {
+      title: "وضعیت بازگشت مشتری",
+      withOrders: "مشتری با سفارش",
+      repeatRate: "نرخ بازگشت",
+      repeatRateHint: "سهم مشتریانی که بیش از یک بار سفارش داده‌اند",
+      averageLifetimeValue: "میانگین ارزش هر مشتری",
+      averageOrders: "میانگین سفارش هر مشتری",
+    },
+
+    /**
+     * The action cards. Each states a group and what is known about it — never
+     * an instruction, because what to do about it is the owner's trade, not
+     * the software's.
+     */
+    opportunities: {
+      title: "فرصت‌های بازگرداندن مشتری",
+      hint: "بر اساس سفارش‌های ثبت‌شده‌ی همین مجموعه.",
+      empty: "هنوز داده‌ی کافی برای پیشنهاد وجود ندارد.",
+      /** `{count}` customers are in the group. */
+      firstToSecond: "{count} مشتری یک بار سفارش داده‌اند و هنوز برنگشته‌اند",
+      firstToSecondHint: "اولین تجربه‌شان خوب بوده؛ دومین سفارش معمولاً سخت‌ترین است.",
+      highValueAtRisk: "{count} مشتری پرارزش دیرتر از همیشه سفارش داده‌اند",
+      highValueAtRiskHint: "بیشترین خرید را داشته‌اند و حالا از ریتم همیشگی‌شان عقب‌اند.",
+      winBack: "{count} مشتری قدیمی مدت‌هاست سفارش نداده‌اند",
+      winBackHint: "قبلاً چند بار سفارش داده بودند؛ حالا مدت زیادی است خبری نیست.",
+      activeRegulars: "{count} مشتری وفادار فعال دارید",
+      activeRegularsHint: "مرتب سفارش می‌دهند — ارزش نگه‌داشتن دارند.",
+      /** `{amount}` is the group's combined historical spending. */
+      revenueAtStake: "مجموع خرید این گروه: {amount}",
+      viewCustomers: "دیدن مشتریان",
+    },
+
+    /**
+     * Why a customer is in the group they are in.
+     *
+     * Every one states a checkable fact rather than a verdict. `{n}` is days
+     * idle, `{interval}` the guest's own typical gap, `{orders}` their order
+     * count — the dashboard fills whichever the sentence uses.
+     */
+    reasons: {
+      lapsedLongSilence: "{n} روز است سفارشی ثبت نکرده‌اند.",
+      atRiskOverdue:
+        "معمولاً هر {interval} روز سفارش می‌دادند، اما {n} روز است خبری نیست.",
+      atRiskNoRhythm: "{n} روز است سفارشی ثبت نکرده‌اند.",
+      loyalFrequent: "{orders} سفارش ثبت‌شده و همچنان فعال هستند.",
+      returningActive: "بیش از یک بار سفارش داده‌اند و فعال هستند.",
+      newFirstOrder: "اولین سفارششان را ثبت کرده‌اند.",
+      newNoOrders: "هنوز سفارشی ثبت نکرده‌اند.",
+    },
+    /** Shown where there is too little history to say anything useful. */
+    notEnoughHistory: "سابقه‌ی کافی برای تشخیص ریتم سفارش وجود ندارد.",
+    typicalInterval: "فاصله‌ی معمول سفارش",
+    /** `{n}` days. */
+    everyNDays: "هر {n} روز",
     /**
      * Segment names, keyed by CUSTOMER_SEGMENTS. The thresholds behind them
      * live in src/lib/customers.ts, not here.
@@ -652,7 +816,8 @@ export const fa = {
     title: "کمپین‌ها",
     subtitle: "برنامه‌ریزی برای گروه‌های مشتری، بر اساس سفارش‌های ثبت‌شده",
     noDeliveryNotice:
-      "در این نسخه هیچ پیامی ارسال نمی‌شود. کمپین فقط برنامه‌ریزی و ذخیره می‌شود.",
+      "کمپین فقط برنامه‌ریزی و ذخیره می‌شود و خودکار پیامی نمی‌فرستد. برای رساندن پیام به مشتری‌ها «پیامک تبلیغاتی» را بزنید؛ پس از پرداخت، پیامک توسط تیم رستوکار ارسال می‌شود.",
+    sendSms: "ارسال پیامک به این گروه",
 
     create: "کمپین جدید",
     editTitle: "ویرایش کمپین",
@@ -700,7 +865,7 @@ export const fa = {
     deliveryMetrics: "آمار ارسال و تعامل",
     unavailable: "در دسترس نیست",
     unavailableHint:
-      "تا زمانی که سامانهٔ ارسال اضافه نشود، این عددها وجود ندارند و ساختگی نمایش داده نمی‌شوند.",
+      "پیامک‌ها توسط تیم رستوکار ارسال می‌شوند و آمار تحویل و تعامل اندازه‌گیری نمی‌شود؛ این عددها ساختگی نمایش داده نمی‌شوند.",
     metrics: {
       sent: "ارسال‌شده",
       delivered: "تحویل‌شده",
@@ -724,8 +889,7 @@ export const fa = {
     deleted: "پیش‌نویس حذف شد",
 
     empty: "هنوز کمپینی نساخته‌اید",
-    emptyHint:
-      "یک گروه از مشتری‌ها را انتخاب کنید و برنامه‌تان را ذخیره کنید؛ ارسالی انجام نمی‌شود.",
+    emptyHint: "یک گروه از مشتری‌ها را انتخاب کنید و برنامه‌تان را ذخیره کنید.",
     emptyFiltered: "با این فیلتر کمپینی پیدا نشد.",
     pageOf: "صفحه {page} از {pages}",
     previous: "قبلی",
@@ -739,6 +903,77 @@ export const fa = {
    * together, the copy says «داده‌ها نشان می‌دهد» — the data suggests — rather
    * than claiming a cause it cannot establish.
    */
+
+  smsBroadcast: {
+    open: "پیامک تبلیغاتی",
+    title: "پیامک تبلیغاتی",
+    forCampaign: "برای کمپین «{name}»",
+    intro:
+      "پیام را بنویسید و گیرنده‌ها را انتخاب کنید. پس از پرداخت، پیامک توسط تیم رستوکار برای مشتری‌هایی ارسال می‌شود که رضایت دریافت پیام داده‌اند.",
+    audience: "گیرنده‌ها",
+    allCustomers: "همهٔ مشتریان",
+    text: "متن پیامک",
+    textPlaceholder: "مثلاً: این هفته ۲۰٪ تخفیف روی همهٔ نوشیدنی‌ها",
+    optOutNote: "عبارت «{suffix}» برای لغو دریافت، خودکار به انتهای پیام اضافه می‌شود.",
+    preview: "پیامکی که ارسال می‌شود",
+    recipients: "گیرنده",
+    parts: "پیامک برای هر نفر",
+    characters: "{count} نویسه",
+    pricePerPart: "قیمت هر پیامک",
+    total: "مبلغ قابل پرداخت",
+    toman: "تومان",
+    calculating: "در حال محاسبه…",
+    pay: "پرداخت و ثبت درخواست",
+    paying: "در حال انتقال به درگاه…",
+    checkoutDisabled:
+      "پرداخت آنلاین پیامک هنوز فعال نشده است. برای ارسال با پشتیبانی تماس بگیرید.",
+    consentNote:
+      "فقط مشتری‌هایی شمرده می‌شوند که رضایت دریافت پیام داده‌اند و شمارهٔ موبایل معتبر دارند.",
+    issues: {
+      EMPTY: "متن پیامک را بنویسید.",
+      CONTAINS_LINK: "پیامک تبلیغاتی نمی‌تواند لینک داشته باشد؛ اپراتور آن را رد می‌کند.",
+      TOO_LONG: "متن طولانی است. حداکثر {max} پیامک برای هر نفر مجاز است.",
+      NO_RECIPIENTS: "در این گروه هیچ مشتری‌ای با رضایت دریافت پیام وجود ندارد.",
+    },
+    history: "درخواست‌های پیامک",
+    historyEmpty: "هنوز درخواستی ثبت نکرده‌اید.",
+    date: "تاریخ",
+    message: "پیام",
+    amount: "مبلغ",
+    status: "وضعیت",
+    statuses: {
+      PENDING_PAYMENT: "در انتظار پرداخت",
+      PAID: "در صف ارسال",
+      SENT: "ارسال شد",
+      CANCELED: "لغو شد",
+    },
+    paymentSuccess: "پرداخت انجام شد. پیامک شما در صف ارسال قرار گرفت.",
+    paymentFailed: "پرداخت انجام نشد و پیامکی در صف قرار نگرفت.",
+    admin: {
+      title: "صف پیامک‌های تبلیغاتی",
+      subtitle:
+        "فایل شماره‌ها را دریافت کنید، پیام را با ابزار ارسال بفرستید و سپس «ارسال شد» را بزنید.",
+      empty: "درخواستی در این بخش نیست.",
+      filterOpen: "در انتظار ارسال",
+      filterSent: "ارسال‌شده",
+      filterCanceled: "لغوشده",
+      venue: "رستوران",
+      campaign: "کمپین",
+      paidAt: "زمان پرداخت",
+      download: "دریافت فایل شماره‌ها",
+      copyText: "کپی متن",
+      copied: "متن کپی شد",
+      markSent: "ارسال شد",
+      cancel: "لغو درخواست",
+      confirmSent: "این پیامک را با ابزار ارسال فرستاده‌اید؟",
+      confirmCancel:
+        "این درخواست لغو شود؟ بازگرداندن مبلغ به رستوران باید جداگانه انجام شود.",
+      mockPayment: "پرداخت آزمایشی — مبلغی دریافت نشده است. ارسال نکنید.",
+      refId: "کد پیگیری",
+      markedSent: "به‌عنوان ارسال‌شده ثبت شد",
+      canceled: "درخواست لغو شد",
+    },
+  },
   insights: {
     title: "تحلیل فروش",
     subtitle: "چه چیزی نسبت به بازهٔ قبل تغییر کرده است",
@@ -779,6 +1014,10 @@ export const fa = {
       customerMixChange: "رفتار مشتریان",
       featuredWeakConversion: "محصول ویژه",
       recommendationWeakConversion: "پیشنهاد همراه",
+      tableHighActivity: "میز پرفروش",
+      tableActivityDecline: "افت فعالیت میز",
+      tableViewsWithoutOrders: "بازدید بیشتر از سفارش",
+      tableConcentration: "تمرکز فروش روی چند میز",
     },
 
     messages: {
@@ -806,6 +1045,35 @@ export const fa = {
         "{impressions} بار دیده شد اما تنها {purchases} بار خریداری شد.",
       recommendationWeakConversion:
         "{impressions} بار پیشنهاد شد، {addedToCart} بار به سبد رفت و {purchases} بار خریداری شد.",
+
+      /*
+        Profitability. Every sentence states the two margins side by side, so
+        the owner reads a comparison they can check rather than a verdict —
+        «۹٪ در برابر میانگین ۲۴٪» is something they can go and verify.
+      */
+      highSalesLowMargin:
+        "فروش خوبی دارد اما حاشیه سود برآوردی آن {margin} است؛ میانگین منو {menuMargin}.",
+      lowSalesHighMargin:
+        "حاشیه سود برآوردی آن {margin} است — بالاتر از میانگین منو ({menuMargin}) — اما فروش کمی دارد.",
+      costDataIncomplete:
+        "{products} محصول بهای تمام‌شده ثبت‌نشده دارند؛ حاشیه سود فقط از {coverage} فروش این بازه محاسبه شده است.",
+      menuConcentration: "{count} محصول اول {share} از درآمد این بازه را تشکیل داده‌اند.",
+
+      /*
+        Table intelligence. Every sentence describes and stops.
+
+        None of them names a cause — not a peeled sticker, not a bad seat, not
+        an unhappy guest. The platform cannot tell those apart, and the owner is
+        standing in the room that can.
+      */
+      tableHighActivity:
+        "{orders} سفارش ثبت شده و {share} از فروش ثبت‌شدهٔ میزها از این میز بوده است.",
+      tableActivityDecline:
+        "فروش ثبت‌شدهٔ این میز نسبت به بازهٔ مقایسه {percent} کمتر شده است ({amount} کمتر) — {previousOrders} سفارش در بازهٔ قبل، {orders} سفارش در این بازه.",
+      tableViewsWithoutOrders:
+        "منوی این میز {views} بار باز شده و {orders} سفارش از آن ثبت شده است؛ نسبت سفارش به بازدید در این میز {ratio} است، در حالی که میانگین میزهای دیگر {venueRatio} است.",
+      tableConcentration:
+        "{count} میز اول {share} از فروش ثبت‌شدهٔ میزها را تشکیل داده‌اند.",
     },
 
     /** Suggestions for the owner. Nothing here changes anything by itself. */
@@ -814,6 +1082,14 @@ export const fa = {
       featureProductMore: "می‌توانید این محصول را بیشتر در معرض دید بگذارید.",
       reviewFeaturedDish: "عکس، قیمت یا توضیح این محصول ویژه را بازبینی کنید.",
       reviewSuggestion: "شاید این پیشنهاد با محصول مبدأ هم‌خوان نباشد.",
+      /*
+        Each points at a screen that already exists — the product editor owns
+        price and cost, the merchandising screen owns promotion. Nothing here
+        offers to change anything on the owner's behalf.
+      */
+      reviewProductPricing: "قیمت یا بهای تمام‌شدهٔ این محصول را بررسی کنید.",
+      promoteProduct: "می‌توانید این محصول را ویژه کنید یا در پیشنهادها قرار دهید.",
+      addProductCosts: "بهای تمام‌شدهٔ محصولات را کامل کنید تا سود دقیق‌تر محاسبه شود.",
     },
 
     labels: {
@@ -822,9 +1098,137 @@ export const fa = {
       averageOrderValue: "میانگین هر سفارش",
       current: "این بازه",
       previous: "بازهٔ قبل",
+      /** Prefixes an insight about a table, so «۱۲» reads as a place. */
+      table: "میز",
     },
   },
+  /**
+   * What is happening through each QR code.
+   *
+   * Two words carry most of the honesty in this screen. It says **بازدید منو**
+   * (menu visit) and never **اسکن** (scan): the platform knows a page was
+   * opened, not that a camera was pointed at a sticker, and those differ every
+   * time a guest reloads, shares the link, or returns to the tab. And it says
+   * **فروش ثبت‌شده** (recorded sales) rather than the venue's takings, because a
+   * table's figure only ever covers orders that carried its number.
+   */
+  tableIntel: {
+    navLabel: "عملکرد میزها",
+    title: "عملکرد میزها",
+    subtitle: "ببینید از هر میز چه اندازه سفارش و فروش ثبت شده است.",
+    backToAnalytics: "بازگشت به گزارش فروش",
+
+    columns: {
+      table: "میز",
+      orders: "سفارش‌ها",
+      revenue: "فروش ثبت‌شده",
+      averageOrderValue: "میانگین هر سفارش",
+      visits: "بازدید منو",
+      perVisit: "سفارش به ازای هر بازدید",
+      trend: "تغییر فروش",
+      activity: "فعالیت",
+      lastOrder: "آخرین سفارش",
+    },
+
+    tiles: {
+      activeTables: "میزهای فعال",
+      tableRevenue: "فروش ثبت‌شدهٔ میزها",
+      tableOrders: "سفارش‌های ثبت‌شدهٔ میزها",
+      busiest: "پرکارترین میز",
+    },
+
+    activity: {
+      high: "بالا",
+      medium: "متوسط",
+      low: "پایین",
+      none: "بدون سفارش",
+      /** Shown in place of a band when the venue is too quiet to compare. */
+      unknown: "—",
+    },
+
+    /** A number that appears on orders but has no table row of its own. */
+    unlisted: "ثبت‌نشده",
+    unlistedHint:
+      "این شمارهٔ میز روی سفارش‌ها ثبت شده اما در فهرست میزهای شما وجود ندارد — شاید میزی که حذف شده یا شماره‌ای که دستی وارد شده است.",
+
+    seats: "{count} نفره",
+    noOrders: "بدون سفارش",
+    noOrdersYet: "هنوز سفارشی از این میز ثبت نشده است.",
+
+    empty: "هنوز میزی تعریف نشده است",
+    emptyHint:
+      "برای دیدن عملکرد هر میز، ابتدا از صفحهٔ بارکد میزها میز اضافه کنید و بارکد اختصاصی هر میز را روی آن بگذارید.",
+    emptyAction: "رفتن به بارکد میزها",
+
+    noActivity: "در این بازه سفارشی از میزها ثبت نشده است",
+    noActivityHint: "بازهٔ دیگری را انتخاب کنید یا تا ثبت سفارش‌های بیشتر صبر کنید.",
+
+    insufficientBands: "برای مقایسهٔ میزها داده کافی نیست",
+    insufficientBandsHint:
+      "برچسب «بالا» و «پایین» زمانی نشان داده می‌شود که دست‌کم {orders} سفارش روی {tables} میز ثبت شده باشد. تعداد سفارش و فروش هر میز همچنان در جدول زیر نشان داده می‌شود.",
+
+    /* The visit column's own honesty note. */
+    visitsTitle: "بازدید منو",
+    visitsMeasured:
+      "{attributed} بازدید از بارکد میزها و {unattributed} بازدید از لینک مستقیم ثبت شده است.",
+    visitsInsufficient: "داده کافی برای بازدید میزها نیست",
+    visitsInsufficientHint:
+      "بازدید هر میز از زمانی شمرده می‌شود که مشتری منو را با بارکد همان میز باز کند. اگر بیشتر بازدیدها از لینک مستقیم باشد یا هنوز بازدیدی ثبت نشده باشد، این ستون خالی می‌ماند.",
+    visitsNote:
+      "«بازدید منو» یعنی باز شدن صفحهٔ منو با بارکد این میز؛ این عدد تعداد اسکن یا تعداد مشتری نیست. یک مشتری ممکن است چند بار منو را باز کند و چند مشتری ممکن است با یک سفارش مشترک باشند.",
+    perVisitOver:
+      "سفارش‌های این میز از تعداد بازدیدهای بارکدش بیشتر است؛ یعنی بخشی از مشتریان این میز منو را از راه دیگری باز کرده‌اند.",
+  },
   /** Upselling: the owner's suggestions, and how they performed. */
+  /** Meal deals: what a combo contains, and what it saves. */
+  bundles: {
+    title: "پیشنهاد ویژه (مِنو کامل)",
+    hint: "اگر این محصول یک پیشنهاد ترکیبی است، اجزای آن را اینجا مشخص کنید. قیمت خودِ محصول، قیمت نهایی پیشنهاد است.",
+    emptyHint: "این محصول یک پیشنهاد ترکیبی نیست.",
+    product: "محصول",
+    quantity: "تعداد",
+    add: "افزودن جزء",
+    remove: "حذف جزء",
+    partsTotal: "مجموع قیمت اجزا",
+    saving: "صرفه‌جویی مشتری",
+    noSaving: "بدون صرفه‌جویی",
+    /** Column heading on the merchandising overview. */
+    overviewLabel: "پیشنهاد ترکیبی",
+  },
+  /** The one screen answering "what am I promoting, and where?" */
+  merchandising: {
+    navLabel: "فروش و پیشنهادها",
+    title: "فروش و پیشنهادها",
+    subtitle: "ببینید هر محصول کجا به مشتری پیشنهاد می‌شود.",
+    empty: "هنوز محصولی برای پیشنهاد تنظیم نشده است.",
+    product: "محصول",
+    promotions: "پیشنهادها",
+    nothing: "—",
+    featured: "ویژه",
+    pairings: "پیشنهاد همراه",
+    bundle: "پیشنهاد ترکیبی",
+    upgrade: "ارتقا",
+    /** Where a given promotion shows up, so the owner is not guessing. */
+    appearsOn: "محل نمایش",
+    appearsProductSheet: "صفحه محصول",
+    appearsCart: "سبد خرید",
+    appearsMenu: "بالای منو",
+    /** The history-derived suggestions block. */
+    suggestionsTitle: "این‌ها را با هم سفارش می‌دهند",
+    suggestionsHint:
+      "بر اساس سفارش‌های ثبت‌شده‌ی همین مجموعه. می‌توانید هرکدام را به‌عنوان پیشنهاد همراه ثبت کنید.",
+    suggestionsEmpty:
+      "هنوز سفارش کافی برای نتیجه‌گیری ثبت نشده است. تا آن زمان فقط پیشنهادهای خودتان نمایش داده می‌شود.",
+    /** `{count}` orders contained both dishes. */
+    togetherCount: "در {count} سفارش با هم",
+    /** `{percent}` of orders with the first dish also had the second. */
+    togetherShare: "{percent} از سفارش‌های «{source}»",
+    addAsPairing: "ثبت به‌عنوان پیشنهاد",
+    added: "ثبت شد",
+    computedAt: "آخرین محاسبه",
+    never: "هنوز محاسبه نشده",
+    recompute: "محاسبه دوباره",
+  },
   recommendations: {
     title: "پیشنهاد همراه",
     hint: "وقتی مشتری این محصول را سفارش می‌دهد، این موارد به او پیشنهاد می‌شود.",
@@ -847,7 +1251,8 @@ export const fa = {
     impressions: "نمایش",
     addedToCart: "افزودن به سبد",
     purchases: "خرید",
-    conversion: "نرخ تبدیل",
+    /** See the note on the same key in the `featured` block above. */
+    revenuePerView: "درآمد به‌ازای نمایش",
     revenue: "درآمد منتسب",
   },
   design: {
@@ -967,13 +1372,93 @@ export const fa = {
     pairingsFallback: "اینها با آن خوب می‌روند",
     /** Heading of the featured strip at the top of the menu. */
     featuredTitle: "پیشنهاد ویژه",
+    /**
+     * Why a dish is being suggested — one short line under its name.
+     *
+     * Every suggestion carries one. A guest reading «اغلب با هم سفارش داده
+     * می‌شود» is being told something true and checkable, and an owner can see
+     * which of their decisions produced it. Kept to a few words because it sits
+     * under a product name on a 320px card.
+     *
+     * `frequentlyTogether` deliberately states an association and never a
+     * cause — the same discipline `sales-insights.ts` follows.
+     */
+    upsellReasons: {
+      pairing: "پیشنهاد رستوران",
+      bundle: "با هم ارزان‌تر",
+      frequentlyTogether: "اغلب با هم سفارش داده می‌شود",
+      featured: "انتخاب ویژه",
+    },
+    /** What a meal deal saves. `{amount}` is already formatted money. */
+    bundleSaving: "{amount} صرفه‌جویی",
+    /** Heading above what a meal deal contains. */
+    bundleIncludes: "شامل",
+    /** Heading of the meal-deal block on a product sheet. */
+    bundleOffersTitle: "به‌صرفه‌تر سفارش دهید",
+    /**
+     * The one-tap size upgrade. `{name}` is the choice, `{amount}` the extra
+     * cost as formatted money — never the raw `priceDelta`, which would
+     * understate the charge on a ladder that starts below zero.
+     */
+    upgradePrompt: "{name} + {amount}",
+    /** Heading above the upgrade offers on a product sheet. */
+    upgradeTitle: "بزرگ‌ترش کنید",
     ingredients: "اطلاعات بیشتر",
     minutes: "دقیقه",
     viewDetails: "جزئیات",
     closed: "این منو در حال حاضر در دسترس نیست",
     orderingDisabled: "سفارش‌گیری آنلاین این مجموعه غیرفعال است",
     requiredFields: "لطفاً نام و شماره میز را وارد کنید",
+    emptyCart: "سبد خرید شما خالی است",
     trackOrder: "پیگیری سفارش",
+  },
+  /**
+   * The sheet that appears the moment a dish goes into the basket.
+   *
+   * Phrased as an offer, not a prompt — «اینها را هم اضافه کنم؟» invites a no
+   * as easily as a yes, which is the tone a guest mid-order will accept.
+   */
+  upsell: {
+    title: "چیز دیگری هم اضافه کنم؟",
+    subtitle: "معمولاً با این سفارش، این‌ها را هم می‌گیرند.",
+    dismiss: "نه، ممنون",
+  },
+  /** The board's detail view: everything about one order, and who placed it. */
+  orderDetail: {
+    title: "سفارش",
+    open: "مشاهدهٔ جزئیات سفارش",
+    items: "اقلام سفارش",
+    orderNote: "توضیح مشتری",
+    totals: "مبالغ",
+    subtotal: "جمع اقلام",
+    discount: "تخفیف",
+    serviceCharge: "هزینه سرویس",
+    tax: "مالیات",
+    rounding: "گرد کردن",
+    tip: "انعام",
+    total: "مبلغ قابل پرداخت",
+    timeline: "زمان‌ها",
+    placedAt: "ثبت سفارش",
+    preparingAt: "شروع آماده‌سازی",
+    readyAt: "آماده شد",
+    deliveredAt: "تحویل شد",
+    paidAt: "پرداخت شد",
+    canceledAt: "لغو شد",
+    refundedAt: "وجه بازگردانده شد",
+    payments: "تراکنش‌ها",
+    refId: "کد پیگیری",
+    paymentStates: { PENDING: "در انتظار پرداخت", FAILED: "ناموفق" },
+    table: "میز",
+    manual: "ثبت دستی",
+    methodOnline: "پرداخت آنلاین",
+    methodCash: "پرداخت در محل",
+    customer: "مشتری",
+    openCustomer: "مشاهده در بخش مشتریان",
+    /* Two different absences, said differently — see `customerMissingReason`. */
+    customerNoPhone:
+      "این سفارش بدون شماره تماس ثبت شده است، بنابراین پروندهٔ مشتری ندارد.",
+    customerNotFound:
+      "با این شماره تماس مشتری ثبت‌شده‌ای پیدا نشد. ممکن است پرونده حذف شده باشد.",
   },
   orderStatus: {
     title: "وضعیت سفارش",
@@ -1039,9 +1524,122 @@ export const fa = {
      */
     tipLabel: "انعام مهمان",
   },
+  /**
+   * Data export.
+   *
+   * Column headers carry the *unit* — «درآمد (تومان)» — because the cell itself
+   * must stay a bare number for the spreadsheet to add it up. The header is the
+   * only place a unit can live without breaking arithmetic.
+   */
+  exports: {
+    action: "خروجی CSV",
+    downloading: "در حال آماده‌سازی…",
+    /** Shown when the chosen period produced no rows at all. */
+    empty: "در این بازه اطلاعاتی برای خروجی وجود ندارد.",
+    failed: "تهیهٔ خروجی ممکن نشد.",
+    forbidden: "شما اجازهٔ دریافت این خروجی را ندارید.",
+    /** The owner is downloading too often; the platform's rate limiter said no. */
+    tooMany: "درخواست‌های زیادی ارسال شده است. کمی بعد دوباره تلاش کنید.",
+    datasets: {
+      sales: "فروش روزانه",
+      orders: "سفارش‌ها",
+      "order-items": "اقلام سفارش",
+      products: "عملکرد محصولات",
+      categories: "دسته‌بندی‌ها",
+      customers: "مشتریان",
+      inventory: "موجودی انبار",
+      pnl: "سود و زیان",
+      tables: "عملکرد میزها",
+    },
+    columns: {
+      date: "تاریخ",
+      time: "ساعت",
+      orderNumber: "شماره سفارش",
+      branch: "شعبه",
+      table: "میز",
+      status: "وضعیت",
+      paymentMethod: "روش پرداخت",
+      paymentStatus: "وضعیت پرداخت",
+      product: "محصول",
+      category: "دسته‌بندی",
+      options: "انتخاب‌ها",
+      note: "توضیح",
+      quantity: "تعداد",
+      orders: "تعداد سفارش",
+      unitPrice: "قیمت واحد (تومان)",
+      unitCost: "بهای واحد (تومان)",
+      lineTotal: "جمع ردیف (تومان)",
+      subtotal: "جمع جزء (تومان)",
+      discount: "تخفیف (تومان)",
+      serviceCharge: "هزینه سرویس (تومان)",
+      tax: "مالیات (تومان)",
+      tip: "انعام (تومان)",
+      total: "مبلغ کل (تومان)",
+      revenue: "درآمد (تومان)",
+      cost: "بهای تمام‌شده (تومان)",
+      grossProfit: "سود ناخالص (تومان)",
+      margin: "حاشیه سود",
+      revenueShare: "سهم از درآمد",
+      averageOrderValue: "میانگین هر سفارش (تومان)",
+      standing: "وضعیت محصول",
+      amount: "مبلغ (تومان)",
+      item: "عنوان",
+      /** Inventory. */
+      unit: "واحد",
+      inStock: "موجودی",
+      lowStockAt: "حد هشدار",
+      isLow: "کمبود موجودی",
+      active: "فعال",
+      /** Customers. */
+      customerName: "نام مشتری",
+      phone: "شماره تماس",
+      firstOrder: "اولین سفارش",
+      lastOrder: "آخرین سفارش",
+      daysSinceLastOrder: "روز از آخرین سفارش",
+      totalSpend: "مجموع خرید (تومان)",
+      typicalInterval: "فاصله معمول سفارش (روز)",
+      segment: "وضعیت مشتری",
+      valueTier: "ارزش مشتری",
+      marketingConsent: "رضایت دریافت پیام",
+      /*
+        Tables. The visit column says «بازدید منو» and not «اسکن», the same
+        distinction the screen draws: the platform knows the page was opened
+        through this table's code, not that a camera was pointed at a sticker.
+      */
+      tableLabel: "نام میز",
+      menuVisits: "بازدید منو",
+      ordersPerVisit: "سفارش به ازای هر بازدید",
+      tableActivity: "فعالیت میز",
+    },
+  },
+
   analytics: {
     title: "گزارش فروش",
     subtitle: "عملکرد فروش رستوران شما",
+
+    /** Per-dish realised economics — what each product actually earns. */
+    productPerformance: "عملکرد محصولات",
+    productPerformanceEmpty:
+      "هنوز فروش کافی برای تحلیل عملکرد محصولات در این بازه ثبت نشده است.",
+    /** The bar each row is judged against — the median dish, not the weighted mean. */
+    typicalProductMargin: "حاشیه سود معمول محصولات",
+    product: "محصول",
+    /* `grossProfit` already exists further down this block — reused, not redefined. */
+    margin: "حاشیه سود",
+    /**
+     * Where a dish sits on the volume/margin grid.
+     *
+     * Each names what is interesting about the dish, never what to do with it —
+     * «بازبینی قیمت» says the price is worth a look, not that it is wrong.
+     */
+    quadrants: {
+      star: "پرفروش و پرسود",
+      reviewPricing: "بازبینی قیمت",
+      promote: "فرصت معرفی",
+      review: "عادی",
+      unknown: "بدون بهای تمام‌شده",
+      insufficient: "داده کافی نیست",
+    },
     range7: "۷ روز اخیر",
     range30: "۳۰ روز اخیر",
     range90: "۹۰ روز اخیر",
@@ -1384,6 +1982,7 @@ export const fa = {
     expiringSoon: "در آستانه انقضا",
     support: "پشتیبانی",
     supportInboxEmpty: "تیکتی ثبت نشده است",
+    smsQueue: "پیامک‌ها",
     supportReplyPlaceholder: "پاسخ خود را بنویسید…",
     supportSendReply: "ثبت پاسخ",
     supportClose: "بستن تیکت",
@@ -1504,6 +2103,22 @@ export const fa = {
       CAMPAIGN_END_BEFORE_START: "تاریخ پایان باید بعد از تاریخ شروع باشد",
       CAMPAIGN_MISSING_START: "برای زمان‌بندی، تاریخ شروع لازم است",
       CAMPAIGN_ENDS_IN_PAST: "بازهٔ این کمپین گذشته است",
+      SMS_CHECKOUT_DISABLED: "پرداخت آنلاین پیامک هنوز فعال نشده است",
+      SMS_TEXT_EMPTY: "متن پیامک را بنویسید",
+      SMS_TEXT_CONTAINS_LINK: "پیامک تبلیغاتی نمی‌تواند لینک داشته باشد",
+      SMS_TEXT_TOO_LONG: "متن پیامک طولانی است",
+      SMS_NO_RECIPIENTS: "در این گروه هیچ مشتری‌ای با رضایت دریافت پیام وجود ندارد",
+      SMS_BROADCAST_NOT_FOUND: "درخواست پیامک پیدا نشد",
+      SMS_BROADCAST_INVALID_TRANSITION: "وضعیت این درخواست قبلاً تغییر کرده است",
+      SMS_BROADCAST_UNPAID: "این درخواست هنوز پرداخت نشده است",
+      INVENTORY_PRICE_UNIT_MISMATCH: "واحد قیمت خرید باید از همان نوع واحد موجودی باشد",
+      INVENTORY_UNIT_KIND_CHANGE:
+        "واحد ماده‌ای که در نسخه یا موجودی استفاده شده نمی‌تواند به نوع دیگری (مثلاً از وزن به عدد) تغییر کند",
+      INVENTORY_UNIT_TOO_COARSE:
+        "با این واحد، مقدار مصرف یکی از غذاها کمتر از حد قابل ثبت می‌شود",
+      INVENTORY_UNIT_OVERFLOW: "با این واحد، مقدار موجودی بیش از حد بزرگ می‌شود",
+      RECIPE_AMOUNT_UNREPRESENTABLE:
+        "مقدار یکی از مواد در واحد انبار آن ثبت‌شدنی نیست؛ مقدار یا واحد را بررسی کنید",
       INTERNAL_ERROR: "خطای غیرمنتظره‌ای رخ داد. دوباره تلاش کنید.",
     },
   },

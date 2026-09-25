@@ -15,6 +15,12 @@ import {
   recommendationSelect,
   replaceRecommendations,
 } from "@/lib/recommendations-server";
+import {
+  bundleItemOrderBy,
+  bundleItemSelect,
+  replaceBundleItems,
+} from "@/lib/bundles-server";
+import { shownPrices } from "@/lib/costing";
 
 export const runtime = "nodejs";
 
@@ -32,6 +38,10 @@ export const PATCH = route(async (request: Request, context: unknown) => {
       id: true,
       name: true,
       price: true,
+      priceExact: true,
+      compareAtPrice: true,
+      compareAtPriceExact: true,
+      costFromRecipe: true,
       isFeatured: true,
       featuredOrder: true,
       featuredLabel: true,
@@ -54,6 +64,47 @@ export const PATCH = route(async (request: Request, context: unknown) => {
       select: { id: true },
     });
     if (!category) throw new HttpError(400, "Category not found", "CATEGORY_NOT_FOUND");
+  }
+
+  /*
+    Prices: the typed figure is the exact price, and the shown one is derived.
+
+    A price equal to what the menu shows *now* is not a change. The editor sends
+    every field on every save, so the price comes back even when the owner only
+    renamed the dish — and treating it as new would overwrite an exact price of
+    251,035 with its shown 250,000, silently undoing every ingredient-driven
+    increase each time anything was edited. Only a figure the owner actually
+    changed replaces the exact price.
+  */
+  const priceTouched = input.price !== undefined && input.price !== existing.price;
+  const compareTouched =
+    input.compareAtPrice !== undefined &&
+    input.compareAtPrice !== existing.compareAtPrice;
+
+  let priceData: {
+    priceExact: number;
+    price: number;
+    compareAtPriceExact: number | null;
+    compareAtPrice: number | null;
+  } | null = null;
+
+  if (priceTouched || compareTouched) {
+    const venue = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { menuPriceStep: true },
+    });
+
+    const priceExact = priceTouched ? input.price! : existing.priceExact;
+    const compareAtPriceExact = compareTouched
+      ? (input.compareAtPrice ?? null)
+      : (existing.compareAtPriceExact ?? existing.compareAtPrice);
+
+    const shown = shownPrices({
+      priceExact,
+      compareAtPriceExact,
+      step: venue?.menuPriceStep ?? 0,
+    });
+    priceData = { priceExact, compareAtPriceExact, ...shown };
   }
 
   const product = await prisma.$transaction(async (tx) => {
@@ -128,6 +179,13 @@ export const PATCH = route(async (request: Request, context: unknown) => {
       await replaceRecommendations(tx, restaurantId, id, input.recommendations);
     }
 
+    // Absent means "leave it alone"; an empty array means "this is no longer a
+    // bundle". The existing PATCH convention, and the reason this checks for
+    // `undefined` rather than for length.
+    if (input.bundleItems) {
+      await replaceBundleItems(tx, restaurantId, id, input.bundleItems);
+    }
+
     return tx.product.update({
       where: { id },
       data: {
@@ -155,11 +213,14 @@ export const PATCH = route(async (request: Request, context: unknown) => {
           ? { pairingNoteEn: input.pairingNoteEn || null }
           : {}),
         ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl || null } : {}),
-        ...(input.price !== undefined ? { price: input.price } : {}),
-        ...(input.compareAtPrice !== undefined
-          ? { compareAtPrice: input.compareAtPrice }
+        ...(priceData ?? {}),
+        // A dish costed from its recipe takes its cost from the recipe; a typed
+        // figure would be overwritten at the next ingredient change anyway, and
+        // accepting it in between would let reports briefly disagree with the
+        // recipe the owner can see.
+        ...(input.costPrice !== undefined && !existing.costFromRecipe
+          ? { costPrice: input.costPrice }
           : {}),
-        ...(input.costPrice !== undefined ? { costPrice: input.costPrice } : {}),
         ...(input.prepMinutes !== undefined ? { prepMinutes: input.prepMinutes } : {}),
         ...(input.isAvailable !== undefined ? { isAvailable: input.isAvailable } : {}),
         ...(input.hideWhenUnavailable !== undefined
@@ -193,6 +254,7 @@ export const PATCH = route(async (request: Request, context: unknown) => {
           include: { choices: { orderBy: { sortOrder: "asc" } } },
         },
         availabilityWindows: { select: scheduleSelect, orderBy: scheduleOrderBy },
+        bundleItems: { select: bundleItemSelect, orderBy: bundleItemOrderBy },
         recommendations: {
           select: recommendationSelect,
           orderBy: recommendationOrderBy,
@@ -283,15 +345,20 @@ export const PATCH = route(async (request: Request, context: unknown) => {
     });
   }
 
-  if (input.price !== undefined && input.price !== existing.price) {
+  if (priceData && priceTouched) {
     await recordAudit({
       actor: user,
       restaurantId,
       action: "PRICE_CHANGED",
-      summary: `قیمت «${existing.name}» از ${formatMoney(existing.price)} به ${formatMoney(input.price)} تغییر کرد`,
+      summary: `قیمت «${existing.name}» از ${formatMoney(existing.price)} به ${formatMoney(priceData.price)} تغییر کرد`,
       entityType: "Product",
       entityId: id,
-      metadata: { before: existing.price, after: input.price },
+      metadata: {
+        before: existing.price,
+        after: priceData.price,
+        exactBefore: existing.priceExact,
+        exactAfter: priceData.priceExact,
+      },
     });
   }
 

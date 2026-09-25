@@ -39,7 +39,15 @@ import { cn } from "@/lib/utils";
  * that reuses `amount` or `percent` is formatted correctly without touching
  * this table. Anything unlisted is a count.
  */
-const AS_MONEY = new Set(["amount"]);
+const AS_MONEY = new Set([
+  "amount",
+  // Profitability placeholders. Money, so they read in Toman rather than as a
+  // bare count of millions.
+  "revenue",
+  "cost",
+  "shortfall",
+  "uncostedRevenue",
+]);
 const AS_PERCENT = new Set([
   "percent",
   "share",
@@ -47,6 +55,14 @@ const AS_PERCENT = new Set([
   "aovPercent",
   "conversionRate",
   "driverShare",
+  // Margins and cost coverage are all fractions, like every entry above.
+  "margin",
+  "menuMargin",
+  "coverage",
+  // Orders per menu visit, at one table and across the room. Fractions too,
+  // and read far better as "40%" than as "۰٫۴ سفارش".
+  "ratio",
+  "venueRatio",
 ]);
 
 function renderMessage(
@@ -89,6 +105,10 @@ const MONEY_METRIC = new Set<SalesInsight["type"]>([
   "topPositiveContributor",
   "categoryDecline",
   "categoryGrowth",
+  // A table's decline is measured in Toman, like every decline above it. The
+  // other three table rules carry a null `deltaPercent`, so they print no
+  // supporting line and never reach this.
+  "tableActivityDecline",
 ]);
 
 function supporting(insight: SalesInsight, value: number, locale: Locale): string {
@@ -213,7 +233,15 @@ export function SalesInsightsSection({
   );
 }
 
-function InsightCard({
+/**
+ * One finding, rendered.
+ *
+ * Exported so the table performance screen shows its findings in exactly the
+ * card the analytics page uses. The rules differ; what an insight *is* — a
+ * severity, a direction, a sentence from `t.insights.messages`, and the figures
+ * behind it — is one thing, defined once.
+ */
+export function InsightCard({
   insight,
   locale,
   copy,
@@ -237,9 +265,16 @@ function InsightCard({
           {types[insight.type] ?? insight.type}
         </Badge>
 
-        {/* The entity the finding is about, when it is about one. */}
+        {/* The entity the finding is about, when it is about one. A table is
+            named by its number, which reads as a quantity on its own — so the
+            noun comes from the dictionary rather than from the engine, which
+            deliberately emits no words. */}
         {insight.entity && (
-          <span className="text-sm font-bold text-ink-900">{insight.entity.name}</span>
+          <span className="text-sm font-bold text-ink-900">
+            {insight.entity.kind === "table"
+              ? `${copy.labels.table} ${insight.entity.name}`
+              : insight.entity.name}
+          </span>
         )}
 
         {insight.confidence === "low" && (

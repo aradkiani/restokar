@@ -169,7 +169,9 @@ export default async function DashboardOverviewPage() {
                 {item.name}
                 <span className="mx-1 opacity-60">·</span>
                 <bdi>
-                  {localizeDigits(formatQuantity(item.quantityMilli), locale)} {item.unit}
+                  {localizeDigits(formatQuantity(item.quantityMilli), locale)}{" "}
+                  {t.costing.units[item.unit as keyof typeof t.costing.units] ??
+                    item.unit}
                 </bdi>
               </span>
             ))}

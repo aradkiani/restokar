@@ -19,6 +19,24 @@ import { consumptionFor } from "./inventory";
 type StockClient = Prisma.TransactionClient;
 
 /**
+ * What the inventory screen reads back for an item, from every route.
+ *
+ * Here rather than in a route file: Next.js allows a route module to export
+ * only its handlers and route config, and a stray export fails the build.
+ */
+export const INVENTORY_ITEM_SELECT = {
+  id: true,
+  name: true,
+  unit: true,
+  quantityMilli: true,
+  lowStockMilli: true,
+  purchasePrice: true,
+  priceUnit: true,
+  priceUpdatedAt: true,
+  isActive: true,
+} as const;
+
+/**
  * Takes an order's ingredients off the shelves and records why.
  *
  * A dish with no recipe contributes nothing, so a venue can track only the

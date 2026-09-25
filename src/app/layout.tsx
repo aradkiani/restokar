@@ -8,11 +8,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(env.NEXT_PUBLIC_APP_URL),
   title: {
-    default: "منولند | منوی دیجیتال حرفه‌ای رستوران و کافه",
-    template: "%s | منولند",
+    default: "رستوکار | منوی دیجیتال، سفارش‌گیری و گزارش سود رستوران",
+    template: "%s | رستوکار",
   },
   description:
-    "ساخت منوی دیجیتال زیبا با بارکد اختصاصی هر میز، سفارش‌گیری آنلاین، پنل آشپزخانه و گزارش دقیق فروش و سود برای رستوران‌ها و کافه‌ها.",
+    "منوی دیجیتال با بارکد اختصاصی هر میز، سفارش‌گیری بدون نصب اپلیکیشن، صفحهٔ آشپزخانهٔ لحظه‌ای و گزارش دقیق فروش، سود و هزینه — همه در یک پنل برای رستوران‌ها و کافه‌ها.",
   keywords: [
     "منوی دیجیتال",
     "منو آنلاین رستوران",
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     type: "website",
-    siteName: "منولند",
+    siteName: "رستوکار",
     locale: "fa_IR",
     alternateLocale: "en_US",
   },

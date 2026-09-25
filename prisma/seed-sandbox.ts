@@ -129,6 +129,7 @@ async function ensureMenu(
           shortDescription: product.short,
           fullDescription: product.full,
           price: product.price,
+          priceExact: product.price,
           costPrice: product.cost,
           prepMinutes: product.prep ?? null,
           sortOrder: productOrder++,

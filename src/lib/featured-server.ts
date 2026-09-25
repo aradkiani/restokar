@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
+import { COUNTED_ORDER } from "./order-status";
 import {
   deriveRates,
   rankByRevenue,
@@ -51,15 +52,14 @@ export async function getFeaturedPerformance(
       in one pass; since the rows must be fetched anyway, the purchase count
       comes from the same pass.
 
-      `status: { not: "CANCELED" }` is the platform's existing definition of a
-      counted sale — the same rule every figure in `analytics.ts` applies — so a
-      promotion can never be reported as having earned money on an order the
-      venue cancelled.
+      `COUNTED_ORDER` is the platform's one definition of a counted sale — see
+      `order-status.ts` — so a promotion can never be reported as having earned
+      money on an order the venue cancelled.
     */
     prisma.orderItem.findMany({
       where: {
         fromFeatured: true,
-        order: { restaurantId, status: { not: "CANCELED" }, placedAt: window },
+        order: { restaurantId, ...COUNTED_ORDER, placedAt: window },
       },
       select: { productId: true, priceSnapshot: true, quantity: true },
     }),

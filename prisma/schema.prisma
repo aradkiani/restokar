@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Menuland — multi-tenant digital menu SaaS
+// Restokar — multi-tenant digital menu SaaS
 //
 // Tenancy model: shared database, shared schema, discriminator column.
 // Every tenant-owned row carries `restaurantId`. Isolation is enforced by the
@@ -69,6 +69,8 @@ enum PaymentStatus {
 enum PaymentPurpose {
   ORDER
   SUBSCRIPTION
+  /// A venue paying the platform for a promotional SMS broadcast.
+  SMS_BROADCAST
 }
 
 /// Events worth reconstructing after the fact — money, access, or destruction.
@@ -111,6 +113,23 @@ enum AuditAction {
   /// instead of splitting into PRICE_RAISED and PRICE_LOWERED — the enum stays
   /// narrow enough to be worth reading.
   CAMPAIGN_STATUS_CHANGED
+  /// Business data left the platform as a file.
+  ///
+  /// Recorded for the customer book specifically: it carries guests' phone
+  /// numbers, and "who took a copy of our customer list, and when" is a
+  /// question an owner may one day need answered. `metadata` holds the dataset
+  /// and the row count, so the entry says how much left rather than only that
+  /// something did.
+  ///
+  /// One action for every dataset rather than one per report, matching how
+  /// CAMPAIGN_STATUS_CHANGED covers five transitions — the enum stays narrow
+  /// enough to be worth reading.
+  DATA_EXPORTED
+  /// A venue paid for — or started paying for — a promotional SMS broadcast.
+  SMS_BROADCAST_REQUESTED
+  /// Platform staff marked a broadcast sent, or cancelled it. One action with
+  /// the old and new status in `metadata`, like CAMPAIGN_STATUS_CHANGED.
+  SMS_BROADCAST_STATUS_CHANGED
 }
 
 /// Where a campaign is in its life.
@@ -132,6 +151,19 @@ enum CampaignStatus {
   COMPLETED
   /// Abandoned. Terminal. Spelled with one L to match OrderStatus.CANCELED and
   /// SubscriptionStatus.CANCELED rather than introducing a second spelling.
+  CANCELED
+}
+
+/// Where a paid promotional SMS request stands. The rules are in
+/// src/lib/sms-broadcast.ts.
+enum SmsBroadcastStatus {
+  /// Written and priced; the venue has been sent to the gateway.
+  PENDING_PAYMENT
+  /// Money verified. Waiting in the admin queue for staff to send it.
+  PAID
+  /// Staff sent it with the external tool. Terminal.
+  SENT
+  /// Abandoned, or refused by staff. Terminal.
   CANCELED
 }
 
@@ -168,6 +200,7 @@ model User {
   auditLogs        AuditLog[]
   grantedExtensions SubscriptionExtension[] @relation("ExtensionAdmin")
   createdCampaigns  Campaign[]             @relation("CampaignCreator")
+  createdSmsBroadcasts SmsBroadcast[]     @relation("SmsBroadcastCreator")
 
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
@@ -322,6 +355,26 @@ model Restaurant {
   /// "up" | "down" | "nearest"
   roundingDirection String @default("nearest")
 
+  /// The step menu prices are *shown and charged* at, in Toman. 0 shows the
+  /// exact price to the nearest Toman.
+  ///
+  /// Distinct from `roundingIncrement`, which rounds a whole basket's payable
+  /// total. This one rounds each dish's list price, and only for display: the
+  /// exact price is kept on the product, so every later increase — by hand, in
+  /// bulk, or from an ingredient's cost — starts from the exact figure rather
+  /// than compounding on a rounded one. See src/lib/costing.ts.
+  menuPriceStep Int @default(0)
+
+  /// Whether a change in an ingredient's purchase price moves the price of
+  /// every dish that uses it, by exactly the change in that dish's ingredient
+  /// cost. On by default; manual and bulk price changes are unaffected.
+  autoRepriceFromCost Boolean @default(true)
+
+  /// Gross margin over ingredient cost, in percent, below which the owner is
+  /// warned when setting a price. Ingredient cost only — no labour or rent —
+  /// so a healthy dish sits far above this.
+  lowMarginPercent Int @default(30)
+
   /// Rejects baskets below this subtotal. 0 means no minimum.
   minimumOrderAmount Int @default(0)
 
@@ -389,8 +442,11 @@ model Restaurant {
   recommendations      ProductRecommendation[]
   recommendationEvents RecommendationEvent[]
   featuredEvents       FeaturedProductEvent[]
+  bundleItems          ProductBundleItem[]
+  pairStats            ProductPairStat[]
   customers            Customer[]
   campaigns            Campaign[]
+  smsBroadcasts        SmsBroadcast[]
   dailyViews           MenuDailyView[]
   reviews              OrderReview[]
 
@@ -572,11 +628,29 @@ model Product {
   fullDescriptionEn  String?
   imageUrl         String?
 
+  /// What a guest is shown and charged, in whole Toman: `priceExact` rounded
+  /// to the venue's `menuPriceStep`. Every existing reader — the menu, the
+  /// order path, analytics — keeps reading this column and nothing else.
   price         Int // Toman
-  /// Optional strike-through "was" price for promotions.
+  /// The unrounded price, the one every calculation starts from.
+  ///
+  /// `price` is derived from it and never the other way round. A double rather
+  /// than a Decimal: product rows cross to client components whole, where a
+  /// Decimal object cannot go, and fifteen significant digits hold any menu
+  /// price to far below a Toman. What is charged is always the integer above.
+  priceExact    Float
+  /// Optional strike-through "was" price for promotions, rounded for display.
   compareAtPrice Int?
+  /// Its unrounded twin, moved alongside `priceExact`.
+  compareAtPriceExact Float?
   /// Ingredient + production cost, drives profit reporting. Owner-only.
+  ///
+  /// Typed by the owner — unless `costFromRecipe` is set, in which case it is
+  /// the dish's recipe priced at current ingredient costs, recomputed whenever
+  /// either changes, and the typed value is not accepted.
   costPrice     Int  @default(0)
+  /// True while the dish has a recipe whose every ingredient has a price.
+  costFromRecipe Boolean @default(false)
 
   isAvailable Boolean @default(true)
 
@@ -666,6 +740,20 @@ model Product {
   recommendations     ProductRecommendation[] @relation("RecommendationSource")
   /// …and the dishes that suggest *this* one.
   recommendedBy       ProductRecommendation[] @relation("RecommendationTarget")
+
+  /// What this dish contains, when it is a meal deal.
+  ///
+  /// Empty for every ordinary dish, which is what makes a bundle a *product*
+  /// rather than a second kind of thing: see src/lib/bundles.ts for why that
+  /// representation was chosen over a Bundle entity with its own order path.
+  bundleItems   ProductBundleItem[] @relation("BundleParent")
+  /// …and the meal deals that contain this dish.
+  inBundles     ProductBundleItem[] @relation("BundleComponent")
+
+  /// Aggregate co-occurrence rows where this dish is the source…
+  pairStatsFrom ProductPairStat[]   @relation("PairStatSource")
+  /// …and where it is the partner.
+  pairStatsTo   ProductPairStat[]   @relation("PairStatTarget")
   /// Order lines this dish was suggested onto, for revenue attribution.
   recommendedOrderItems OrderItem[]           @relation("OrderItemRecommendedFrom")
   /// Campaigns using this dish as their optional context.
@@ -702,6 +790,21 @@ model ProductOptionGroup {
   /// anything higher as checkboxes. minSelect is only enforced when required.
   minSelect Int @default(1)
   maxSelect Int @default(1)
+
+  /// This group is the dish's size ladder, and may be offered as a one-tap
+  /// upgrade: «بزرگش کن + ۴۰٬۰۰۰ تومان».
+  ///
+  /// A flag on the existing group rather than a new variant model, because a
+  /// single-select group whose choices carry a signed `priceDelta` *already is*
+  /// a size ladder — the data was never missing, only the affordance. Marking
+  /// it adds no second pricing path: the number a guest is quoted is the
+  /// `priceDelta` the order will actually be charged.
+  ///
+  /// Meaningful only when `maxSelect` is 1. In a multi-select group the choices
+  /// accumulate, so an "upgrade" would add a second size to the line rather
+  /// than replace the first — `isUpgradeGroup` in src/lib/upgrades.ts refuses
+  /// that combination rather than quoting a difference that would be wrong.
+  isUpgrade Boolean @default(false)
 
   sortOrder Int @default(0)
 
@@ -810,6 +913,33 @@ model MenuDailyView {
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
+  /// Which table's QR code this open came through, or `""` for none.
+  ///
+  /// The grain widened from (venue, day) to (venue, table, day) so the QR codes
+  /// can answer "what is happening through this one?" — a question the venue
+  /// total cannot be decomposed into after the fact. A venue's daily total is
+  /// now the sum across its rows, which is why `viewsToday` and `dailyViews`
+  /// aggregate rather than reading a single row. Both still return the venue's
+  /// whole total, tabled and untabled alike — the figure the subscription
+  /// screen and the `maxDailyViews` ceiling are written against.
+  ///
+  /// Empty string, not null, and this is load-bearing: Postgres treats NULLs as
+  /// distinct in a unique index, so a nullable column here would let every
+  /// untabled open create its own row and silently break the
+  /// upsert-and-increment below. `""` is a value, so it collides and increments
+  /// like any other.
+  ///
+  /// Carries the number as the link supplied it — this is the same free text
+  /// `Order.tableNumber` holds, deliberately, so the two join. It is not a
+  /// foreign key to RestaurantTable for the same reason the order's is not: a
+  /// printed code outlives the row an owner may delete, and telemetry must
+  /// never be able to refuse a guest's menu.
+  ///
+  /// Still an aggregate, not a log. A venue with 20 tables writes at most 21
+  /// rows a day instead of 1 — bounded by its table count, which its plan
+  /// bounds — against the 15 million a year a row-per-view would cost.
+  tableNumber String @default("")
+
   day   DateTime
   count Int      @default(0)
 
@@ -817,7 +947,7 @@ model MenuDailyView {
   updatedAt DateTime @updatedAt
 
   /// What makes the upsert-and-increment safe under concurrent requests.
-  @@unique([restaurantId, day])
+  @@unique([restaurantId, day, tableNumber])
 }
 
 /// A guest's rating of a delivered order.
@@ -891,10 +1021,9 @@ model Customer {
 
   /// Permission to contact this guest about anything other than their order.
   ///
-  /// Off unless it was explicitly given. No provider exists and nothing is
-  /// sent — this is here so that the day a gateway is added, the consent it
-  /// needs is already being recorded rather than being backfilled from
-  /// nothing. Order confirmations are not marketing and never depended on it.
+  /// Off unless it was explicitly given. A paid promotional SMS broadcast
+  /// reaches only guests with this set — see SmsBroadcast. Order confirmations
+  /// are not marketing and never depended on it.
   marketingConsent  Boolean   @default(false)
   consentUpdatedAt  DateTime?
 
@@ -978,6 +1107,9 @@ model Campaign {
   /// Orders attributed to this campaign. Empty until something can drive one.
   orders Order[]
 
+  /// Paid SMS broadcasts sent to this campaign's audience.
+  smsBroadcasts SmsBroadcast[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -989,6 +1121,76 @@ model Campaign {
   /// "Is this dish referenced by a campaign?" — asked when one is deleted.
   @@index([productId])
   @@index([categoryId])
+}
+
+// ----------------------------- SMS broadcasts -------------------------------
+
+/// A promotional SMS a venue has paid the platform to send.
+///
+/// **Nothing in the application sends it.** The venue writes the text and
+/// chooses the audience, pays through the ordinary gateway, and the request
+/// then waits in the admin console, where platform staff download the recipient
+/// file and send it with a separate tool. The SMS API in src/lib/sms/ is kept
+/// for one-time codes only.
+///
+/// The recipient list is **frozen when the request is priced**, unlike a
+/// campaign's audience, which is evaluated live. The price is recipients × SMS
+/// parts × rate, so the list the venue paid for and the list staff send to
+/// have to be the same list — a guest who lapsed into another segment between
+/// payment and sending must not change either the bill or the delivery.
+///
+/// Scoped to the menu owner, like Customer and Campaign.
+model SmsBroadcast {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// The campaign it was sent for, if any. `SetNull`: deleting a draft
+  /// campaign must not erase a record of money paid.
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  /// `all` or a key from `CUSTOMER_SEGMENTS`. Text rather than an enum for
+  /// the same reason as Campaign.targetSegment.
+  audience String
+
+  /// What the owner wrote.
+  text String
+  /// Exactly what is sent and what was priced: `text` plus the opt-out marker.
+  body String
+
+  /// Canonical `09xxxxxxxxx`, de-duplicated, consented. Visible only to
+  /// platform staff; the venue sees the count.
+  recipients     String[]
+  recipientCount Int
+  /// SMS parts per recipient. Persian is 70 characters for one, 67 per part
+  /// after that.
+  smsParts       Int
+  /// Whole Toman per part per recipient, snapshotted so a later price change
+  /// never rewrites what a venue was charged.
+  pricePerPart   Int
+  /// Whole Toman: recipientCount × smsParts × pricePerPart.
+  amount         Int
+
+  status SmsBroadcastStatus @default(PENDING_PAYMENT)
+  paidAt DateTime?
+  sentAt DateTime?
+  canceledAt DateTime?
+
+  createdByUserId String?
+  createdBy       User?   @relation("SmsBroadcastCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The venue's own history, newest first.
+  @@index([restaurantId, createdAt])
+  /// The admin queue: everything paid and not yet sent, oldest payment first.
+  @@index([status, paidAt])
+  @@index([campaignId])
 }
 
 // -------------------------- recommendations --------------------------------
@@ -1041,6 +1243,114 @@ model ProductRecommendation {
   @@index([restaurantId])
   /// Backs the cascade above, so deleting a product does not scan the table.
   @@index([recommendedProductId])
+}
+
+/// One product inside a meal deal.
+///
+/// The whole of the bundle feature, and deliberately almost nothing: a bundle
+/// is an ordinary `Product` — own price, own photo, own options, own schedule —
+/// and these rows only say what it contains. Ordering one is ordering a
+/// product, so `createOrder`, the kitchen board, refunds, inventory, finance
+/// and the backup all keep working without knowing bundles exist.
+///
+/// The alternative was a Bundle entity with its own path through cart, order
+/// creation and every report. That is the enterprise-POS shape this product
+/// does not need; see the header of src/lib/bundles.ts for the full reasoning.
+///
+/// Two constraints Prisma cannot express are hand-written CHECKs in migration
+/// 30: a bundle may not contain itself, and a quantity must be positive. The
+/// first is not merely tidiness — a self-referencing bundle makes the
+/// availability rule in `isBundleOrderable` recurse.
+///
+/// `restaurantId` is carried for the same reason every other table here carries
+/// it: it is the tenant column, and it lets a venue's whole bundle graph be
+/// read in one indexed query rather than one per dish.
+model ProductBundleItem {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// The meal deal.
+  bundleProductId String
+  bundleProduct   Product @relation("BundleParent", fields: [bundleProductId], references: [id], onDelete: Cascade)
+
+  /// One of the dishes it contains.
+  componentProductId String
+  componentProduct   Product @relation("BundleComponent", fields: [componentProductId], references: [id], onDelete: Cascade)
+
+  /// How many of that dish. Folded by `normaliseComponents` when an owner adds
+  /// the same dish twice, so two rows for one product is data, not a mistake.
+  quantity Int @default(1)
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One row per product per bundle. The database rather than the route,
+  /// because a double-submitted form must not produce a duplicated component.
+  @@unique([bundleProductId, componentProductId])
+  /// The public read: a bundle's contents, already in display order.
+  @@index([bundleProductId, sortOrder])
+  @@index([restaurantId])
+  /// Backs the cascade above, so deleting a dish does not scan the table.
+  @@index([componentProductId])
+}
+
+/// How often two dishes were bought on the same bill.
+///
+/// An aggregate, not a log, and the same reasoning as `MenuDailyView`: the
+/// question "which dishes go together here" is asked on every menu render, and
+/// answering it by scanning order history each time would put a multi-second
+/// join on the one page that must stay at single-digit milliseconds. These rows
+/// are recomputed periodically and read with one indexed query.
+///
+/// **Directional.** `P(chips | burger)` and `P(burger | chips)` are different
+/// questions with different answers — nearly every burger comes with chips
+/// while plenty of chips are ordered alone — so a symmetric row could only ever
+/// answer one of them. Two rows per pair is the price of answering both.
+///
+/// The **raw counts** are stored rather than a finished score, so the
+/// thresholds in `CO_OCCURRENCE_THRESHOLDS` stay the only place a judgement is
+/// made. Retuning them re-ranks every venue without recomputing anything.
+///
+/// Nothing here identifies a guest. It is four integers about two dishes, which
+/// is the entire reason this feature needs no profiling, no login and no
+/// tracking to work.
+model ProductPairStat {
+  id String @id @default(cuid())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  sourceProductId String
+  sourceProduct   Product @relation("PairStatSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
+
+  targetProductId String
+  targetProduct   Product @relation("PairStatTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
+
+  /// Non-cancelled orders containing both dishes.
+  pairCount Int @default(0)
+  /// Non-cancelled orders containing the source dish — confidence's denominator.
+  sourceSupport Int @default(0)
+  /// Non-cancelled orders containing the target dish — lift's denominator.
+  targetSupport Int @default(0)
+  /// Non-cancelled orders for the venue over the same window, so a stored row
+  /// carries its own context and the read needs no second query.
+  totalOrders Int @default(0)
+
+  /// When the counting pass that produced this row ran. Drives the staleness
+  /// check that decides whether a refresh is due.
+  computedAt DateTime @default(now())
+
+  @@unique([sourceProductId, targetProductId])
+  /// The guest read: one dish's partners.
+  @@index([sourceProductId])
+  /// The dashboard read, and the delete-then-insert of a refresh.
+  @@index([restaurantId, computedAt])
+  /// Backs the cascade above.
+  @@index([targetProductId])
 }
 
 /// What a guest did with a featured dish, short of buying it.
@@ -1205,8 +1515,18 @@ model InventoryItem {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   name String
-  /// "کیلوگرم" | "گرم" | "لیتر" | "عدد" | anything the venue actually uses.
+  /// A unit code from src/lib/units.ts — `g`, `kg`, `l`, `piece`… — which
+  /// fixes the item's dimension (weight, volume or count). Stock and recipe
+  /// amounts are thousandths of this unit.
   unit String
+
+  /// What the venue pays, in whole Toman, for one `priceUnit` of this item —
+  /// "45,000 per kilogram". Kept as typed so no conversion ever rounds the
+  /// figure the owner entered. Null until the owner prices it.
+  purchasePrice Int?
+  /// The unit `purchasePrice` is quoted in. Same dimension as `unit`.
+  priceUnit     String?
+  priceUpdatedAt DateTime?
 
   /// Thousandths of `unit` currently on the shelf.
   quantityMilli Int @default(0)
@@ -1240,6 +1560,10 @@ model ProductIngredient {
 
   /// Thousandths of the item's unit consumed per one of this dish.
   perUnitMilli Int
+  /// The unit the owner typed the amount in — "230 گرم" of a kilogram item —
+  /// kept so the recipe reads back the way it was written. Arithmetic uses
+  /// `perUnitMilli` only. Null means the item's own unit.
+  unit String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1464,6 +1788,20 @@ model Order {
   deliveredAt DateTime?
   canceledAt  DateTime?
 
+  /// When the money actually arrived.
+  ///
+  /// `paymentStatus` says *whether* an order is settled; this says *when*, and
+  /// the board needs both. A finished order leaves the pass an hour after it is
+  /// delivered **and** paid, and those are two independent events in either
+  /// order — a guest can pay online before the food is handed over, and a cash
+  /// bill is usually settled well after. Without a timestamp the rule could
+  /// only be measured from delivery, which would time out an order that was
+  /// handed over and never paid for.
+  ///
+  /// Cleared back to null when an owner un-marks a cash bill, so the pair
+  /// (`paymentStatus`, `paidAt`) can never disagree.
+  paidAt DateTime?
+
   /// When the owner confirmed the money was returned for a cancelled order the
   /// customer had already paid for.
   ///
@@ -1501,6 +1839,10 @@ model Order {
   /// `normalisePhone` in src/lib/phone.ts, which is what makes equality on this
   /// column mean "the same person".
   @@index([restaurantId, customerPhone])
+
+  /// Backs the kitchen board's "is this order still live?" filter, which runs
+  /// on every poll and would otherwise scan the tenant's whole history.
+  @@index([restaurantId, paymentStatus, paidAt])
 }
 
 model OrderItem {
@@ -1640,6 +1982,8 @@ model Payment {
   order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  smsBroadcastId String?
+  smsBroadcast   SmsBroadcast? @relation(fields: [smsBroadcastId], references: [id], onDelete: SetNull)
 
   provider String // "zarinpal" | "mock"
   amount   Int
@@ -1660,6 +2004,7 @@ model Payment {
   @@index([orderId])
   /// Same reason as OrderItem.productId — the subscription FK is SetNull.
   @@index([subscriptionId])
+  @@index([smsBroadcastId])
 }
 
 // ------------------------------- audit -------------------------------------

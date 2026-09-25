@@ -78,6 +78,68 @@ const EnvSchema = z.object({
     .string()
     .default("false")
     .transform((v) => v === "true" || v === "1"),
+
+  // --------------------------------- SMS -----------------------------------
+  //
+  // Melipayamak, reached over SOAP, for one-time codes only. Unlike every other
+  // outbound call in this product it costs money per message, so the defaults
+  // below are the ones that spend nothing: provider `mock` and dry run `true`.
+  // Sending for real is something an operator switches on deliberately.
+  //
+  // Promotional messages never use these: they are paid for by the venue and
+  // sent by platform staff with a separate tool. See sms-broadcast.ts.
+  SMS_PROVIDER: z.enum(["melipayamak", "mock"]).default("mock"),
+
+  /**
+   * Log instead of sending, without changing anything else.
+   *
+   * Defaults to `true` **including in production**, which is unusual and
+   * deliberate: every other misconfiguration in this file is loud, and a wrong
+   * one here is silent and billed.
+   */
+  SMS_DRY_RUN: z
+    .string()
+    .default("true")
+    .transform((v) => v !== "false" && v !== "0"),
+
+  MELIPAYAMAK_USERNAME: z.string().default(""),
+  MELIPAYAMAK_PASSWORD: z.string().default(""),
+
+  /**
+   * The approved OTP pattern, issued by Melipayamak once the template is
+   * reviewed. Zero means "not set up", and codes are skipped rather than
+   * attempted — see patterns.ts. A pattern carries its own sender line, which
+   * is why there is no `MELIPAYAMAK_FROM`.
+   */
+  SMS_PATTERN_OTP: z.coerce.number().int().min(0).default(0),
+
+  // --------------------------- promotional SMS -------------------------------
+  //
+  // A venue pays for a broadcast when it submits one; platform staff send it by
+  // hand. Nothing here reaches an SMS provider.
+
+  /**
+   * What the venue is charged per SMS part per recipient, in whole Toman.
+   *
+   * Per *part*, not per message, because that is how the line is billed: a
+   * Persian text of 71 characters is two SMS, and pricing it as one would mean
+   * the platform paying for the second out of its own pocket on every
+   * recipient. A placeholder until the real price is decided.
+   */
+  SMS_PRICE_PER_PART: z.coerce.number().int().min(1).max(100_000).default(200),
+
+  /**
+   * Appended to every promotional text. A multi-recipient send without it is
+   * refused by the line (code 15), so it is added to the text the venue pays
+   * for and the text staff paste into the sending tool.
+   */
+  SMS_OPT_OUT_SUFFIX: z.string().default("لغو11"),
+
+  // --------------------------------- OTP -----------------------------------
+  OTP_CODE_LENGTH: z.coerce.number().int().min(4).max(8).default(5),
+  OTP_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
+  OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
+  OTP_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -103,6 +165,33 @@ if (isProd && env.AUTH_SECRET.startsWith("dev-only")) {
 
 if (isProd && env.PAYMENT_PROVIDER === "zarinpal" && !env.ZARINPAL_MERCHANT_ID) {
   throw new Error("PAYMENT_PROVIDER=zarinpal requires ZARINPAL_MERCHANT_ID.");
+}
+
+/**
+ * A real SMS provider needs both credentials.
+ *
+ * Checked at boot rather than at the first send because the first send is
+ * someone waiting on a verification code: discovering there that the password
+ * is empty means a person staring at a code that will never arrive.
+ *
+ * Only when the provider is actually selected AND dry run is off, so a venue can
+ * deploy with SMS switched off and fill the credentials in later.
+ */
+if (env.SMS_PROVIDER === "melipayamak" && !env.SMS_DRY_RUN) {
+  const missing = (
+    [
+      ["MELIPAYAMAK_USERNAME", env.MELIPAYAMAK_USERNAME],
+      ["MELIPAYAMAK_PASSWORD", env.MELIPAYAMAK_PASSWORD],
+    ] as const
+  )
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `SMS_PROVIDER=melipayamak with SMS_DRY_RUN=false requires: ${missing.join(", ")}.`,
+    );
+  }
 }
 
 /**

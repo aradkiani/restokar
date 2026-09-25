@@ -11,7 +11,7 @@ import { jwtVerify } from "jose";
  * turn "not signed in" into a clean redirect instead of a flash of dashboard
  * chrome followed by one.
  */
-const SESSION_COOKIE = "menuland_session";
+const SESSION_COOKIE = "restokar_session";
 
 /**
  * The signing key, or nothing.
@@ -43,8 +43,8 @@ export async function proxy(request: NextRequest) {
   if (token && secret) {
     try {
       const { payload } = await jwtVerify(token, secret, {
-        issuer: "menuland",
-        audience: "menuland-app",
+        issuer: "restokar",
+        audience: "restokar-app",
       });
       claims = payload as { role?: string };
     } catch {

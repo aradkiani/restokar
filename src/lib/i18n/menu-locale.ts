@@ -15,7 +15,7 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from "./index";
  * one, and none of it touches the dashboard.
  */
 
-export const MENU_LOCALE_COOKIE = "menuland_menu_locale";
+export const MENU_LOCALE_COOKIE = "restokar_menu_locale";
 
 /**
  * The cookie path that confines a guest's choice to one venue.

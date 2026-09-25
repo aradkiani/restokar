@@ -4,6 +4,7 @@ import * as React from "react";
 import { CartProvider, useCart } from "./cart";
 import { ProductSheet } from "./product-sheet";
 import { CartDrawer } from "./cart-drawer";
+import { UpsellSheet } from "./upsell-sheet";
 import { reportMenuView } from "./menu-view-events";
 import type { MenuData, MenuProduct } from "../types";
 import type { Locale } from "@/lib/i18n";
@@ -31,6 +32,13 @@ interface MenuRuntimeValue {
   /** Set while a sheet opened from a merchandising surface is on screen. */
   recommendedFrom: string | null;
   fromFeatured: boolean;
+  /**
+   * Offer whatever goes with a dish, now that it is in the basket.
+   *
+   * Called by `useAddToCart` and by the product sheet once its required
+   * questions are answered — the two ways a dish reaches the cart.
+   */
+  offerUpsellsFor: (productId: string) => void;
 }
 
 const MenuRuntimeContext = React.createContext<MenuRuntimeValue | null>(null);
@@ -61,7 +69,7 @@ export function useAddToCart(): (
   recommendedFrom?: string | null,
   fromFeatured?: boolean,
 ) => void {
-  const { openProduct } = useMenu();
+  const { openProduct, offerUpsellsFor } = useMenu();
   const cart = useCart();
 
   return React.useCallback(
@@ -78,8 +86,22 @@ export function useAddToCart(): (
         return;
       }
       cart.add(product, 1, "", [], recommendedFrom, fromFeatured);
+
+      /*
+        And ask what goes with it.
+
+        Here rather than inside `cart.add` because this is the single funnel
+        every template adds through, while `add` is also called by the product
+        sheet — which raises the sheet itself once the guest has answered its
+        required questions. Putting it in the cart would fire it for both and
+        stack two sheets.
+
+        A dish with nothing to suggest opens nothing: `UpsellSheet` resolves the
+        list first and closes immediately when it is empty.
+      */
+      offerUpsellsFor(product.id);
     },
-    [openProduct, cart],
+    [openProduct, cart, offerUpsellsFor],
   );
 }
 
@@ -104,6 +126,8 @@ export function MenuRuntimeProvider({
   const [activeProduct, setActiveProduct] = React.useState<MenuProduct | null>(null);
   const [recommendedFrom, setRecommendedFrom] = React.useState<string | null>(null);
   const [fromFeatured, setFromFeatured] = React.useState(false);
+  /** The dish whose suggestions are being offered, if any. */
+  const [upsellFor, setUpsellFor] = React.useState<string | null>(null);
   const t = React.useMemo(() => getDictionary(locale), [locale]);
 
   /*
@@ -115,8 +139,8 @@ export function MenuRuntimeProvider({
     tracks; `reportMenuView` is idempotent per page load on its own.
   */
   React.useEffect(() => {
-    reportMenuView({ slug: data.restaurant.slug, preview });
-  }, [data.restaurant.slug, preview]);
+    reportMenuView({ slug: data.restaurant.slug, preview, table: presetTable });
+  }, [data.restaurant.slug, preview, presetTable]);
 
   const value = React.useMemo<MenuRuntimeValue>(
     () => ({
@@ -131,6 +155,15 @@ export function MenuRuntimeProvider({
         setActiveProduct(product);
         setRecommendedFrom(from);
         setFromFeatured(featured);
+      },
+      /*
+        Re-triggered even for the same dish: a guest adding two burgers in a row
+        should be asked again if they skipped the question the first time.
+        Clearing first makes the second call a real state change.
+      */
+      offerUpsellsFor: (productId: string) => {
+        setUpsellFor(null);
+        setUpsellFor(productId);
       },
     }),
     [data, locale, t, preview, presetTable, recommendedFrom, fromFeatured],
@@ -150,6 +183,7 @@ export function MenuRuntimeProvider({
             setFromFeatured(false);
           }}
         />
+        <UpsellSheet productId={upsellFor} onClose={() => setUpsellFor(null)} />
         <CartDrawer />
       </CartProvider>
     </MenuRuntimeContext.Provider>

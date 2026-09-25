@@ -141,9 +141,9 @@ export function FeaturedStrip() {
       card looks clipped rather than scrollable, while its contents still need
       to line up with the menu below it.
     */
-    <section aria-labelledby="menuland-featured" className="-mx-4 mb-5">
+    <section aria-labelledby="restokar-featured" className="-mx-4 mb-5">
       <h2
-        id="menuland-featured"
+        id="restokar-featured"
         className="mb-2.5 px-4 text-sm font-black"
         style={{ color: "var(--m-text)" }}
       >

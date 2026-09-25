@@ -4,13 +4,15 @@ import { createPaymentProvider } from "@/lib/payments";
 import { env } from "@/lib/env";
 import { addMonths } from "@/lib/onboarding";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { publishOrderEvent } from "@/lib/events";
 import { RATE_LIMITS } from "@/lib/constants";
+import { markBroadcastPaid } from "@/lib/sms-broadcast-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Gateway return endpoint for both order and subscription payments.
+ * Gateway return endpoint for order, subscription and SMS broadcast payments.
  *
  * Never trusts the query string about whether money moved: the only thing the
  * redirect carries is an Authority, which is then verified server-to-server
@@ -84,6 +86,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(failureUrl);
   }
 
+  const settledAt = new Date();
+
   await prisma.$transaction(async (tx) => {
     await tx.payment.update({
       where: { id: payment.id },
@@ -91,14 +95,16 @@ export async function GET(request: Request) {
         status: "PAID",
         refId: result.refId ?? null,
         cardPan: result.cardPan ?? null,
-        verifiedAt: new Date(),
+        verifiedAt: settledAt,
       },
     });
 
     if (payment.purpose === "ORDER" && payment.orderId) {
+      // `paidAt` starts the board's retirement clock, so it is written in the
+      // same statement as the status it belongs to.
       await tx.order.update({
         where: { id: payment.orderId },
-        data: { paymentStatus: "PAID" },
+        data: { paymentStatus: "PAID", paidAt: new Date() },
       });
     }
 
@@ -121,7 +127,35 @@ export async function GET(request: Request) {
         data: { status: "ACTIVE", currentPeriodEnd: nextEnd, canceledAt: null },
       });
     }
+
+    // The broadcast joins the admin queue here and nowhere else — the one state
+    // change no person can make, because it is the gateway's word that the
+    // money arrived. Nothing is sent: staff send it by hand from the queue.
+    if (payment.purpose === "SMS_BROADCAST" && payment.smsBroadcastId) {
+      await markBroadcastPaid(tx, payment.smsBroadcastId, settledAt);
+    }
   });
+
+  /*
+    Tell every open screen the money arrived.
+
+    `markOrderPaid` — the cash equivalent — has always published this, but the
+    gateway path never did, so an online payment settling left the kitchen board
+    showing "unpaid" until its next thirty-second poll. On a busy pass that is
+    long enough for a waiter to chase a table that has already paid.
+
+    After the transaction, not inside it: a listener must never be told about a
+    state that could still roll back.
+  */
+  if (payment.purpose === "ORDER" && payment.orderId && payment.order) {
+    publishOrderEvent({
+      type: "order.updated",
+      restaurantId: payment.order.restaurantId,
+      orderId: payment.orderId,
+      publicToken: payment.order.publicToken,
+      at: new Date().toISOString(),
+    });
+  }
 
   return NextResponse.redirect(
     resultUrl(purpose, slug, token, "success", result.refId ?? null),
@@ -150,6 +184,10 @@ function resultUrl(
 
   if (purpose === "subscription") {
     return `${env.NEXT_PUBLIC_APP_URL}/dashboard/subscription?payment=${outcome}${suffix}`;
+  }
+
+  if (purpose === "sms") {
+    return `${env.NEXT_PUBLIC_APP_URL}/dashboard/campaigns?payment=${outcome}${suffix}`;
   }
 
   const safeSlug = encodeURIComponent(slug);

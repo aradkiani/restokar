@@ -9,6 +9,12 @@ import {
   recommendationSelect,
   replaceRecommendations,
 } from "@/lib/recommendations-server";
+import {
+  bundleItemOrderBy,
+  bundleItemSelect,
+  replaceBundleItems,
+} from "@/lib/bundles-server";
+import { shownPrices } from "@/lib/costing";
 
 export const runtime = "nodejs";
 
@@ -27,6 +33,7 @@ export const GET = route(async (request: Request) => {
       },
       availabilityWindows: { select: scheduleSelect, orderBy: scheduleOrderBy },
       recommendations: { select: recommendationSelect, orderBy: recommendationOrderBy },
+      bundleItems: { select: bundleItemSelect, orderBy: bundleItemOrderBy },
     },
   });
 
@@ -46,6 +53,19 @@ export const POST = route(async (request: Request) => {
     select: { id: true },
   });
   if (!category) throw new HttpError(400, "Category not found", "CATEGORY_NOT_FOUND");
+
+  // The typed price is the exact price; what the menu shows is derived from it
+  // at the venue's step. See costing.ts.
+  const venue = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { menuPriceStep: true },
+  });
+  const compareAtPriceExact = input.compareAtPrice ?? null;
+  const shown = shownPrices({
+    priceExact: input.price,
+    compareAtPriceExact,
+    step: venue?.menuPriceStep ?? 0,
+  });
 
   const last = await prisma.product.findFirst({
     where: { categoryId: input.categoryId },
@@ -79,8 +99,12 @@ export const POST = route(async (request: Request) => {
         pairingNote: input.pairingNote || null,
         pairingNoteEn: input.pairingNoteEn || null,
         imageUrl: input.imageUrl || null,
-        price: input.price,
-        compareAtPrice: input.compareAtPrice ?? null,
+        price: shown.price,
+        priceExact: input.price,
+        compareAtPrice: shown.compareAtPrice,
+        compareAtPriceExact,
+        // A new dish has no recipe yet, so its cost is the owner's own figure
+        // until one is recorded.
         costPrice: input.costPrice,
         prepMinutes: input.prepMinutes ?? null,
         isAvailable: input.isAvailable,
@@ -147,6 +171,10 @@ export const POST = route(async (request: Request) => {
       await replaceRecommendations(tx, restaurantId, created.id, input.recommendations);
     }
 
+    if (input.bundleItems?.length) {
+      await replaceBundleItems(tx, restaurantId, created.id, input.bundleItems);
+    }
+
     return tx.product.findUniqueOrThrow({
       where: { id: created.id },
       include: {
@@ -156,6 +184,7 @@ export const POST = route(async (request: Request) => {
           include: { choices: { orderBy: { sortOrder: "asc" } } },
         },
         availabilityWindows: { select: scheduleSelect, orderBy: scheduleOrderBy },
+        bundleItems: { select: bundleItemSelect, orderBy: bundleItemOrderBy },
         recommendations: {
           select: recommendationSelect,
           orderBy: recommendationOrderBy,

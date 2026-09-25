@@ -17,7 +17,7 @@
 
 export type RecommendationEventType = "IMPRESSION" | "INTERACTION" | "ADD_TO_CART";
 
-const SESSION_STORAGE_KEY = "menuland:rec-session";
+const SESSION_STORAGE_KEY = "restokar:rec-session";
 
 /**
  * A random id identifying this browser's ordering session.

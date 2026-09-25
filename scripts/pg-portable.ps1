@@ -19,15 +19,15 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # Kept outside the repo so `git clean` and IDE indexers never touch the cluster.
-$Root    = Join-Path $env:LOCALAPPDATA 'menuland-pg'
+$Root    = Join-Path $env:LOCALAPPDATA 'restokar-pg'
 $Dist    = Join-Path $Root 'dist'
 $DataDir = Join-Path $Root 'data'
 $LogFile = Join-Path $Root 'server.log'
 $PgCtl   = Join-Path $Dist 'bin\pg_ctl.exe'
 $Port    = 5433
-$PgUser  = 'menuland'
-$PgPass  = 'menuland'
-$PgDb    = 'menuland'
+$PgUser  = 'restokar'
+$PgPass  = 'restokar'
+$PgDb    = 'restokar'
 $Version = '16.4.0'
 
 function Install-Postgres {

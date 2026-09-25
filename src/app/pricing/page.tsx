@@ -14,7 +14,7 @@ import {
 
 export const metadata: Metadata = {
   title: "تعرفه‌ها",
-  description: "پلن‌های اشتراک منولند برای رستوران‌ها و کافه‌ها — ۱۴ روز رایگان.",
+  description: "پلن‌های اشتراک رستوکار برای رستوران‌ها و کافه‌ها — ۱۴ روز رایگان.",
 };
 
 // Must stay a literal: Next.js statically analyses segment config.

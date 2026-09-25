@@ -2,8 +2,8 @@ import type { Dictionary } from "./fa";
 
 export const en: Dictionary = {
   common: {
-    appName: "Menuland",
-    tagline: "Professional digital menus for restaurants & cafés",
+    appName: "Restokar",
+    tagline: "Digital menus, table ordering and profit reporting for restaurants & cafés",
     save: "Save",
     saving: "Saving…",
     saved: "Saved",
@@ -59,11 +59,11 @@ export const en: Dictionary = {
     logout: "Sign out",
   },
   landing: {
-    heroBadge: "No app installation required",
-    heroTitle: "Your restaurant's digital menu,",
-    heroTitleAccent: "beautiful and smart",
+    heroBadge: "No app to install, no special hardware",
+    heroTitle: "Everything your restaurant runs on,",
+    heroTitleAccent: "from menu to profit",
     heroSubtitle:
-      "One QR code on the table lets guests browse your menu and order — while you track sales, profit and expenses precisely.",
+      "Guests order from the QR code on the table, the order lands on the kitchen screen the same moment, and you see sales, profit and costs exactly.",
     heroCtaPrimary: "Start 14 days free",
     ctaContactSupport: "Contact support",
     paymentsPausedTitle: "Online payment is temporarily unavailable",
@@ -73,22 +73,24 @@ export const en: Dictionary = {
     heroNote: "No credit card required",
     statsRestaurants: "restaurants & cafés",
     statsOrders: "orders processed",
-    statsUptime: "uptime",
-    featuresTitle: "Everything you need to go digital",
+    statsTemplates: "menu templates",
+    featuresTitle: "Everything it takes to run the place",
     featuresSubtitle:
-      "From menu building to kitchen operations and profit reporting — in one simple panel.",
+      "From building the menu to the kitchen screen and the profit report — one panel, no separate software.",
     howTitle: "Live in three steps",
     howSubtitle: "Under 15 minutes to your first digital order",
-    step1Title: "Sign up and build your menu",
-    step1Text: "Add categories and products with photos and descriptions.",
-    step2Title: "Pick a template and make it yours",
-    step2Text: "Choose a template, then tune colors, fonts and background.",
-    step3Title: "Print QR codes for your tables",
-    step3Text: "Print each table's code — guests scan it and order instantly.",
+    step1Title: "Build your menu",
+    step1Text: "Add categories and dishes with photos, prices and a short description.",
+    step2Title: "Choose a template and your branding",
+    step2Text:
+      "Take one of the ready-made templates, then set colours, fonts and logo to match your brand.",
+    step3Title: "Print the table codes",
+    step3Text:
+      "Every table gets its own code; a guest scans it and the order goes straight to the kitchen.",
     demoTitle: "Real menu examples",
     demoSubtitle: "See every template on a real menu",
-    benefitsTitle: "Why restaurants choose Menuland",
-    ctaTitle: "Ready to digitize your restaurant?",
+    benefitsTitle: "Why restaurants choose Restokar",
+    ctaTitle: "Ready to make running the place simpler?",
     ctaSubtitle: "Get started today — the first 14 days are free.",
     faqTitle: "Frequently asked questions",
     contactTitle: "Get in touch",
@@ -185,10 +187,11 @@ export const en: Dictionary = {
   },
   inventory: {
     title: "Inventory",
-    hint: "Record ingredients in whatever unit you use. Each order deducts what its dishes consume.",
+    hint: "Record ingredients with their unit and purchase price. Each order deducts its dishes' recipes from stock, and each dish's cost is calculated from these prices.",
     itemName: "Ingredient",
     itemUnit: "Unit",
-    unitHint: "e.g. kg, g, litre, piece",
+    unitHint:
+      "The unit stock is counted in. Recipes can use its sub-units — for example 230 g of an ingredient kept in kilograms.",
     quantity: "In stock",
     lowStock: "Warn at",
     lowStockHint:
@@ -208,6 +211,83 @@ export const en: Dictionary = {
     dashboardBody:
       "These ingredients have reached their warning level and need restocking.",
     manageLink: "Manage inventory",
+  },
+
+  costing: {
+    units: {
+      g: "g",
+      kg: "kg",
+      mesghal: "mesghal",
+      ml: "ml",
+      l: "L",
+      tsp: "tsp",
+      tbsp: "tbsp",
+      piece: "pcs",
+      dozen: "dozen",
+    },
+    dimensions: {
+      weight: "Weight",
+      volume: "Volume",
+      count: "Count",
+    },
+
+    settingsTitle: "Menu pricing",
+    settingsHint:
+      "Each dish keeps its exact price and is rounded only for display; every later change — by hand, in bulk or from an ingredient's cost — starts from the exact price.",
+    menuPriceStep: "Round menu prices to",
+    menuPriceStepHint:
+      "Prices are shown on the menu, and charged, at the nearest multiple of this amount.",
+    noRounding: "No rounding (exact to the Toman)",
+    autoReprice: "Update prices automatically when ingredient prices change",
+    autoRepriceHint:
+      "When an ingredient's purchase price changes, each dish's price moves by exactly the change in its own ingredient cost.",
+    lowMargin: "Low-margin warning (percent)",
+    lowMarginHint:
+      "When a dish's profit as a share of its price falls below this, you are warned while pricing it. Zero turns the warning off.",
+    save: "Save",
+    saved: "Menu pricing saved",
+    reRounded: "Shown prices of {n} products updated to the new step",
+    confirmStepTitle: "Change the rounding step?",
+    confirmStepBody:
+      "Every product's shown price is recalculated at the new step. Exact prices do not change, and switching back restores the previous prices.",
+    confirmStep: "Change step",
+
+    bulkStepNote:
+      "The percentage applies to exact prices, and menu prices are rounded to {step}. Change the step under Menu pricing.",
+    bulkStepNone:
+      "The percentage applies to exact prices, and menu prices are shown unrounded, to the Toman.",
+    bulkBelowCost:
+      "{n} products would sell below their ingredient cost after this change",
+    bulkLowMargin: "{n} products would have a low margin after this change",
+
+    belowCost:
+      "The ingredients ({cost}) cost more than this dish's price — every sale loses money.",
+    lowMarginWarn:
+      "This dish's margin is {margin}%, below your warning level of {floor}%.",
+    marginOk: "Margin: {margin}%",
+    costFromRecipe: "Calculated from the recipe",
+    costFromRecipeHint:
+      "This dish's cost is calculated automatically from its recipe and ingredient purchase prices, without profit.",
+    shownAs: "On the menu: {price}",
+    exactPrice: "Exact price: {price}",
+
+    purchasePrice: "Purchase price (Toman)",
+    per: "per",
+    purchasePriceHint:
+      "What you pay for this ingredient. When it changes, dishes that use it move by the same amount.",
+    unitCost: "per {unit}: {cost}",
+    notPriced: "No purchase price",
+    repriced: "Prices of {n} products updated automatically",
+    repricedRow: "{name}: {before} → {after}",
+    repriceOff: "Automatic price updates are off; no product prices changed.",
+    alertsTitle: "Check these products:",
+    alertBelowCost: "{name} — below ingredient cost",
+    alertLowMargin: "{name} — {margin}% margin",
+    recipeUnit: "Unit",
+    recipeCost: "Ingredient cost per serving: {cost}",
+    recipeIncomplete: "Enter a purchase price for these to complete the cost: {items}",
+    recipeAmountInvalid:
+      "The amount of “{name}” is too small for its stock unit; use a larger amount or a smaller stock unit.",
   },
   manualOrder: {
     navLabel: "Manual order",
@@ -477,6 +557,9 @@ export const en: Dictionary = {
     optionGroupNameEn: "English group name",
     optionRequired: "Guest must choose",
     optionMaxSelect: "Max choices",
+    optionIsUpgrade: "Upgrade group",
+    optionIsUpgradeHint:
+      "The dearer choices in this group are offered at the top of the product page as “Large + 40,000”.",
     optionChoiceName: "Choice name",
     optionChoiceNamePlaceholder: "e.g. Chicken",
     optionChoiceNameEn: "English choice name",
@@ -559,7 +642,7 @@ export const en: Dictionary = {
     views: "Views",
     addedToCart: "Added",
     purchases: "Purchased",
-    conversion: "Conversion",
+    revenuePerView: "Revenue / view",
     revenue: "Attributed revenue",
   },
   customers: {
@@ -591,7 +674,63 @@ export const en: Dictionary = {
     next: "Next",
     marketingConsent: "Agreed to be contacted",
     marketingConsentHint:
-      "Recorded only — Menuland does not send any messages at this time.",
+      "Recorded only — Restokar does not send any messages at this time.",
+
+    valueTier: "Customer value",
+    allValueTiers: "All values",
+    valueTiers: {
+      unknown: "Unknown",
+      standard: "Standard",
+      high: "High value",
+    },
+    highValueFrom: "High value: {amount} total spend and above",
+
+    retention: {
+      title: "Customer retention",
+      withOrders: "Customers with orders",
+      repeatRate: "Repeat rate",
+      repeatRateHint: "Share of customers who ordered more than once",
+      averageLifetimeValue: "Average customer value",
+      averageOrders: "Average orders per customer",
+    },
+
+    opportunities: {
+      title: "Retention opportunities",
+      hint: "From this venue's own orders.",
+      empty: "Not enough data for suggestions yet.",
+      /*
+        Phrased as "label: count" rather than "{count} customers are…".
+
+        English inflects the noun and the verb after a numeral, so the natural
+        sentence form reads "1 customers are overdue" at a count of one. Persian
+        does not inflect after a numeral, so `fa.ts` keeps the conversational
+        wording. The alternative — a plural helper — would be new infrastructure
+        for four strings, and the codebase has no such helper today.
+      */
+      firstToSecond: "Ordered once and not returned: {count}",
+      firstToSecondHint: "They liked it enough to try. The second order is the hard one.",
+      highValueAtRisk: "High-value customers now overdue: {count}",
+      highValueAtRiskHint: "Your biggest spenders, now behind their usual rhythm.",
+      winBack: "Former regulars gone quiet: {count}",
+      winBackHint: "They ordered several times before. Nothing for a long while now.",
+      activeRegulars: "Loyal customers ordering regularly: {count}",
+      activeRegularsHint: "They come back often — worth keeping.",
+      revenueAtStake: "Combined spend: {amount}",
+      viewCustomers: "View customers",
+    },
+
+    reasons: {
+      lapsedLongSilence: "No order for {n} days.",
+      atRiskOverdue: "Usually ordered every {interval} days, but nothing for {n}.",
+      atRiskNoRhythm: "No order for {n} days.",
+      loyalFrequent: "{orders} orders placed, and still active.",
+      returningActive: "Has ordered more than once and is still active.",
+      newFirstOrder: "Has placed their first order.",
+      newNoOrders: "Has not placed an order yet.",
+    },
+    notEnoughHistory: "Not enough history to tell their ordering rhythm.",
+    typicalInterval: "Typical gap between orders",
+    everyNDays: "Every {n} days",
     segments: {
       new: "New",
       returning: "Returning",
@@ -616,7 +755,8 @@ export const en: Dictionary = {
     title: "Campaigns",
     subtitle: "Plan for groups of customers, based on the orders they placed",
     noDeliveryNotice:
-      "Nothing is sent in this version. A campaign is planned and saved only.",
+      "A campaign is planned and saved; it sends nothing on its own. To reach your customers, use Promotional SMS — once paid, the Restokar team sends it for you.",
+    sendSms: "Send an SMS to this group",
 
     create: "New campaign",
     editTitle: "Edit campaign",
@@ -664,7 +804,7 @@ export const en: Dictionary = {
     deliveryMetrics: "Delivery and engagement",
     unavailable: "Not available",
     unavailableHint:
-      "Until a delivery system exists these figures do not exist, and none is invented here.",
+      "SMS is sent by the Restokar team and delivery or engagement is not measured, so these figures are never invented.",
     metrics: {
       sent: "Sent",
       delivered: "Delivered",
@@ -688,11 +828,82 @@ export const en: Dictionary = {
     deleted: "Draft deleted",
 
     empty: "No campaigns yet",
-    emptyHint: "Pick a group of customers and save your plan; nothing is sent.",
+    emptyHint: "Pick a group of customers and save your plan.",
     emptyFiltered: "No campaigns match this filter.",
     pageOf: "Page {page} of {pages}",
     previous: "Previous",
     next: "Next",
+  },
+
+  smsBroadcast: {
+    open: "Promotional SMS",
+    title: "Promotional SMS",
+    forCampaign: "For the campaign “{name}”",
+    intro:
+      "Write the message and choose who receives it. Once paid, the Restokar team sends it to the customers who agreed to receive messages.",
+    audience: "Recipients",
+    allCustomers: "All customers",
+    text: "Message",
+    textPlaceholder: "e.g. 20% off all drinks this week",
+    optOutNote: "“{suffix}” is added to the end automatically so recipients can opt out.",
+    preview: "The SMS that will be sent",
+    recipients: "recipients",
+    parts: "SMS per person",
+    characters: "{count} characters",
+    pricePerPart: "Price per SMS",
+    total: "Amount to pay",
+    toman: "Toman",
+    calculating: "Calculating…",
+    pay: "Pay and submit",
+    paying: "Redirecting to the payment gateway…",
+    checkoutDisabled:
+      "Online payment for SMS is not available yet. Contact support to send a message.",
+    consentNote:
+      "Only customers who agreed to receive messages and have a valid mobile number are counted.",
+    issues: {
+      EMPTY: "Write the message first.",
+      CONTAINS_LINK: "A promotional SMS cannot contain a link — the operator refuses it.",
+      TOO_LONG: "The message is too long. At most {max} SMS per person are allowed.",
+      NO_RECIPIENTS: "No customer in this group has agreed to receive messages.",
+    },
+    history: "SMS requests",
+    historyEmpty: "You have not submitted a request yet.",
+    date: "Date",
+    message: "Message",
+    amount: "Amount",
+    status: "Status",
+    statuses: {
+      PENDING_PAYMENT: "Awaiting payment",
+      PAID: "Queued for sending",
+      SENT: "Sent",
+      CANCELED: "Cancelled",
+    },
+    paymentSuccess: "Payment received. Your SMS is queued for sending.",
+    paymentFailed: "The payment did not go through and nothing was queued.",
+    admin: {
+      title: "Promotional SMS queue",
+      subtitle:
+        "Download the number file, send the message with your SMS tool, then press “Sent”.",
+      empty: "Nothing here.",
+      filterOpen: "Waiting to send",
+      filterSent: "Sent",
+      filterCanceled: "Cancelled",
+      venue: "Restaurant",
+      campaign: "Campaign",
+      paidAt: "Paid",
+      download: "Download numbers",
+      copyText: "Copy text",
+      copied: "Text copied",
+      markSent: "Sent",
+      cancel: "Cancel request",
+      confirmSent: "Have you sent this SMS with your sending tool?",
+      confirmCancel:
+        "Cancel this request? Refunding the restaurant has to be done separately.",
+      mockPayment: "Test payment — no money was received. Do not send.",
+      refId: "Reference",
+      markedSent: "Marked as sent",
+      canceled: "Request cancelled",
+    },
   },
   insights: {
     title: "Sales insights",
@@ -733,6 +944,10 @@ export const en: Dictionary = {
       customerMixChange: "Customer behaviour",
       featuredWeakConversion: "Featured product",
       recommendationWeakConversion: "Suggestion",
+      tableHighActivity: "Busy table",
+      tableActivityDecline: "Table activity down",
+      tableViewsWithoutOrders: "More visits than orders",
+      tableConcentration: "Sales concentrated on few tables",
     },
 
     messages: {
@@ -760,6 +975,26 @@ export const en: Dictionary = {
         "Seen {impressions} times but bought only {purchases} times.",
       recommendationWeakConversion:
         "Suggested {impressions} times, added to the basket {addedToCart} times, bought {purchases} times.",
+
+      highSalesLowMargin:
+        "Sells well, but its estimated margin is {margin} against a menu average of {menuMargin}.",
+      lowSalesHighMargin:
+        "Its estimated margin is {margin} — above the menu average of {menuMargin} — but it sells little.",
+      costDataIncomplete:
+        "{products} products have no cost recorded; margins are calculated from {coverage} of this period's sales.",
+      menuConcentration:
+        "The top {count} products made up {share} of this period's revenue.",
+
+      // Table intelligence. Descriptive throughout — none of these names a
+      // cause, because the data cannot distinguish between the possible ones.
+      tableHighActivity:
+        "{orders} orders recorded, making up {share} of recorded table sales.",
+      tableActivityDecline:
+        "Recorded sales at this table fell {percent} against the comparison period ({amount} less) — {previousOrders} orders before, {orders} now.",
+      tableViewsWithoutOrders:
+        "This table's menu was opened {views} times with {orders} orders recorded — an orders-per-visit ratio of {ratio}, against {venueRatio} across the other tables.",
+      tableConcentration:
+        "The top {count} tables made up {share} of recorded table sales.",
     },
 
     actions: {
@@ -768,6 +1003,9 @@ export const en: Dictionary = {
       reviewFeaturedDish:
         "Consider reviewing this featured product's photo, price or description.",
       reviewSuggestion: "This suggestion may not pair well with its source product.",
+      reviewProductPricing: "Consider reviewing this product's price or cost.",
+      promoteProduct: "Consider featuring this product or adding it to suggestions.",
+      addProductCosts: "Add product costs so profit can be calculated more accurately.",
     },
 
     labels: {
@@ -776,7 +1014,114 @@ export const en: Dictionary = {
       averageOrderValue: "Average order value",
       current: "This period",
       previous: "Previous period",
+      table: "Table",
     },
+  },
+  tableIntel: {
+    navLabel: "Table performance",
+    title: "Table performance",
+    subtitle: "See how many orders and how much revenue each table has recorded.",
+    backToAnalytics: "Back to sales report",
+
+    columns: {
+      table: "Table",
+      orders: "Orders",
+      revenue: "Recorded sales",
+      averageOrderValue: "Average order",
+      visits: "Menu visits",
+      perVisit: "Orders per visit",
+      trend: "Sales change",
+      activity: "Activity",
+      lastOrder: "Last order",
+    },
+
+    tiles: {
+      activeTables: "Active tables",
+      tableRevenue: "Recorded table sales",
+      tableOrders: "Recorded table orders",
+      busiest: "Busiest table",
+    },
+
+    activity: {
+      high: "High",
+      medium: "Medium",
+      low: "Low",
+      none: "No orders",
+      unknown: "—",
+    },
+
+    unlisted: "Not listed",
+    unlistedHint:
+      "This table number appears on orders but is not in your table list — it may be a table that was deleted, or a number entered by hand.",
+
+    seats: "{count} seats",
+    noOrders: "No orders",
+    noOrdersYet: "No orders have been recorded from this table yet.",
+
+    empty: "No tables have been added yet",
+    emptyHint:
+      "To see how each table performs, add your tables on the QR codes screen and put each table's own code on it.",
+    emptyAction: "Go to table QR codes",
+
+    noActivity: "No table orders were recorded in this period",
+    noActivityHint: "Choose another period, or wait until more orders come in.",
+
+    insufficientBands: "Not enough data to compare tables",
+    insufficientBandsHint:
+      "“High” and “Low” appear once at least {orders} orders have been recorded across {tables} tables. Each table's orders and sales are still shown below.",
+
+    visitsTitle: "Menu visits",
+    visitsMeasured:
+      "{attributed} visits came through a table's QR code and {unattributed} through a direct link.",
+    visitsInsufficient: "Not enough table visit data",
+    visitsInsufficientHint:
+      "A table's visits are counted from the moment a guest opens the menu using that table's QR code. If most visits come through a direct link, or none have been recorded yet, this column stays empty.",
+    visitsNote:
+      "“Menu visits” means the menu page was opened through this table's QR code. It is not a count of scans or of people — one guest may open the menu several times, and several guests may share one order.",
+    perVisitOver:
+      "This table records more orders than its code has visits, so some of its guests opened the menu another way.",
+  },
+  bundles: {
+    title: "Meal deal",
+    hint: "If this product is a combo, list what it contains. The product's own price is the deal price.",
+    emptyHint: "This product is not a meal deal.",
+    product: "Product",
+    quantity: "Qty",
+    add: "Add item",
+    remove: "Remove item",
+    partsTotal: "Parts total",
+    saving: "Guest saves",
+    noSaving: "No saving",
+    overviewLabel: "Meal deal",
+  },
+  merchandising: {
+    navLabel: "Sales & offers",
+    title: "Sales & offers",
+    subtitle: "See where each product is offered to guests.",
+    empty: "No product has any promotion set up yet.",
+    product: "Product",
+    promotions: "Promotions",
+    nothing: "—",
+    featured: "Featured",
+    pairings: "Pairings",
+    bundle: "Meal deal",
+    upgrade: "Upgrade",
+    appearsOn: "Appears on",
+    appearsProductSheet: "Product page",
+    appearsCart: "Cart",
+    appearsMenu: "Top of menu",
+    suggestionsTitle: "Ordered together",
+    suggestionsHint:
+      "From this venue's own orders. You can save any of these as a pairing.",
+    suggestionsEmpty:
+      "Not enough orders yet to draw a conclusion. Until then only your own pairings are shown.",
+    togetherCount: "In {count} orders together",
+    togetherShare: "{percent} of “{source}” orders",
+    addAsPairing: "Save as pairing",
+    added: "Saved",
+    computedAt: "Last calculated",
+    never: "Not calculated yet",
+    recompute: "Recalculate",
   },
   recommendations: {
     title: "Suggested with this",
@@ -798,7 +1143,7 @@ export const en: Dictionary = {
     impressions: "Shown",
     addedToCart: "Added",
     purchases: "Purchased",
-    conversion: "Conversion",
+    revenuePerView: "Revenue / view",
     revenue: "Attributed revenue",
   },
   design: {
@@ -906,13 +1251,65 @@ export const en: Dictionary = {
     recommendationsTitle: "Complete your order",
     pairingsFallback: "These go well with it",
     featuredTitle: "Featured",
+    upsellReasons: {
+      pairing: "Recommended by us",
+      bundle: "Cheaper together",
+      frequentlyTogether: "Often ordered together",
+      featured: "Featured choice",
+    },
+    bundleSaving: "Save {amount}",
+    bundleIncludes: "Includes",
+    bundleOffersTitle: "Order it for less",
+    upgradePrompt: "{name} + {amount}",
+    upgradeTitle: "Make it bigger",
     ingredients: "More information",
     minutes: "min",
     viewDetails: "Details",
     closed: "This menu is not available right now",
     orderingDisabled: "Online ordering is disabled for this venue",
     requiredFields: "Please enter your name and table number",
+    emptyCart: "Your basket is empty",
     trackOrder: "Track order",
+  },
+  upsell: {
+    title: "Anything with that?",
+    subtitle: "These usually go with what you just added.",
+    dismiss: "No, thanks",
+  },
+  orderDetail: {
+    title: "Order",
+    open: "View order details",
+    items: "Items",
+    orderNote: "Customer note",
+    totals: "Amounts",
+    subtotal: "Subtotal",
+    discount: "Discount",
+    serviceCharge: "Service charge",
+    tax: "Tax",
+    rounding: "Rounding",
+    tip: "Tip",
+    total: "Total",
+    timeline: "Timeline",
+    placedAt: "Placed",
+    preparingAt: "Preparing",
+    readyAt: "Ready",
+    deliveredAt: "Delivered",
+    paidAt: "Paid",
+    canceledAt: "Cancelled",
+    refundedAt: "Refunded",
+    payments: "Transactions",
+    refId: "Ref",
+    paymentStates: { PENDING: "Awaiting payment", FAILED: "Failed" },
+    table: "Table",
+    manual: "Entered by staff",
+    methodOnline: "Paid online",
+    methodCash: "Pay at the table",
+    customer: "Customer",
+    openCustomer: "Open in Customers",
+    customerNoPhone:
+      "This order was placed without a phone number, so it has no customer record.",
+    customerNotFound:
+      "No customer matches this phone number. The record may have been removed.",
   },
   orderStatus: {
     title: "Order status",
@@ -972,9 +1369,97 @@ export const en: Dictionary = {
     markUnpaidHint: "Click to mark unpaid again",
     tipLabel: "Guest tip",
   },
+  exports: {
+    action: "Export CSV",
+    downloading: "Preparing…",
+    empty: "There is no data to export for this period.",
+    failed: "The export could not be prepared.",
+    forbidden: "You do not have permission to download this export.",
+    tooMany: "Too many requests. Please try again shortly.",
+    datasets: {
+      sales: "Daily sales",
+      orders: "Orders",
+      "order-items": "Order items",
+      products: "Product performance",
+      categories: "Categories",
+      customers: "Customers",
+      inventory: "Inventory",
+      pnl: "Profit & loss",
+      tables: "Table performance",
+    },
+    columns: {
+      date: "Date",
+      time: "Time",
+      orderNumber: "Order number",
+      branch: "Branch",
+      table: "Table",
+      status: "Status",
+      paymentMethod: "Payment method",
+      paymentStatus: "Payment status",
+      product: "Product",
+      category: "Category",
+      options: "Options",
+      note: "Note",
+      quantity: "Quantity",
+      orders: "Orders",
+      unitPrice: "Unit price (Toman)",
+      unitCost: "Unit cost (Toman)",
+      lineTotal: "Line total (Toman)",
+      subtotal: "Subtotal (Toman)",
+      discount: "Discount (Toman)",
+      serviceCharge: "Service charge (Toman)",
+      tax: "Tax (Toman)",
+      tip: "Tip (Toman)",
+      total: "Total (Toman)",
+      revenue: "Revenue (Toman)",
+      cost: "Cost of goods (Toman)",
+      grossProfit: "Gross profit (Toman)",
+      margin: "Margin",
+      revenueShare: "Share of revenue",
+      averageOrderValue: "Average order value (Toman)",
+      standing: "Product standing",
+      amount: "Amount (Toman)",
+      item: "Item",
+      unit: "Unit",
+      inStock: "In stock",
+      lowStockAt: "Low-stock threshold",
+      isLow: "Running low",
+      active: "Active",
+      customerName: "Customer name",
+      phone: "Phone",
+      firstOrder: "First order",
+      lastOrder: "Last order",
+      daysSinceLastOrder: "Days since last order",
+      totalSpend: "Total spend (Toman)",
+      typicalInterval: "Typical gap between orders (days)",
+      segment: "Customer status",
+      valueTier: "Customer value",
+      marketingConsent: "Agreed to be contacted",
+      tableLabel: "Table name",
+      menuVisits: "Menu visits",
+      ordersPerVisit: "Orders per visit",
+      tableActivity: "Table activity",
+    },
+  },
+
   analytics: {
     title: "Sales analytics",
     subtitle: "How your restaurant is performing",
+
+    productPerformance: "Product performance",
+    productPerformanceEmpty:
+      "Not enough sales in this period to analyse product performance yet.",
+    typicalProductMargin: "Typical product margin",
+    product: "Product",
+    margin: "Margin",
+    quadrants: {
+      star: "Sells well, earns well",
+      reviewPricing: "Review pricing",
+      promote: "Promotion opportunity",
+      review: "Ordinary",
+      unknown: "No cost recorded",
+      insufficient: "Not enough data",
+    },
     range7: "Last 7 days",
     range30: "Last 30 days",
     range90: "Last 90 days",
@@ -1314,6 +1799,7 @@ export const en: Dictionary = {
     expiringSoon: "Expiring soon",
     support: "Support",
     supportInboxEmpty: "No tickets yet",
+    smsQueue: "SMS",
     supportReplyPlaceholder: "Write your reply…",
     supportSendReply: "Send reply",
     supportClose: "Close ticket",
@@ -1429,6 +1915,23 @@ export const en: Dictionary = {
       CAMPAIGN_END_BEFORE_START: "The end date must be after the start date",
       CAMPAIGN_MISSING_START: "A scheduled campaign needs a start date",
       CAMPAIGN_ENDS_IN_PAST: "That campaign window has already closed",
+      SMS_CHECKOUT_DISABLED: "Online payment for SMS is not available yet",
+      SMS_TEXT_EMPTY: "Write the message first",
+      SMS_TEXT_CONTAINS_LINK: "A promotional SMS cannot contain a link",
+      SMS_TEXT_TOO_LONG: "The message is too long",
+      SMS_NO_RECIPIENTS: "No customer in this group has agreed to receive messages",
+      SMS_BROADCAST_NOT_FOUND: "SMS request not found",
+      SMS_BROADCAST_INVALID_TRANSITION: "The status of this request has already changed",
+      SMS_BROADCAST_UNPAID: "This request has not been paid for",
+      INVENTORY_PRICE_UNIT_MISMATCH:
+        "The price unit must be the same kind as the stock unit",
+      INVENTORY_UNIT_KIND_CHANGE:
+        "An ingredient already in use cannot change to a different kind of unit (for example, weight to count)",
+      INVENTORY_UNIT_TOO_COARSE:
+        "In that unit, a recipe amount would be too small to record",
+      INVENTORY_UNIT_OVERFLOW: "In that unit, the stock amount would be too large",
+      RECIPE_AMOUNT_UNREPRESENTABLE:
+        "An ingredient amount cannot be recorded in its stock unit; check the amount or the unit",
       INTERNAL_ERROR: "Something went wrong. Please try again.",
     },
   },

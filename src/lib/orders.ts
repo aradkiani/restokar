@@ -728,11 +728,51 @@ export async function createOrder(
   const publicToken = randomToken(24);
 
   const order = await prisma.$transaction(async (tx) => {
+    /*
+      The venue's own order number.
+
+      `increment` rather than a read followed by a write, and the UPDATE takes a
+      row lock held to commit — so two guests ordering at the same instant
+      serialise here and cannot be handed the same number.
+    */
     const { orderSequence } = await tx.restaurant.update({
       where: { id: restaurant.id },
       data: { orderSequence: { increment: 1 } },
       select: { orderSequence: true },
     });
+
+    /*
+      And a guard for when the counter has fallen behind the orders themselves.
+
+      The counter is the source of truth, but it only advances through this
+      function. Anything that writes `Order` rows around it — a restore from a
+      partial backup, a data import, a one-off script backfilling history —
+      leaves `orderSequence` below the numbers already on disk. Every subsequent
+      checkout then collides with `@@unique([restaurantId, orderNumber])` and
+      the guest is shown a 500 on the one screen that must never fail, with
+      nothing in the interface explaining why. Observed on the development
+      database, where two earlier test-data scripts had inserted 268 orders
+      directly: every new order on that venue failed until the counter caught up.
+      A restaurant would have experienced that as "the QR menu is broken".
+
+      One indexed lookup on the same unique index, which returns nothing on a
+      healthy venue. It runs under the row lock taken above, so the repair is as
+      race-safe as the increment it corrects.
+    */
+    const ahead = await tx.order.findFirst({
+      where: { restaurantId: restaurant.id, orderNumber: { gte: orderSequence } },
+      select: { orderNumber: true },
+      orderBy: { orderNumber: "desc" },
+    });
+
+    const orderNumber = ahead ? ahead.orderNumber + 1 : orderSequence;
+
+    if (ahead) {
+      await tx.restaurant.update({
+        where: { id: restaurant.id },
+        data: { orderSequence: orderNumber },
+      });
+    }
 
     /*
       Recognise the guest, if they gave a number.
@@ -751,7 +791,7 @@ export async function createOrder(
       data: {
         customerId,
         restaurantId: restaurant.id,
-        orderNumber: orderSequence,
+        orderNumber,
         publicToken,
         isManual: options.isManual ?? false,
         tableNumber: input.tableNumber,
@@ -944,9 +984,17 @@ export async function markOrderPaid(
   const next = paid ? "PAID" : "PENDING";
   if (existing.paymentStatus === next) return { paymentStatus: next };
 
+  /*
+    `paidAt` moves with `paymentStatus`, never independently.
+
+    The board retires a finished order an hour after it was delivered *and*
+    paid, so the timestamp is what starts that clock. Clearing it when an owner
+    un-marks a bill matters as much as setting it: a stale `paidAt` on an order
+    that is no longer paid would retire it while the money is still owed.
+  */
   await prisma.order.update({
     where: { id: orderId },
-    data: { paymentStatus: next },
+    data: { paymentStatus: next, paidAt: paid ? new Date() : null },
   });
 
   // The board and the guest's tracking page both listen, so the badge turns

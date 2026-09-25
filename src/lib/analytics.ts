@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { prisma } from "./prisma";
 import { endOfDayInZone, startOfDayInZone, zonedParts } from "./time";
+import { COUNTED_ORDER } from "./order-status";
 
 /**
  * Reporting for a single tenant. Every function takes `restaurantId` as its
@@ -15,7 +16,7 @@ import { endOfDayInZone, startOfDayInZone, zonedParts } from "./time";
  */
 
 /** Cancelled orders are excluded from every revenue figure. */
-const COUNTED = { status: { not: "CANCELED" } } as const;
+const COUNTED = COUNTED_ORDER;
 
 export interface DayPoint {
   date: string; // ISO yyyy-mm-dd
@@ -253,6 +254,73 @@ export async function getTopProducts(
   }
 
   return [...grouped.values()].sort((a, b) => b.quantity - a.quantity).slice(0, limit);
+}
+
+/**
+ * Per-dish realised economics for a window: what it sold for, what it cost.
+ *
+ * A sibling of `getTopProducts` rather than a replacement — that function
+ * answers "what sold most" and is ranked and capped for a leaderboard, while
+ * this returns the whole menu unranked because the profitability layer has to
+ * see every dish to work out what the menu's own margin is.
+ *
+ * Both read the same request-cached `loadOrderItems`, so calling both on one
+ * page costs one query rather than two.
+ *
+ * ### `hasCost` is the load-bearing field
+ *
+ * `costSnapshot` is zero both for a dish that genuinely costs nothing and for
+ * one whose owner never entered a cost — and the platform has exactly one cost
+ * input (`Product.costPrice`; `InventoryItem` carries no price, so recipes
+ * cannot supply one). Treating an uncosted dish as zero-cost reports a 100%
+ * margin on it and silently inflates the menu average that every other dish is
+ * judged against. So a dish is treated as costed only if at least one of its
+ * sales carried a non-zero cost, and `profitability.ts` refuses to compute a
+ * margin without it.
+ */
+export interface ProductSalesRow {
+  key: string;
+  id: string | null;
+  name: string;
+  quantity: number;
+  revenue: number;
+  cost: number;
+  hasCost: boolean;
+}
+
+export async function getProductSales(
+  restaurantId: string,
+  window: number | DateRange,
+): Promise<ProductSalesRow[]> {
+  const { from, to } = resolveRange(window);
+
+  const items = await loadOrderItems(restaurantId, from.getTime(), to.getTime());
+
+  const grouped = new Map<string, ProductSalesRow>();
+
+  for (const item of items) {
+    // Same key as `getTopProducts`, so a deleted dish groups identically on
+    // both screens rather than appearing once per name in one and not the other.
+    const key = item.productId ?? `deleted:${item.nameSnapshot}`;
+    const entry = grouped.get(key) ?? {
+      key,
+      id: item.productId,
+      name: item.nameSnapshot,
+      quantity: 0,
+      revenue: 0,
+      cost: 0,
+      hasCost: false,
+    };
+
+    entry.quantity += item.quantity;
+    entry.revenue += item.priceSnapshot * item.quantity;
+    entry.cost += item.costSnapshot * item.quantity;
+    if (item.costSnapshot > 0) entry.hasCost = true;
+
+    grouped.set(key, entry);
+  }
+
+  return [...grouped.values()];
 }
 
 export interface CategorySlice {

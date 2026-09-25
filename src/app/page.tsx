@@ -162,7 +162,18 @@ export default async function HomePage() {
                   value: formatNumber(Math.max(orderCount, 1), locale),
                   label: t.landing.statsOrders,
                 },
-                { value: "٪۹۹.۹", label: t.landing.statsUptime },
+                /*
+                  The third figure was a hard-coded «٪۹۹.۹» uptime claim, sitting
+                  between two counts genuinely read from the database. The
+                  service has never been measured for availability, and an
+                  invented number beside two real ones undermines both — so this
+                  reports the template catalogue instead, straight from the
+                  registry that renders it.
+                */
+                {
+                  value: formatNumber(TEMPLATES.length, locale),
+                  label: t.landing.statsTemplates,
+                },
               ].map((stat) => (
                 <div key={stat.label}>
                   <dt className="sr-only">{stat.label}</dt>

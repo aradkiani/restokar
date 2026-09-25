@@ -10,6 +10,7 @@ import {
   recommendationOrderBy,
   recommendationSelect,
 } from "@/lib/recommendations-server";
+import { bundleItemOrderBy, bundleItemSelect } from "@/lib/bundles-server";
 
 export const metadata: Metadata = { title: "مدیریت منو" };
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export default async function MenuPage() {
   const [venue, categories, products, limits] = await Promise.all([
     prisma.restaurant.findUnique({
       where: { id: restaurantId },
-      select: { templateId: true },
+      select: { templateId: true, menuPriceStep: true, lowMarginPercent: true },
     }),
     prisma.category.findMany({
       where: { restaurantId },
@@ -36,6 +37,7 @@ export default async function MenuPage() {
       include: {
         availabilityWindows: { select: scheduleSelect, orderBy: scheduleOrderBy },
         recommendations: { select: recommendationSelect, orderBy: recommendationOrderBy },
+        bundleItems: { select: bundleItemSelect, orderBy: bundleItemOrderBy },
         infoSections: { orderBy: { sortOrder: "asc" } },
         optionGroups: {
           orderBy: { sortOrder: "asc" },
@@ -52,6 +54,10 @@ export default async function MenuPage() {
       /* Vitrin and anything like it show a short description and nothing else,
          so the editor hides the fields that template would never render. */
       shortOnly={isShortDescriptionOnly(venue?.templateId)}
+      pricing={{
+        step: venue?.menuPriceStep ?? 0,
+        lowMarginPercent: venue?.lowMarginPercent ?? 30,
+      }}
       initialCategories={categories.map((category) => ({
         id: category.id,
         name: category.name,
@@ -76,8 +82,10 @@ export default async function MenuPage() {
         pairingNoteEn: product.pairingNoteEn,
         imageUrl: product.imageUrl,
         price: product.price,
+        priceExact: product.priceExact,
         compareAtPrice: product.compareAtPrice,
         costPrice: product.costPrice,
+        costFromRecipe: product.costFromRecipe,
         prepMinutes: product.prepMinutes,
         isAvailable: product.isAvailable,
         hideWhenUnavailable: product.hideWhenUnavailable,
@@ -88,6 +96,10 @@ export default async function MenuPage() {
         recommendations: product.recommendations.map((edge) => ({
           recommendedProductId: edge.recommendedProductId,
           isActive: edge.isActive,
+        })),
+        bundleItems: product.bundleItems.map((item) => ({
+          componentProductId: item.componentProductId,
+          quantity: item.quantity,
         })),
         featuredOrder: product.featuredOrder,
         featuredLabel: product.featuredLabel,
@@ -108,6 +120,7 @@ export default async function MenuPage() {
           nameEn: group.nameEn,
           isRequired: group.isRequired,
           maxSelect: group.maxSelect,
+          isUpgrade: group.isUpgrade,
           choices: group.choices.map((choice) => ({
             name: choice.name,
             nameEn: choice.nameEn,

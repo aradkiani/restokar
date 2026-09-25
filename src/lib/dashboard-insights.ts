@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import { netRevenue, startOfDay } from "./analytics";
 import { zonedParts } from "./time";
 import { DAY_MS, staffCallVisibleSince } from "./constants";
+import { COUNTED_ORDER } from "./order-status";
 
 /**
  * The overview page answers "how is today going?". A bare figure cannot answer
@@ -11,8 +12,8 @@ import { DAY_MS, staffCallVisibleSince } from "./constants";
  * something the owner can actually go and fix.
  */
 
-/** Orders that count toward takings. Mirrors the rule in analytics.ts. */
-const COUNTED = { status: { not: "CANCELED" } } as const;
+/** Orders that count toward takings. See `order-status.ts` for why. */
+const COUNTED = COUNTED_ORDER;
 
 export interface Comparison {
   current: number;

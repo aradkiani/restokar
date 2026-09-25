@@ -7,7 +7,14 @@ import { useMenu } from "./runtime";
 import { useCart } from "./cart";
 import { PriceTag, ProductImage, QuantityStepper } from "./pieces";
 import { PairingSuggestions } from "./pairings";
+import { BundleOffers } from "./bundle-offer";
+import { UpgradePrompt } from "./upgrade-prompt";
 import { CategoryIcon } from "@/components/icon";
+import {
+  defaultSelection,
+  missingRequiredGroups,
+  toggleChoice as toggleChoiceIn,
+} from "@/lib/order-options";
 
 /**
  * Full product detail: hero image, long description, and the three
@@ -32,7 +39,7 @@ export function ProductSheet({
   React.useEffect(() => {
     if (product) {
       setQuantity(Math.max(1, cart.quantityOf(product.id) || 1));
-      setSelected(defaultSelection(product));
+      setSelected(defaultSelection(product.optionGroups));
       setShowErrors(false);
     }
     // Reading cart here would re-run the effect on every cart change and stomp
@@ -73,10 +80,7 @@ export function ProductSheet({
 
   /** Groups the guest still has to answer. */
   const missing = React.useMemo(
-    () =>
-      (product?.optionGroups ?? []).filter(
-        (group) => group.isRequired && (selected[group.id]?.length ?? 0) === 0,
-      ),
+    () => missingRequiredGroups(product?.optionGroups ?? [], selected),
     [product, selected],
   );
 
@@ -87,27 +91,21 @@ export function ProductSheet({
     ? Math.max(0, product.price + chosen.reduce((sum, c) => sum + c.priceDelta, 0))
     : 0;
 
-  function toggleChoice(groupId: string, choiceId: string, maxSelect: number) {
-    setSelected((prev) => {
-      const current = prev[groupId] ?? [];
-
-      if (maxSelect <= 1) {
-        // Radio behaviour: picking replaces, and picking the same one again
-        // clears it only when the group is optional.
-        const group = product?.optionGroups.find((g) => g.id === groupId);
-        const isSame = current[0] === choiceId;
-        if (isSame && !group?.isRequired) return { ...prev, [groupId]: [] };
-        return { ...prev, [groupId]: [choiceId] };
-      }
-
-      if (current.includes(choiceId)) {
-        return { ...prev, [groupId]: current.filter((id) => id !== choiceId) };
-      }
-      // Silently ignoring the tap past the limit would look broken; the
-      // checkbox simply stays unticked and the hint explains the cap.
-      if (current.length >= maxSelect) return prev;
-      return { ...prev, [groupId]: [...current, choiceId] };
-    });
+  /**
+   * Delegated to `order-options.ts`, which is the platform's one answer to
+   * "what does tapping a choice do".
+   *
+   * This sheet used to carry its own copy of that rule, alongside its own
+   * `defaultSelection` and its own required-group check. Three copies of logic
+   * the dashboard already shared, and the upgrade offer made the duplication
+   * load-bearing: `resolveUpgrade` measures an upgrade's cost from whatever
+   * `defaultSelection` ticks, so a sheet that started the guest somewhere else
+   * would quote a price the server then disagreed with.
+   */
+  function toggleChoice(groupId: string, choiceId: string) {
+    const group = product?.optionGroups.find((g) => g.id === groupId);
+    if (!group) return;
+    setSelected((prev) => toggleChoiceIn(prev, group, choiceId));
   }
 
   function handleAdd() {
@@ -123,6 +121,15 @@ export function ProductSheet({
     // suggestion, so a dish the guest found themselves is never credited to one.
     cart.add(product, quantity, "", chosen, recommendedFrom, fromFeatured);
     onClose();
+    /*
+      No upsell sheet on this path, deliberately.
+
+      Adding from the sheet opens the cart drawer, and the drawer already
+      carries its own suggestion strip. Raising the add-time sheet as well would
+      stack two dialogs and ask the same question twice in the same second. The
+      quick-add "+" on a card is the path that has no drawer behind it, and that
+      is where `useAddToCart` raises the sheet.
+    */
     cart.open();
   }
 
@@ -237,6 +244,19 @@ export function ProductSheet({
               </p>
             )}
 
+            {/*
+              The size ladder as a one-tap offer, above the groups rather than
+              inside them. It ticks a choice in the same selection the fieldsets
+              below read, so the two always agree — there is no second state.
+            */}
+            {canOrder && product.isAvailable && (
+              <UpgradePrompt
+                product={product}
+                selected={selected}
+                onSelect={(groupId, choiceId) => toggleChoice(groupId, choiceId)}
+              />
+            )}
+
             {canOrder && product.isAvailable && product.optionGroups.length > 0 && (
               <div className="mt-6 space-y-5">
                 {product.optionGroups.map((group) => {
@@ -300,9 +320,7 @@ export function ProductSheet({
                                 name={group.id}
                                 checked={checked}
                                 disabled={disabled}
-                                onChange={() =>
-                                  toggleChoice(group.id, choice.id, group.maxSelect)
-                                }
+                                onChange={() => toggleChoice(group.id, choice.id)}
                                 className="size-4 shrink-0 accent-[var(--m-primary)]"
                               />
                               <span className="min-w-0 flex-1 text-sm">
@@ -372,6 +390,10 @@ export function ProductSheet({
 
             {/* After the owner's own information sections: a guest reads what
                 this dish is before being told what goes with it. */}
+            {/* Deals first, then pairings: "the same meal for less" is a
+                stronger offer than "add something else", and putting the
+                cheaper option second would read as an upsell ladder. */}
+            <BundleOffers product={product} />
             <PairingSuggestions product={product} />
           </div>
 
@@ -427,28 +449,12 @@ export function ProductSheet({
 }
 
 /**
- * Pre-ticks the first available choice of every required single-select group.
+ * Flattens the selection map back into choice *objects*, in menu order.
  *
- * A required question that starts blank makes the guest do work to reach the
- * state the venue already considers normal — and the owner lists the default
- * cut first for exactly that reason. Optional groups start empty, because a
- * pre-ticked paid extra would be charging by inattention.
+ * Not a duplicate of `selectedChoiceIds`: this sheet needs the choices
+ * themselves to price the line live, while the shared helper returns the ids
+ * the server wants. Same ordering rule, two different projections of it.
  */
-function defaultSelection(product: MenuProduct): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-
-  for (const group of product.optionGroups) {
-    if (group.isRequired && group.maxSelect === 1) {
-      const first = group.choices.find((choice) => choice.isAvailable);
-      out[group.id] = first ? [first.id] : [];
-    } else {
-      out[group.id] = [];
-    }
-  }
-  return out;
-}
-
-/** Flattens the selection map back into choice objects, in menu order. */
 function chosenChoices(
   product: MenuProduct,
   selected: Record<string, string[]>,

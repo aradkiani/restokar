@@ -1,21 +1,21 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: menuland-db
+    container_name: restokar-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: menuland
-      POSTGRES_PASSWORD: menuland
-      POSTGRES_DB: menuland
+      POSTGRES_USER: restokar
+      POSTGRES_PASSWORD: restokar
+      POSTGRES_DB: restokar
     ports:
       - "5433:5432"
     volumes:
-      - menuland-pgdata:/var/lib/postgresql/data
+      - restokar-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U menuland -d menuland"]
+      test: ["CMD-SHELL", "pg_isready -U restokar -d restokar"]
       interval: 5s
       timeout: 5s
       retries: 10
 
 volumes:
-  menuland-pgdata:
+  restokar-pgdata:

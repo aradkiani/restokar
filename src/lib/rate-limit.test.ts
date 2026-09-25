@@ -10,7 +10,7 @@ import { clientIp } from "./rate-limit";
  */
 
 function request(headers: Record<string, string>): Request {
-  return new Request("https://menuland.ir/api/auth/login", { headers });
+  return new Request("https://restokar.ir/api/auth/login", { headers });
 }
 
 describe("clientIp", () => {

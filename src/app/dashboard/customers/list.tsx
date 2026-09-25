@@ -11,6 +11,14 @@ import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
 import { formatDateShort, formatMoney, formatNumber } from "@/lib/format";
 import { CUSTOMER_SEGMENTS, type CustomerSegment } from "@/lib/customers";
+import {
+  VALUE_TIERS,
+  type RetentionExplanation,
+  type RetentionOpportunityKey,
+  type ValueTier,
+} from "@/lib/retention";
+import { formatPercent } from "@/lib/format";
+import { ExportButton } from "@/components/export-button";
 import type { Locale } from "@/lib/i18n";
 
 /**
@@ -29,12 +37,29 @@ export interface CustomerRow {
   name: string | null;
   marketingConsent: boolean;
   segment: CustomerSegment;
+  valueTier: ValueTier;
   orderCount: number;
   totalRevenue: number;
   averageOrderValue: number;
   firstOrderAt: string | null;
   lastOrderAt: string | null;
   daysSinceLastOrder: number | null;
+  typicalInterval: number | null;
+}
+
+interface RetentionSummary {
+  withOrders: number;
+  repeatCustomers: number;
+  repeatRate: number;
+  averageLifetimeValue: number;
+  averageOrders: number;
+}
+
+interface Opportunity {
+  key: RetentionOpportunityKey;
+  count: number;
+  revenueAtStake: number;
+  filter: { segment?: CustomerSegment; valueTier?: ValueTier };
 }
 
 interface ListPayload {
@@ -43,6 +68,8 @@ interface ListPayload {
   page: number;
   pageSize: number;
   pageCount: number;
+  summary: RetentionSummary;
+  opportunities: Opportunity[];
 }
 
 type SegmentCounts = Record<CustomerSegment, number> & { total: number };
@@ -73,15 +100,22 @@ export function CustomerList({
   const [data, setData] = React.useState(initial);
   const [segments, setSegments] = React.useState(initialSegments);
   const [segment, setSegment] = React.useState<CustomerSegment | "">("");
+  const [valueTier, setValueTier] = React.useState<ValueTier | "">("");
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [detail, setDetail] = React.useState<CustomerDetail | null>(null);
 
   const load = React.useCallback(
-    async (next: { segment?: string; search?: string; page?: number }) => {
+    async (next: {
+      segment?: string;
+      valueTier?: string;
+      search?: string;
+      page?: number;
+    }) => {
       setLoading(true);
       const params = new URLSearchParams();
       if (next.segment) params.set("segment", next.segment);
+      if (next.valueTier) params.set("valueTier", next.valueTier);
       if (next.search) params.set("search", next.search);
       if (next.page && next.page > 1) params.set("page", String(next.page));
 
@@ -102,17 +136,35 @@ export function CustomerList({
 
   // Debounced so typing a name does not fire a request per keystroke.
   React.useEffect(() => {
-    const id = setTimeout(() => void load({ segment, search }), 300);
+    const id = setTimeout(() => void load({ segment, valueTier, search }), 300);
     return () => clearTimeout(id);
     // `load` is stable; re-running on it would defeat the debounce.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segment, search]);
+  }, [segment, valueTier, search]);
+
+  /**
+   * An action card's "show me" — the point of the whole screen.
+   *
+   * Sets the filters the opportunity describes rather than navigating anywhere:
+   * the list below already answers the question, so the cheapest correct thing
+   * is to point it at the right rows.
+   */
+  function applyOpportunity(filter: Opportunity["filter"]) {
+    setSegment(filter.segment ?? "");
+    setValueTier(filter.valueTier ?? "");
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <header>
-        <h1 className="text-2xl font-black text-ink-900">{c.title}</h1>
-        <p className="mt-1 text-sm text-ink-500">{c.subtitle}</p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-ink-900">{c.title}</h1>
+          <p className="mt-1 text-sm text-ink-500">{c.subtitle}</p>
+        </div>
+
+        {/* The one export carrying personal data. Owner-only on the server and
+            audited there; this button is simply where an owner finds it. */}
+        <ExportButton dataset="customers" />
       </header>
 
       {/* Counts first: an owner opens this screen to see the shape of their
@@ -131,9 +183,97 @@ export function CustomerList({
         ))}
       </div>
 
+      {/*
+        What the book as a whole is doing.
+
+        Above the individuals deliberately: an owner opening this screen is
+        asking "is my retention healthy?" before "who is this person?". Only
+        shown once somebody has actually ordered — every figure here divides by
+        that count, and a row of zeroes teaches nothing.
+      */}
+      {data.summary.withOrders > 0 && (
+        <Card>
+          <CardBody>
+            <p className="mb-3 text-sm font-semibold text-ink-800">{c.retention.title}</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat
+                label={c.retention.withOrders}
+                value={formatNumber(data.summary.withOrders, locale)}
+              />
+              <Stat
+                label={c.retention.repeatRate}
+                value={formatPercent(data.summary.repeatRate, locale)}
+                hint={c.retention.repeatRateHint}
+              />
+              <Stat
+                label={c.retention.averageLifetimeValue}
+                value={formatMoney(data.summary.averageLifetimeValue, locale)}
+              />
+              <Stat
+                label={c.retention.averageOrders}
+                value={formatNumber(
+                  Math.round(data.summary.averageOrders * 10) / 10,
+                  locale,
+                )}
+              />
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* The action centre. Each card names a group and offers to show it. */}
+      {data.opportunities.length > 0 && (
+        <Card>
+          <CardBody>
+            <p className="text-sm font-semibold text-ink-800">{c.opportunities.title}</p>
+            <p className="mt-0.5 text-xs text-ink-500">{c.opportunities.hint}</p>
+
+            <ul className="mt-3 space-y-2.5">
+              {data.opportunities.map((opportunity) => (
+                <li
+                  key={opportunity.key}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-ink-200 p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-ink-800">
+                      {c.opportunities[opportunity.key].replace(
+                        "{count}",
+                        formatNumber(opportunity.count, locale),
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      {c.opportunities[`${opportunity.key}Hint` as const]}
+                    </p>
+                    {/* What the group has spent historically, so "18 customers"
+                        comes with a sense of what is actually at stake. */}
+                    {opportunity.revenueAtStake > 0 && (
+                      <p className="mt-0.5 text-xs text-ink-500">
+                        {c.opportunities.revenueAtStake.replace(
+                          "{amount}",
+                          formatMoney(opportunity.revenueAtStake, locale),
+                        )}
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyOpportunity(opportunity.filter)}
+                  >
+                    {c.opportunities.viewCustomers}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardBody className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <Field label={c.search} htmlFor="cu-search">
               <Input
                 id="cu-search"
@@ -152,6 +292,22 @@ export function CustomerList({
                 {CUSTOMER_SEGMENTS.map((key) => (
                   <option key={key} value={key}>
                     {c.segments[key]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {/* Value is a second, independent axis — a guest can be both high
+                value and at risk, which is the combination worth acting on. */}
+            <Field label={c.valueTier} htmlFor="cu-value">
+              <Select
+                id="cu-value"
+                value={valueTier}
+                onChange={(e) => setValueTier(e.target.value as ValueTier | "")}
+              >
+                <option value="">{c.allValueTiers}</option>
+                {VALUE_TIERS.map((key) => (
+                  <option key={key} value={key}>
+                    {c.valueTiers[key]}
                   </option>
                 ))}
               </Select>
@@ -191,9 +347,16 @@ export function CustomerList({
                         </span>
                       </td>
                       <td className="py-2.5">
-                        <Badge tone={SEGMENT_TONE[row.segment]}>
-                          {c.segments[row.segment]}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <Badge tone={SEGMENT_TONE[row.segment]}>
+                            {c.segments[row.segment]}
+                          </Badge>
+                          {/* Only the top band is badged. Marking everyone
+                              "standard" would be a column of noise. */}
+                          {row.valueTier === "high" && (
+                            <Badge tone="brand">{c.valueTiers.high}</Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 tabular-nums">
                         {formatNumber(row.orderCount, locale)}
@@ -320,6 +483,7 @@ function SegmentTile({
 }
 
 interface CustomerDetail extends CustomerRow {
+  explanation: RetentionExplanation;
   recentOrders: {
     id: string;
     orderNumber: number;
@@ -385,6 +549,39 @@ function CustomerDetailDialog({
           {customer.phone}
         </p>
 
+        {/*
+          The classification, and why.
+
+          The reason is the whole point: «معمولاً هر ۱۶ روز سفارش می‌دادند، اما
+          ۳۷ روز است خبری نیست» is something an owner can check against their own
+          memory of the guest and act on. A bare badge is something they have to
+          believe.
+        */}
+        <div className="rounded-[var(--radius-sm)] border border-ink-200 p-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={SEGMENT_TONE[customer.segment]}>
+              {c.segments[customer.segment]}
+            </Badge>
+            {customer.valueTier === "high" && (
+              <Badge tone="brand">{c.valueTiers.high}</Badge>
+            )}
+          </div>
+          <p className="mt-2 text-sm leading-6 text-ink-700">
+            {explanationText(customer.explanation, c, locale)}
+          </p>
+          {/* Stated where it is known, and stated as absent where it is not —
+              rather than the screen quietly omitting a figure it could not
+              compute, which reads as a bug. */}
+          <p className="mt-1 text-xs text-ink-500">
+            {customer.typicalInterval === null
+              ? c.notEnoughHistory
+              : `${c.typicalInterval}: ${c.everyNDays.replace(
+                  "{n}",
+                  formatNumber(customer.typicalInterval, locale),
+                )}`}
+          </p>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <Stat label={c.orders} value={formatNumber(customer.orderCount, locale)} />
           <Stat label={c.revenue} value={formatMoney(customer.totalRevenue, locale)} />
@@ -392,7 +589,7 @@ function CustomerDetailDialog({
             label={c.averageOrder}
             value={formatMoney(customer.averageOrderValue, locale)}
           />
-          <Stat label={c.segment} value={c.segments[customer.segment]} />
+          <Stat label={c.valueTier} value={c.valueTiers[customer.valueTier]} />
           <Stat label={c.firstOrder} value={date(customer.firstOrderAt)} />
           <Stat label={c.lastOrder} value={date(customer.lastOrderAt)} />
         </div>
@@ -445,11 +642,30 @@ function CustomerDetailDialog({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
       <span className="block text-xs text-ink-500">{label}</span>
       <span className="mt-0.5 block font-bold text-ink-900">{value}</span>
+      {hint && <span className="mt-0.5 block text-[0.6875rem] text-ink-400">{hint}</span>}
     </div>
   );
+}
+
+/**
+ * The sentence behind a classification, with its numbers filled in.
+ *
+ * The dictionary owns the wording and the engine owns the facts — this only
+ * joins them. Every reason key is present in both dictionaries, so a missing
+ * one is a compile error rather than a blank line on the screen.
+ */
+function explanationText(
+  explanation: RetentionExplanation,
+  c: ReturnType<typeof useI18n>["t"]["customers"],
+  locale: Locale,
+): string {
+  return c.reasons[explanation.reason]
+    .replace("{n}", formatNumber(explanation.idleDays ?? 0, locale))
+    .replace("{interval}", formatNumber(explanation.typicalInterval ?? 0, locale))
+    .replace("{orders}", formatNumber(explanation.orderCount, locale));
 }

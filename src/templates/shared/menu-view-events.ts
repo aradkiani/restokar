@@ -24,7 +24,19 @@
  */
 let reported = false;
 
-export function reportMenuView(input: { slug: string; preview?: boolean }): void {
+export function reportMenuView(input: {
+  slug: string;
+  preview?: boolean;
+  /**
+   * The table from the QR link, when the guest arrived through one.
+   *
+   * Only ever what `?table=` carried — never what the guest later types at
+   * checkout. A number typed into the cart says where they are sitting; it does
+   * not say this menu was opened through that table's code, and counting it as
+   * though it did would report opens for a QR code nobody scanned.
+   */
+  table?: string | null;
+}): void {
   // The dashboard previewer renders the same templates against real data. A
   // venue checking its own design must not inflate its own figures.
   if (input.preview) return;
@@ -33,7 +45,7 @@ export function reportMenuView(input: { slug: string; preview?: boolean }): void
 
   reported = true;
 
-  const body = JSON.stringify({ slug: input.slug });
+  const body = JSON.stringify({ slug: input.slug, table: input.table ?? undefined });
 
   /*
     `keepalive` so the report survives the guest navigating away in the same

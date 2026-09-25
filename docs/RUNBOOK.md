@@ -1,6 +1,6 @@
 # Runbook
 
-Operational procedures for a running Menuland server. Everything here is a
+Operational procedures for a running Restokar server. Everything here is a
 command you can copy.
 
 If you are reading this because something is broken, go straight to
@@ -10,11 +10,11 @@ Assumptions, all set by `docs/LINUX-DEPLOY.md`:
 
 | Thing         | Where                                        |
 | ------------- | -------------------------------------------- |
-| Application   | `/srv/menuland`                              |
-| Customer data | `/var/lib/menuland` (uploads, backups, logs) |
-| Service       | `menuland` (systemd)                         |
-| Config        | `/srv/menuland/.env`                         |
-| Database      | PostgreSQL, database `menuland`              |
+| Application   | `/srv/restokar`                              |
+| Customer data | `/var/lib/restokar` (uploads, backups, logs) |
+| Service       | `restokar` (systemd)                         |
+| Config        | `/srv/restokar/.env`                         |
+| Database      | PostgreSQL, database `restokar`              |
 
 Substitute your own paths if you deployed somewhere else.
 
@@ -54,13 +54,13 @@ one, so a schedule that has quietly stopped shows up here instead of only in
 ### 2. Is the process running?
 
 ```bash
-sudo systemctl status menuland
+sudo systemctl status restokar
 ```
 
 If it is not running, start it and watch what happens:
 
 ```bash
-sudo systemctl start menuland && sudo journalctl -u menuland -f
+sudo systemctl start restokar && sudo journalctl -u restokar -f
 ```
 
 Press `Ctrl+C` to stop watching.
@@ -69,7 +69,7 @@ Press `Ctrl+C` to stop watching.
 on purpose. Read the last error:
 
 ```bash
-sudo journalctl -u menuland -n 50 --no-pager
+sudo journalctl -u restokar -n 50 --no-pager
 ```
 
 The app deliberately refuses to start when:
@@ -79,10 +79,10 @@ The app deliberately refuses to start when:
 | `AUTH_SECRET`          | Still the example value. Generate a real one (see below).                                            |
 | `NEXT_PUBLIC_APP_URL`  | Set to localhost, or to `http://`. It must be your real `https://` domain.                           |
 | `ZARINPAL_MERCHANT_ID` | `PAYMENT_PROVIDER="zarinpal"` with no merchant id. Set the id, or set the provider back to `"mock"`. |
-| `DATABASE_URL`         | Missing or wrong. Check `/srv/menuland/.env`.                                                        |
+| `DATABASE_URL`         | Missing or wrong. Check `/srv/restokar/.env`.                                                        |
 
 These are not bugs. The error message names the variable. Edit
-`/srv/menuland/.env`, then `sudo systemctl restart menuland`.
+`/srv/restokar/.env`, then `sudo systemctl restart restokar`.
 
 To generate a new `AUTH_SECRET` (this signs out every logged-in user, which is
 harmless — they just sign in again):
@@ -114,16 +114,16 @@ sudo systemctl status postgresql
 ```
 
 ```bash
-sudo -u postgres psql -d menuland -c "\dt"
+sudo -u postgres psql -d restokar -c "\dt"
 ```
 
 If that lists tables, the database is fine and the app just cannot reach it —
-check `DATABASE_URL` in `/srv/menuland/.env`.
+check `DATABASE_URL` in `/srv/restokar/.env`.
 
 If PostgreSQL is not running:
 
 ```bash
-sudo systemctl start postgresql && sudo systemctl restart menuland
+sudo systemctl start postgresql && sudo systemctl restart restokar
 ```
 
 ### 5. Is the disk full?
@@ -136,7 +136,7 @@ df -h
 ```
 
 ```bash
-du -sh /var/lib/menuland/*
+du -sh /var/lib/restokar/*
 ```
 
 Backups are the usual culprit. They self-prune to the newest 14, but if that
@@ -144,7 +144,7 @@ never ran the folder grows without limit. Safe to delete old archives by hand �
 keep the most recent few:
 
 ```bash
-ls -lt /var/lib/menuland/backups/
+ls -lt /var/lib/restokar/backups/
 ```
 
 ### 6. Nothing above worked
@@ -152,7 +152,7 @@ ls -lt /var/lib/menuland/backups/
 Restart the whole stack:
 
 ```bash
-sudo systemctl restart postgresql menuland nginx
+sudo systemctl restart postgresql restokar nginx
 ```
 
 Then re-run step 1. If it is still down, take a backup before you experiment
@@ -166,31 +166,31 @@ further — see [Take a backup](#take-a-backup).
 crashes:
 
 ```bash
-sudo journalctl -u menuland -n 100 --no-pager
+sudo journalctl -u restokar -n 100 --no-pager
 ```
 
 Follow live:
 
 ```bash
-sudo journalctl -u menuland -f
+sudo journalctl -u restokar -f
 ```
 
 Since a specific time:
 
 ```bash
-sudo journalctl -u menuland --since "1 hour ago" --no-pager
+sudo journalctl -u restokar --since "1 hour ago" --no-pager
 ```
 
 Errors only:
 
 ```bash
-sudo journalctl -u menuland -p err -n 50 --no-pager
+sudo journalctl -u restokar -p err -n 50 --no-pager
 ```
 
 **Scheduled backups** — these do not go to journalctl:
 
 ```bash
-cat /var/lib/menuland/logs/backup.log
+cat /var/lib/restokar/logs/backup.log
 ```
 
 **nginx**:
@@ -206,10 +206,10 @@ sudo tail -n 100 /var/log/nginx/error.log
 Do this before any update, any migration, and any restore.
 
 ```bash
-cd /srv/menuland && npm run backup
+cd /srv/restokar && npm run backup
 ```
 
-That writes a timestamped `.tar.gz` into `/var/lib/menuland/backups/`
+That writes a timestamped `.tar.gz` into `/var/lib/restokar/backups/`
 containing every database table and every uploaded image, prunes to the newest
 14 archives, and emails the archive if SMTP and a destination address are
 configured.
@@ -217,7 +217,7 @@ configured.
 Archive only, no email:
 
 ```bash
-cd /srv/menuland && npm run backup:dry
+cd /srv/restokar && npm run backup:dry
 ```
 
 **The command exits non-zero if the backup failed.** A zero exit with
@@ -227,7 +227,7 @@ the archive is safe on disk. Set the address at `/admin/settings`.
 Check it landed:
 
 ```bash
-ls -lht /var/lib/menuland/backups/ | head
+ls -lht /var/lib/restokar/backups/ | head
 ```
 
 ---
@@ -248,7 +248,7 @@ ls -lht /var/lib/menuland/backups/ | head
 The script is a dry run by default. It prints what it would restore and stops.
 
 ```bash
-cd /srv/menuland && npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland
+cd /srv/restokar && npm run backup:restore -- /var/lib/restokar/backups/ARCHIVE.tar.gz --confirm=restokar
 ```
 
 Read the output. It shows when the archive was taken, which schema version it
@@ -261,13 +261,13 @@ the archive's version first.
 ### 2. Stop the app so nothing writes during the restore
 
 ```bash
-sudo systemctl stop menuland
+sudo systemctl stop restokar
 ```
 
 ### 3. Apply it
 
 ```bash
-cd /srv/menuland && npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland --yes
+cd /srv/restokar && npm run backup:restore -- /var/lib/restokar/backups/ARCHIVE.tar.gz --confirm=restokar --yes
 ```
 
 `--confirm=<dbname>` is checked against the database `DATABASE_URL` actually
@@ -279,7 +279,7 @@ over production because the shell still had the wrong connection string.
 ### 4. Start up and check
 
 ```bash
-sudo systemctl start menuland && curl -s https://YOUR-DOMAIN/api/health
+sudo systemctl start restokar && curl -s https://YOUR-DOMAIN/api/health
 ```
 
 Then open a menu page and the dashboard in a browser and confirm real data is
@@ -301,11 +301,11 @@ code, and after any migration that adds a table.
 Create the scratch database and give it the current schema:
 
 ```bash
-psql "$DATABASE_URL" -c 'CREATE DATABASE menuland_restore_rehearsal'
+psql "$DATABASE_URL" -c 'CREATE DATABASE restokar_restore_rehearsal'
 ```
 
 ```bash
-DATABASE_URL="postgresql://USER:PASS@localhost:5432/menuland_restore_rehearsal?schema=public" npx prisma migrate deploy
+DATABASE_URL="postgresql://USER:PASS@localhost:5432/restokar_restore_rehearsal?schema=public" npx prisma migrate deploy
 ```
 
 Restore into it. `DATA_DIR` is pointed at a throwaway directory so the archive's
@@ -313,14 +313,14 @@ uploads do not overwrite the real ones, and `--confirm` names the scratch
 database:
 
 ```bash
-DATABASE_URL="postgresql://USER:PASS@localhost:5432/menuland_restore_rehearsal?schema=public" DATA_DIR=/tmp/restore-rehearsal npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland_restore_rehearsal --yes
+DATABASE_URL="postgresql://USER:PASS@localhost:5432/restokar_restore_rehearsal?schema=public" DATA_DIR=/tmp/restore-rehearsal npm run backup:restore -- /var/lib/restokar/backups/ARCHIVE.tar.gz --confirm=restokar_restore_rehearsal --yes
 ```
 
 Check the guard actually protects you — this must refuse, because
 `DATABASE_URL` is the live database while `--confirm` names the scratch one:
 
 ```bash
-npm run backup:restore -- /var/lib/menuland/backups/ARCHIVE.tar.gz --confirm=menuland_restore_rehearsal --yes
+npm run backup:restore -- /var/lib/restokar/backups/ARCHIVE.tar.gz --confirm=restokar_restore_rehearsal --yes
 ```
 
 Compare row counts against the counts the dry run printed from the archive
@@ -331,7 +331,7 @@ restored uploads for the same reason. Everything else must match exactly.
 Then drop the scratch database:
 
 ```bash
-psql "$DATABASE_URL" -c 'DROP DATABASE menuland_restore_rehearsal'
+psql "$DATABASE_URL" -c 'DROP DATABASE restokar_restore_rehearsal'
 ```
 
 > On the Windows development machine the portable PostgreSQL build ships no
@@ -346,49 +346,49 @@ The folder layout exists to make this safe: the application directory is
 replaced wholesale and the customer-data directory is never touched.
 
 ```bash
-cd /srv/menuland && npm run backup
+cd /srv/restokar && npm run backup
 ```
 
 ```bash
-sudo systemctl stop menuland
+sudo systemctl stop restokar
 ```
 
 Preserve the configuration — it is the one file in the app directory that is not
 in the repository:
 
 ```bash
-cp /srv/menuland/.env /tmp/menuland.env
+cp /srv/restokar/.env /tmp/restokar.env
 ```
 
 Replace the application. **If you deploy from git** (recommended now that the
 project is under version control):
 
 ```bash
-cd /srv/menuland && git fetch && git checkout main && git pull
+cd /srv/restokar && git fetch && git checkout main && git pull
 ```
 
 **If you deploy from a tarball** (the original procedure):
 
 ```bash
-sudo rm -rf /srv/menuland && sudo mkdir -p /srv/menuland && sudo chown menuland:menuland /srv/menuland
+sudo rm -rf /srv/restokar && sudo mkdir -p /srv/restokar && sudo chown restokar:restokar /srv/restokar
 ```
 
 ```bash
-sudo -u menuland tar -xzf /tmp/menuland-core-NEW.tar.gz -C /srv/menuland --strip-components=1
+sudo -u restokar tar -xzf /tmp/restokar-core-NEW.tar.gz -C /srv/restokar --strip-components=1
 ```
 
 Either way, put the configuration back and rebuild:
 
 ```bash
-cp /tmp/menuland.env /srv/menuland/.env && chmod 600 /srv/menuland/.env
+cp /tmp/restokar.env /srv/restokar/.env && chmod 600 /srv/restokar/.env
 ```
 
 ```bash
-cd /srv/menuland && npm ci && npx prisma migrate deploy && npm run build
+cd /srv/restokar && npm ci && npx prisma migrate deploy && npm run build
 ```
 
 ```bash
-sudo systemctl start menuland && curl -s https://YOUR-DOMAIN/api/health
+sudo systemctl start restokar && curl -s https://YOUR-DOMAIN/api/health
 ```
 
 To stamp the running build with its commit, export `GIT_COMMIT` before
@@ -409,35 +409,35 @@ Use this when a deploy made things worse and you want the previous version back.
 See what you are on and what came before:
 
 ```bash
-cd /srv/menuland && git log --oneline -5
+cd /srv/restokar && git log --oneline -5
 ```
 
 ```bash
-sudo systemctl stop menuland
+sudo systemctl stop restokar
 ```
 
 Go back one commit:
 
 ```bash
-cd /srv/menuland && git checkout HEAD~1
+cd /srv/restokar && git checkout HEAD~1
 ```
 
 Or to a specific commit from the list:
 
 ```bash
-cd /srv/menuland && git checkout COMMIT-HASH
+cd /srv/restokar && git checkout COMMIT-HASH
 ```
 
 Rebuild and start:
 
 ```bash
-cd /srv/menuland && npm ci && npm run build && sudo systemctl start menuland
+cd /srv/restokar && npm ci && npm run build && sudo systemctl start restokar
 ```
 
 To return to the latest version afterwards:
 
 ```bash
-cd /srv/menuland && git checkout main
+cd /srv/restokar && git checkout main
 ```
 
 ### If you deploy from tarballs

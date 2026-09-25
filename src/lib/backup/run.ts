@@ -75,7 +75,7 @@ function summarise(backup: BackupResult): string {
   ).toFixed(1);
 
   return [
-    `Menuland customer-data backup`,
+    `Restokar customer-data backup`,
     ``,
     `Taken:    ${backup.startedAt.toISOString()}`,
     `Duration: ${seconds}s`,
@@ -106,7 +106,7 @@ async function pruneLocalBackups(keep: number): Promise<number> {
   }
 
   const archives = names
-    .filter((name) => name.startsWith("menuland-backup-") && name.endsWith(".tar.gz"))
+    .filter((name) => name.startsWith("restokar-backup-") && name.endsWith(".tar.gz"))
     // The timestamp is embedded in the name and ISO-ordered, so a lexical sort
     // is a chronological one — no need to stat every file.
     .sort()
@@ -155,6 +155,24 @@ async function runMaintenance(): Promise<string> {
     notes.push(`expired sessions pruned: ${count}`);
   } catch (error) {
     notes.push(`session prune failed: ${(error as Error).message}`);
+  }
+
+  // An SMS broadcast is priced with its recipient list frozen onto the row, so
+  // a checkout the venue walked away from is a copy of their consenting
+  // customers' numbers that nobody paid for and nobody will send. A gateway
+  // authority lives for minutes; a day is far past any payment still able to
+  // settle. Deleted rather than cancelled: no money moved, so there is nothing
+  // to keep a record of, and the numbers are exactly what should not linger.
+  try {
+    const { count } = await prisma.smsBroadcast.deleteMany({
+      where: {
+        status: "PENDING_PAYMENT",
+        createdAt: { lt: new Date(now.getTime() - 24 * 3_600_000) },
+      },
+    });
+    notes.push(`abandoned SMS broadcasts pruned: ${count}`);
+  } catch (error) {
+    notes.push(`SMS broadcast prune failed: ${(error as Error).message}`);
   }
 
   return notes.join("; ");
@@ -236,7 +254,7 @@ export async function runBackup(): Promise<BackupRunOutcome> {
     try {
       await sendMail({
         to,
-        subject: `[Menuland] Backup too large to attach — ${backup.fileName}`,
+        subject: `[Restokar] Backup too large to attach — ${backup.fileName}`,
         text: `${message}\n\n${summarise(backup)}`,
       });
     } catch (error) {
@@ -255,7 +273,7 @@ export async function runBackup(): Promise<BackupRunOutcome> {
   try {
     const messageId = await sendMail({
       to,
-      subject: `[Menuland] Customer data backup — ${backup.startedAt
+      subject: `[Restokar] Customer data backup — ${backup.startedAt
         .toISOString()
         .slice(0, 16)
         .replace("T", " ")}`,

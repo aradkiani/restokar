@@ -22,7 +22,7 @@
   which pairs with 15:00 — both outside a restaurant's busiest hours.
 
 .PARAMETER TaskName
-  Scheduled task name. Default "Menuland Backup".
+  Scheduled task name. Default "Restokar Backup".
 
 .PARAMETER Remove
   Unregister the task instead of creating it.
@@ -37,7 +37,7 @@
 param(
   [string]$ProjectPath = (Split-Path -Parent $PSScriptRoot),
   [string]$At = "03:00",
-  [string]$TaskName = "Menuland Backup",
+  [string]$TaskName = "Restokar Backup",
   [switch]$Remove
 )
 
@@ -106,7 +106,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 
 Register-ScheduledTask -TaskName $TaskName `
   -Action $action -Trigger $trigger -Settings $settings `
-  -Description "Backs up Menuland customer data every 12 hours and emails it to the address set in the admin console." | Out-Null
+  -Description "Backs up Restokar customer data every 12 hours and emails it to the address set in the admin console." | Out-Null
 
 Write-Output "Registered '$TaskName'."
 Write-Output "  Project: $ProjectPath"

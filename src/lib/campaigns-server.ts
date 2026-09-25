@@ -16,6 +16,7 @@ import {
   type CampaignStatus,
 } from "./campaigns";
 import type { CustomerSegment } from "./customers";
+import { countedOrderSql } from "./order-status";
 
 /**
  * The database half of campaigns. The rules are in `campaigns.ts`, which stays
@@ -32,9 +33,10 @@ import type { CustomerSegment } from "./customers";
  *     `resolveSegment` — decides who is loyal or at risk. Restating those
  *     thresholds in SQL would give the customer book and the campaign screen
  *     two answers that drift apart.
- *   * **Nothing is ever sent.** No module reachable from here has a delivery
- *     path, and `campaigns.test.ts` asserts the source text of every campaign
- *     module against that.
+ *   * **Nothing is ever sent from here.** No module reachable from here has a
+ *     delivery path, and `campaigns.test.ts` asserts the source text of every
+ *     campaign module against that. A campaign's audience can be *bought* as a
+ *     promotional SMS — see `sms-broadcast.ts` — which staff send by hand.
  *
  * ### Dynamic audience, snapshotted size
  *
@@ -53,7 +55,7 @@ import type { CustomerSegment } from "./customers";
  * Orders that count, matching `COUNTED` in `customers-server.ts` and `analytics.ts`.
  * A cancelled order is not a sale, and a refund is recorded on a cancelled one.
  */
-const COUNTED_STATUS = Prisma.sql`o."status" <> 'CANCELED'`;
+const COUNTED_STATUS = countedOrderSql("o");
 
 // -------------------------------- audience ---------------------------------
 
@@ -96,7 +98,7 @@ function contextFilter(context: CampaignContext): Prisma.Sql {
         JOIN "OrderItem" oi ON oi."orderId" = o2."id"
         JOIN "Product" p   ON p."id" = oi."productId"
        WHERE o2."customerId" = c."id"
-         AND o2."status" <> 'CANCELED'
+         AND ${countedOrderSql("o2")}
          AND ${Prisma.join(predicates, " AND ")}
     )`;
 }
@@ -104,10 +106,15 @@ function contextFilter(context: CampaignContext): Prisma.Sql {
 /**
  * The four fields the segment rules need, per customer, computed by the database.
  *
- * **No identity leaves this query.** `phone` is selected to answer "is there a
- * contact method at all" and is reduced to a boolean by `summariseAudience`
- * before anything else sees it; no name, no id and no number reaches a caller,
- * a response body or a log line.
+ * **No identity leaves this module to a venue.** For a campaign, `phone` only
+ * answers "is there a contact method at all" and is reduced to a boolean by
+ * `summariseAudience`; every campaign endpoint returns counts.
+ *
+ * The one other caller is `sms-broadcast-server.ts`, which freezes the numbers
+ * of consenting guests onto a paid broadcast. Those numbers go to platform
+ * staff, who send the message — the venue itself still only ever sees how many.
+ * Exported for that reason, so a broadcast and a campaign aimed at the same
+ * segment are guaranteed to mean the same people.
  *
  * A `LEFT JOIN` so a customer with no counted orders comes back with a count of
  * zero rather than disappearing — they are a real `new` customer, and dropping
@@ -119,7 +126,7 @@ function contextFilter(context: CampaignContext): Prisma.Sql {
  * not something an index can answer, and pushing the thresholds into SQL would
  * put the segment rules in two places.
  */
-async function audienceCandidates(
+export async function audienceCandidates(
   restaurantId: string,
   context: CampaignContext,
 ): Promise<AudienceCandidate[]> {

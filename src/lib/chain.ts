@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./prisma";
 import { netRevenue } from "./analytics";
 import { DAY_MS } from "./constants";
+import { COUNTED_ORDER } from "./order-status";
 
 /**
  * Chain-wide reporting: one row per site, for the owner of a multi-branch venue.
@@ -76,7 +77,7 @@ export async function getChainSummary(
     prisma.order.findMany({
       where: {
         restaurantId: { in: ids },
-        status: { not: "CANCELED" },
+        ...COUNTED_ORDER,
         placedAt: { gte: since },
       },
       select: { restaurantId: true, total: true, tax: true, tip: true },

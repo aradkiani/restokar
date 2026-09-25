@@ -9,7 +9,7 @@ import { resolveAvailability } from "./availability";
 import { isFeaturedNow } from "./featured";
 import { zonedMoment } from "./time";
 import { getTemplateMeta } from "@/templates/registry";
-import type { MenuData } from "@/templates/types";
+import type { MenuData, MenuPairStat } from "@/templates/types";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -48,6 +48,43 @@ const menuInclude = {
     where: { isActive: true },
     orderBy: [{ sourceProductId: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
     select: { sourceProductId: true, recommendedProductId: true },
+  },
+  /*
+    The venue's bundle contents, in one query, for the same reason.
+
+    A meal deal is an ordinary product that happens to list components, so its
+    price, photo and availability already arrive with the rest of the menu —
+    these rows only say what is inside it. Ordered by bundle and position so the
+    arrays built below keep the owner's arrangement without a second sort.
+  */
+  bundleItems: {
+    orderBy: [{ bundleProductId: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+    select: { bundleProductId: true, componentProductId: true, quantity: true },
+  },
+  /*
+    The co-occurrence aggregate — four integers per pair, already counted.
+
+    Read, never computed, on this path. The counting pass is a scan of order
+    history that belongs nowhere near a menu render; `co-occurrence-server.ts`
+    does it on an authenticated dashboard visit and stores the result, and this
+    is one indexed read of the outcome.
+
+    Capped at a few hundred rows because a venue's qualifying pairs are few —
+    the thresholds in `co-occurrence.ts` discard most of the graph — and because
+    an unbounded include on the hottest page in the product is how a payload
+    quietly triples.
+  */
+  pairStats: {
+    orderBy: [{ pairCount: "desc" }, { sourceProductId: "asc" }],
+    take: 400,
+    select: {
+      sourceProductId: true,
+      targetProductId: true,
+      pairCount: true,
+      sourceSupport: true,
+      targetSupport: true,
+      totalOrders: true,
+    },
   },
   categories: {
     where: { isActive: true },
@@ -206,6 +243,47 @@ function toPublicMenu(restaurant: RestaurantWithMenu): PublicMenu {
     else recommendationsBySource.set(edge.sourceProductId, [edge.recommendedProductId]);
   }
 
+  /*
+    Bundle contents, keyed by the deal.
+
+    Both ends checked against what actually rendered, exactly like the edges
+    above. A component the owner hid is not on the page to resolve, and a bundle
+    is only honest if the guest can see what is in it — so a deal whose contents
+    are partly invisible keeps the components that rendered and loses the rest,
+    which `isBundleOrderable` then treats as it treats any missing dish.
+  */
+  const bundleComponentsByBundle = new Map<
+    string,
+    { productId: string; quantity: number }[]
+  >();
+  for (const item of restaurant.bundleItems) {
+    if (!visibleProductIds.has(item.bundleProductId)) continue;
+    if (!visibleProductIds.has(item.componentProductId)) continue;
+
+    const entry = { productId: item.componentProductId, quantity: item.quantity };
+    const existing = bundleComponentsByBundle.get(item.bundleProductId);
+    if (existing) existing.push(entry);
+    else bundleComponentsByBundle.set(item.bundleProductId, [entry]);
+  }
+
+  /*
+    Co-occurrence, keyed by the dish it is a partner of.
+
+    The raw counts travel rather than a finished ranking, so the thresholds stay
+    in one place and the client applies exactly the rules the dashboard does.
+    Four integers per pair — nothing here identifies a guest, which is the whole
+    reason this feature needs no profiling to work.
+  */
+  const pairStatsBySource = new Map<string, MenuPairStat[]>();
+  for (const stat of restaurant.pairStats) {
+    if (!visibleProductIds.has(stat.sourceProductId)) continue;
+    if (!visibleProductIds.has(stat.targetProductId)) continue;
+
+    const existing = pairStatsBySource.get(stat.sourceProductId);
+    if (existing) existing.push(stat);
+    else pairStatsBySource.set(stat.sourceProductId, [stat]);
+  }
+
   return {
     restaurantId: restaurant.id,
     templateId: templateMeta.id,
@@ -296,6 +374,8 @@ function toPublicMenu(restaurant: RestaurantWithMenu): PublicMenu {
           prepMinutes: product.prepMinutes,
           categoryId: product.categoryId,
           recommendedProductIds: recommendationsBySource.get(product.id) ?? [],
+          bundleComponents: bundleComponentsByBundle.get(product.id) ?? [],
+          frequentlyWith: pairStatsBySource.get(product.id) ?? [],
           pairingNote: product.pairingNote,
           pairingNoteEn: product.pairingNoteEn,
           infoSections: product.infoSections.map((section) => ({
@@ -316,6 +396,7 @@ function toPublicMenu(restaurant: RestaurantWithMenu): PublicMenu {
             isRequired: group.isRequired,
             minSelect: group.minSelect,
             maxSelect: group.maxSelect,
+            isUpgrade: group.isUpgrade,
             choices: group.choices.map((choice) => ({
               id: choice.id,
               name: choice.name,

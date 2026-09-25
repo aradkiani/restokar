@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./prisma";
 import { normalisePhone } from "./phone";
+import { COUNTED_ORDER, countedOrderSql } from "./order-status";
 import {
   CUSTOMER_SEGMENTS,
   DEFAULT_PAGE_SIZE,
@@ -9,6 +10,18 @@ import {
   type CustomerRecord,
   type CustomerSegment,
 } from "./customers";
+import {
+  detectOpportunities,
+  explainSegment,
+  highValueThreshold,
+  resolveValueTier,
+  summariseRetention,
+  typicalReturnInterval,
+  type RetentionExplanation,
+  type RetentionOpportunity,
+  type RetentionSummary,
+  type ValueTier,
+} from "./retention";
 import type { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -36,7 +49,7 @@ import type { Prisma } from "@/generated/prisma/client";
  * real sales in progress, and excluding them would make today's regulars
  * disappear until service ended.
  */
-const COUNTED = { status: { not: "CANCELED" } } as const satisfies Prisma.OrderWhereInput;
+const COUNTED = COUNTED_ORDER;
 
 /**
  * Finds or creates the customer record an order belongs to.
@@ -86,7 +99,30 @@ interface Aggregate {
   totalRevenue: number;
   firstOrderAt: Date | null;
   lastOrderAt: Date | null;
+  /**
+   * When this guest ordered, newest first, capped.
+   *
+   * Needed to know their rhythm — `typicalReturnInterval` takes the median gap
+   * between orders, and a median cannot be computed from `MIN`/`MAX` alone.
+   *
+   * Capped at `INTERVAL_SAMPLE` because a median is a median: the twelve most
+   * recent visits describe how a guest behaves *now*, while three years of
+   * history would let a habit they abandoned last spring outvote the one they
+   * have today. It also bounds the array a venue's busiest regular can produce.
+   *
+   * `array_agg` keeps this in the same single pass as the totals, so adding it
+   * costs no extra query.
+   */
+  orderDates: Date[];
 }
+
+/**
+ * How many recent orders decide a guest's rhythm. See `orderDates`.
+ *
+ * Twelve: enough gaps for a median to be stable, few enough that it reflects
+ * current behaviour rather than the whole relationship.
+ */
+const INTERVAL_SAMPLE = 12;
 
 /**
  * Per-customer totals, computed by the database.
@@ -112,17 +148,23 @@ async function aggregateFor(
       totalRevenue: bigint | null;
       firstOrderAt: Date | null;
       lastOrderAt: Date | null;
+      orderDates: Date[] | null;
     }[]
   >`
     SELECT o."customerId",
            COUNT(*)                                   AS "orderCount",
            SUM(o."total" - o."tax" - o."tip")         AS "totalRevenue",
            MIN(o."placedAt")                          AS "firstOrderAt",
-           MAX(o."placedAt")                          AS "lastOrderAt"
+           MAX(o."placedAt")                          AS "lastOrderAt",
+           -- The most recent visits, for the median gap between them. Ordered
+           -- and sliced inside the aggregate so a regular with a thousand
+           -- orders still returns twelve dates rather than a thousand.
+           (array_agg(o."placedAt" ORDER BY o."placedAt" DESC))[1:${INTERVAL_SAMPLE}]
+                                                      AS "orderDates"
       FROM "Order" o
       JOIN "Customer" c ON c."id" = o."customerId"
      WHERE o."customerId" = ANY(${customerIds as string[]})
-       AND o."status" <> 'CANCELED'
+       AND ${countedOrderSql("o")}
        -- Scoped through the customer's own tenant as well as the id list, so a
        -- guessed id from another venue aggregates to nothing rather than to
        -- somebody else's orders.
@@ -138,6 +180,7 @@ async function aggregateFor(
         totalRevenue: Number(row.totalRevenue ?? 0),
         firstOrderAt: row.firstOrderAt,
         lastOrderAt: row.lastOrderAt,
+        orderDates: row.orderDates ?? [],
       },
     ]),
   );
@@ -148,12 +191,41 @@ const EMPTY: Aggregate = {
   totalRevenue: 0,
   firstOrderAt: null,
   lastOrderAt: null,
+  orderDates: [],
 };
+
+/**
+ * One customer row plus its totals, turned into the derived record.
+ *
+ * The one place the rhythm is computed, so the customer book, the segment
+ * counts and the detail view cannot disagree about how often a guest visits.
+ * `typicalReturnInterval` applies its own low-data guard and answers null below
+ * three orders, which `resolveSegment` then reads as "use the fixed threshold".
+ */
+function deriveFrom(
+  row: { id: string; phone: string; name: string | null; marketingConsent: boolean },
+  aggregate: Aggregate,
+  now: Date,
+): CustomerRecord {
+  return deriveCustomer(
+    {
+      ...row,
+      orderCount: aggregate.orderCount,
+      totalRevenue: aggregate.totalRevenue,
+      firstOrderAt: aggregate.firstOrderAt,
+      lastOrderAt: aggregate.lastOrderAt,
+      typicalInterval: typicalReturnInterval(aggregate.orderDates),
+    },
+    now,
+  );
+}
 
 // -------------------------------- reading ----------------------------------
 
 export interface CustomerListQuery {
   segment?: CustomerSegment;
+  /** Spending band relative to this venue's own book. */
+  valueTier?: ValueTier;
   /** Matches the name or the phone; already trimmed by the schema. */
   search?: string;
   minOrders?: number;
@@ -161,9 +233,14 @@ export interface CustomerListQuery {
   pageSize?: number;
 }
 
+/** A customer as the list returns one: the derived record plus its value band. */
+export interface CustomerListRow extends CustomerRecord {
+  valueTier: ValueTier;
+}
+
 export interface CustomerListResult {
-  customers: CustomerRecord[];
-  /** Rows matching the query before segment filtering and paging. */
+  customers: CustomerListRow[];
+  /** Rows the filter actually matched — the denominator the pager counts from. */
   total: number;
   page: number;
   pageSize: number;
@@ -173,13 +250,26 @@ export interface CustomerListResult {
 /**
  * One page of a venue's customers, with their derived metrics.
  *
- * Segment is filtered *after* aggregation because it is a function of recency
- * and order count rather than a stored column — there is nothing to put in a
- * `WHERE`. Rather than aggregate the whole book to filter it, the page is read
- * first and the segment applied to it, which keeps the query bounded; the
- * consequence is that a segment-filtered page can be shorter than its page
- * size, and the count above it is the unfiltered total. Stated plainly in the
- * UI rather than papered over.
+ * ### Why the filter is applied before the page, not after
+ *
+ * A segment is a function of recency and order count rather than a stored
+ * column, so there is nothing to put in a `WHERE`. This function used to read a
+ * page first and filter it afterwards, which kept the query small but made the
+ * result wrong in a way an owner could see: asking for "at risk" returned
+ * however many of *that page's* twenty-five customers happened to qualify,
+ * the count above the table was the unfiltered total, and page two showed a
+ * different arbitrary subset. Filtering to four people and calling it "۱۲۰
+ * customers" is not a caveat, it is a wrong answer.
+ *
+ * The book is therefore derived in full and then paged, which is what
+ * `getSegmentCounts` has always done one call away — the two now agree by
+ * construction instead of by coincidence, and `total` finally means the number
+ * of rows the filter actually matched.
+ *
+ * This is bounded work: it is one venue's own customer book, not the platform's,
+ * and two queries regardless of size. A venue with a very large book pays for
+ * the aggregate once per request on an owner-only screen, which is the same
+ * trade the segment tiles above the table already make.
  */
 export async function listCustomers(
   restaurantId: string,
@@ -202,64 +292,84 @@ export async function listCustomers(
       : {}),
   };
 
-  const [total, rows] = await Promise.all([
-    prisma.customer.count({ where }),
-    prisma.customer.findMany({
-      where,
-      // Most recently seen first: an owner opening this screen is looking at
-      // who is coming in, not who signed up first.
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      select: {
-        id: true,
-        phone: true,
-        name: true,
-        marketingConsent: true,
-      },
-    }),
-  ]);
+  const rows = await prisma.customer.findMany({
+    where,
+    // Most recently seen first: an owner opening this screen is looking at
+    // who is coming in, not who signed up first.
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    select: { id: true, phone: true, name: true, marketingConsent: true },
+  });
 
   const aggregates = await aggregateFor(
     restaurantId,
     rows.map((row) => row.id),
   );
 
-  let customers = rows.map((row) =>
-    deriveCustomer({ ...row, ...(aggregates.get(row.id) ?? EMPTY) }, now),
+  const derived = rows.map((row) =>
+    deriveFrom(row, aggregates.get(row.id) ?? EMPTY, now),
   );
 
-  if (query.segment) {
-    customers = customers.filter((customer) => customer.segment === query.segment);
-  }
-  if (query.minOrders !== undefined) {
-    customers = customers.filter((customer) => customer.orderCount >= query.minOrders!);
-  }
+  // The value tier is relative to this venue's own book, so the benchmark comes
+  // from every customer in it — not from the page, which would rank a handful of
+  // people against each other and call the top two VIPs.
+  const threshold = highValueThreshold(derived.map((c) => c.totalRevenue));
+
+  const matched = derived.filter((customer) => {
+    if (query.segment && customer.segment !== query.segment) return false;
+    if (query.valueTier) {
+      if (resolveValueTier(customer, threshold) !== query.valueTier) return false;
+    }
+    if (query.minOrders !== undefined && customer.orderCount < query.minOrders) {
+      return false;
+    }
+    return true;
+  });
+
+  const start = (page - 1) * pageSize;
 
   return {
-    customers,
-    total,
+    customers: matched.slice(start, start + pageSize).map((customer) => ({
+      ...customer,
+      valueTier: resolveValueTier(customer, threshold),
+    })),
+    total: matched.length,
     page,
     pageSize,
-    pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    pageCount: Math.max(1, Math.ceil(matched.length / pageSize)),
   };
 }
 
 export type SegmentCounts = Record<CustomerSegment, number> & { total: number };
 
 /**
- * How many customers sit in each segment.
+ * Everything the retention screen shows, from one pass over the book.
  *
- * Aggregates every customer of the venue in two queries — one for the ids, one
- * for their order totals — then applies the segment rules in JS, because they
- * depend on "days since" which no index can answer. At the scale this reports
- * on (a venue's own customer book, not the platform's) that is a few thousand
- * rows at most, and it is the only place that reads them all.
+ * Segment counts, the summary figures and the opportunity list all read the
+ * same derived customers. Computing them separately would mean three passes
+ * that could disagree — and "۱۸ at risk" in a tile beside "۱۲ at risk" in an
+ * action card is the kind of contradiction that makes an owner stop trusting
+ * the screen.
  */
-export async function getSegmentCounts(
+export interface RetentionOverview {
+  segments: SegmentCounts;
+  summary: RetentionSummary;
+  opportunities: RetentionOpportunity[];
+  /** Spending at which a customer counts as high value here; null if unknowable. */
+  highValueFrom: number | null;
+}
+
+/**
+ * The venue's retention picture.
+ *
+ * Two queries — the customer rows and their order totals — then every figure is
+ * derived in one pass. At the scale this reports on (a venue's own book, a few
+ * thousand rows at most) that is the right shape; it is also the only place
+ * that reads them all, and it is behind `requireOwner`.
+ */
+export async function getRetentionOverview(
   restaurantId: string,
   now: Date = new Date(),
-): Promise<SegmentCounts> {
+): Promise<RetentionOverview> {
   const rows = await prisma.customer.findMany({
     where: { restaurantId },
     select: { id: true, phone: true, name: true, marketingConsent: true },
@@ -270,20 +380,63 @@ export async function getSegmentCounts(
     rows.map((row) => row.id),
   );
 
-  const counts = Object.fromEntries(
+  const derived = rows.map((row) =>
+    deriveFrom(row, aggregates.get(row.id) ?? EMPTY, now),
+  );
+
+  const segments = Object.fromEntries(
     CUSTOMER_SEGMENTS.map((segment) => [segment, 0]),
   ) as SegmentCounts;
-  counts.total = rows.length;
+  segments.total = derived.length;
+  for (const customer of derived) segments[customer.segment] += 1;
 
-  for (const row of rows) {
-    const derived = deriveCustomer({ ...row, ...(aggregates.get(row.id) ?? EMPTY) }, now);
-    counts[derived.segment] += 1;
-  }
+  const highValueFrom = highValueThreshold(derived.map((c) => c.totalRevenue));
 
-  return counts;
+  return {
+    segments,
+    summary: summariseRetention(derived),
+    opportunities: detectOpportunities(
+      derived.map((customer) => ({
+        segment: customer.segment,
+        valueTier: resolveValueTier(customer, highValueFrom),
+        orderCount: customer.orderCount,
+        totalRevenue: customer.totalRevenue,
+        idleDays: customer.daysSinceLastOrder,
+      })),
+    ),
+    highValueFrom,
+  };
+}
+
+/**
+ * How many customers sit in each segment.
+ *
+ * Now one field of `getRetentionOverview` rather than its own pass over the
+ * book. It used to be a second copy of exactly that walk — same two queries,
+ * same derivation, counting only the segments — and keeping both would have
+ * meant two places that could disagree about how many customers are at risk.
+ *
+ * Kept as a named function because two callers ask only this question, and
+ * `overview.segments` at each of them reads worse than the question itself.
+ */
+export async function getSegmentCounts(
+  restaurantId: string,
+  now: Date = new Date(),
+): Promise<SegmentCounts> {
+  return (await getRetentionOverview(restaurantId, now)).segments;
 }
 
 export interface CustomerDetail extends CustomerRecord {
+  /** Their spending band relative to this venue's own book. */
+  valueTier: ValueTier;
+  /**
+   * Why they are in the group they are in, with the numbers behind it.
+   *
+   * Carried so the detail view can state the reasoning — «هر ۱۶ روز سفارش
+   * می‌داد، ۳۷ روز است خبری نیست» — rather than printing a label the owner has
+   * to take on trust.
+   */
+  explanation: RetentionExplanation;
   recentOrders: {
     id: string;
     orderNumber: number;
@@ -318,7 +471,7 @@ export async function getCustomer(
 
   if (!customer) return null;
 
-  const [aggregates, recentOrders] = await Promise.all([
+  const [aggregates, recentOrders, bookRevenues] = await Promise.all([
     aggregateFor(restaurantId, [customer.id]),
     prisma.order.findMany({
       where: { customerId: customer.id, ...COUNTED },
@@ -333,10 +486,37 @@ export async function getCustomer(
         restaurant: { select: { name: true } },
       },
     }),
+    /*
+      What every other customer of this venue has spent.
+
+      Needed because "high value" is relative to the book — there is no amount
+      of Toman that means the same thing to a tea house and a steakhouse — so
+      one customer's tier cannot be decided from that customer alone. Grouped in
+      SQL and returning one integer per customer, not their orders.
+    */
+    prisma.$queryRaw<{ revenue: bigint | null }[]>`
+      SELECT SUM(o."total" - o."tax" - o."tip") AS "revenue"
+        FROM "Order" o
+        JOIN "Customer" c ON c."id" = o."customerId"
+       WHERE c."restaurantId" = ${restaurantId}
+         AND ${countedOrderSql("o")}
+       GROUP BY o."customerId"
+    `,
   ]);
 
+  const record = deriveFrom(customer, aggregates.get(customer.id) ?? EMPTY, now);
+
+  const threshold = highValueThreshold(bookRevenues.map((r) => Number(r.revenue ?? 0)));
+
   return {
-    ...deriveCustomer({ ...customer, ...(aggregates.get(customer.id) ?? EMPTY) }, now),
+    ...record,
+    valueTier: resolveValueTier(record, threshold),
+    explanation: explainSegment({
+      segment: record.segment,
+      orderCount: record.orderCount,
+      idleDays: record.daysSinceLastOrder,
+      typicalInterval: record.typicalInterval,
+    }),
     recentOrders: recentOrders.map((order) => ({
       id: order.id,
       orderNumber: order.orderNumber,
