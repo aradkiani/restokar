@@ -15,7 +15,7 @@ import { MAX_BROADCAST_TEXT_LENGTH, SMS_AUDIENCES } from "./sms-broadcast";
 import { MAX_BUNDLE_COMPONENTS } from "./bundles";
 import { CUSTOMER_SEGMENTS, MAX_PAGE_SIZE } from "./customers";
 import { VALUE_TIERS } from "./retention";
-import { EXPORT_DATASETS } from "./export/dataset-names";
+import { EXPORT_DATASETS, EXPORT_FORMATS } from "./export/dataset-names";
 import { CAMPAIGN_STATUSES, MAX_CAMPAIGN_PAGE_SIZE, scheduleIssue } from "./campaigns";
 import { MINUTES_PER_DAY, instantFromZonedWallClock } from "./time";
 
@@ -566,6 +566,8 @@ export const ProductPatchSchema = ProductFields.omit({
 export const ExportQuerySchema = z
   .object({
     dataset: z.enum(EXPORT_DATASETS),
+    /** Absent means `xlsx`, the file an owner opens in Excel. */
+    format: z.enum(EXPORT_FORMATS).optional(),
     days: z.coerce.number().int().min(1).max(366).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),

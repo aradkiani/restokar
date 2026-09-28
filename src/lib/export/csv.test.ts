@@ -136,10 +136,44 @@ describe("toCsv", () => {
   });
 });
 
+describe("persian text and column kinds", () => {
+  /** «كيك» and «کیک» look alike and are different strings to a filter. */
+  it("writes Persian letters in place of their Arabic look-alikes", () => {
+    const csv = toCsv(["دسته"], [["كيك شكلاتي"]]);
+
+    expect(rowsOf(csv)[1]).toBe("کیک شکلاتی");
+  });
+
+  it("normalises the header row too", () => {
+    expect(rowsOf(toCsv(["مشتري"], []))[0]).toBe("مشتری");
+  });
+
+  it("keeps a phone column's leading zero behind the text guard", () => {
+    const csv = toCsv(["نام", "تلفن"], [["سارا", "09121234567"]], ["text", "phone"]);
+
+    expect(rowsOf(csv)[1]).toBe("سارا,'09121234567");
+  });
+
+  it("writes a typed cell's value, not the object", () => {
+    const csv = toCsv(
+      ["عنوان", "مبلغ"],
+      [["حاشیه سود", { value: 0.25, kind: "percent" }]],
+    );
+
+    expect(rowsOf(csv)[1]).toBe("حاشیه سود,0.25");
+  });
+});
+
 describe("exportFilename", () => {
   it("is predictable and sortable", () => {
-    expect(exportFilename("sales", "burger-khaneh", "2026-09-15")).toBe(
+    expect(exportFilename("sales", "burger-khaneh", "2026-09-15", "csv")).toBe(
       "restokar-burger-khaneh-sales-2026-09-15.csv",
+    );
+  });
+
+  it("carries the format's extension", () => {
+    expect(exportFilename("sales", "burger-khaneh", "2026-09-15", "xlsx")).toBe(
+      "restokar-burger-khaneh-sales-2026-09-15.xlsx",
     );
   });
 
@@ -148,14 +182,14 @@ describe("exportFilename", () => {
    * modern OS but not every download path, email gateway or Windows share.
    */
   it("slugifies a non-latin venue name out of the filename", () => {
-    const name = exportFilename("sales", "کافه-نبش", "2026-09-15");
+    const name = exportFilename("sales", "کافه-نبش", "2026-09-15", "csv");
 
     expect(name).toMatch(/^[\x20-\x7e]+$/);
     expect(name).toBe("restokar-venue-sales-2026-09-15.csv");
   });
 
   it("strips anything a filesystem would object to", () => {
-    expect(exportFilename("sales", "a/b\\c:d*e", "2026-09-15")).toBe(
+    expect(exportFilename("sales", "a/b\\c:d*e", "2026-09-15", "csv")).toBe(
       "restokar-a-b-c-d-e-sales-2026-09-15.csv",
     );
   });

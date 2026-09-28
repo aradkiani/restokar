@@ -88,7 +88,7 @@ export function ExportButton({
       */
       const disposition = response.headers.get("content-disposition") ?? "";
       const filename =
-        /filename="([^"]+)"/.exec(disposition)?.[1] ?? `restokar-${dataset}.csv`;
+        /filename="([^"]+)"/.exec(disposition)?.[1] ?? `restokar-${dataset}.xlsx`;
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -116,7 +116,7 @@ export function ExportButton({
     CSV» told an owner nothing about which one gave them product margins and
     which gave them order lines — at 320px they are three identical buttons in a
     row. The dataset name is the useful half; the download icon and the
-    accessible name carry the "export CSV" part.
+    accessible name carry the "export to Excel" part.
   */
   const label = t.exports.datasets[dataset];
 

@@ -24,6 +24,16 @@ export const EXPORT_DATASETS = [
 export type ExportDataset = (typeof EXPORT_DATASETS)[number];
 
 /**
+ * File formats, the first being the default.
+ *
+ * `xlsx` is what an owner downloads: right to left, styled, and immune to the
+ * delimiter a Persian-format Windows expects. `csv` stays for import tools.
+ */
+export const EXPORT_FORMATS = ["xlsx", "csv"] as const;
+
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/**
  * Which datasets carry personal data.
  *
  * Only `customers` does — it contains guests' phone numbers. The route reads

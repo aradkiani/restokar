@@ -1370,7 +1370,19 @@ export const en: Dictionary = {
     tipLabel: "Guest tip",
   },
   exports: {
-    action: "Export CSV",
+    action: "Export to Excel",
+    values: {
+      paymentMethod: {
+        CASH_ON_SITE: "Pay on site",
+        ONLINE: "Online payment",
+      },
+      paymentStatus: {
+        PENDING: "Awaiting payment",
+        PAID: "Paid",
+        FAILED: "Failed",
+        REFUNDED: "Refunded",
+      },
+    },
     downloading: "Preparing…",
     empty: "There is no data to export for this period.",
     failed: "The export could not be prepared.",

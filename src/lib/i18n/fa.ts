@@ -1532,7 +1532,20 @@ export const fa = {
    * only place a unit can live without breaking arithmetic.
    */
   exports: {
-    action: "خروجی CSV",
+    action: "خروجی اکسل",
+    /** Stored codes, as they read inside an exported file. */
+    values: {
+      paymentMethod: {
+        CASH_ON_SITE: "پرداخت در محل",
+        ONLINE: "پرداخت آنلاین",
+      },
+      paymentStatus: {
+        PENDING: "در انتظار پرداخت",
+        PAID: "پرداخت‌شده",
+        FAILED: "ناموفق",
+        REFUNDED: "بازگشت داده‌شده",
+      },
+    },
     downloading: "در حال آماده‌سازی…",
     /** Shown when the chosen period produced no rows at all. */
     empty: "در این بازه اطلاعاتی برای خروجی وجود ندارد.",

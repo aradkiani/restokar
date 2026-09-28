@@ -14,7 +14,7 @@ import { getTableReport } from "../tables-server";
 import { listCustomers } from "../customers-server";
 import { fromMilli, isLowStock } from "../inventory";
 import { zonedParts } from "../time";
-import type { CsvRow } from "./csv";
+import type { ColumnKind, ExportColumn, ExportRow } from "./cells";
 import { type ExportDataset } from "./dataset-names";
 import type { Dictionary } from "../i18n/fa";
 
@@ -55,9 +55,29 @@ export { EXPORT_DATASETS, SENSITIVE_DATASETS, type ExportDataset } from "./datas
  * last hours of every Tehran evening under the following day.
  */
 
+/**
+ * A dataset's columns — each with the *kind* of value it holds — and its rows.
+ *
+ * The kind is what lets the Excel writer format a Toman figure with thousands
+ * separators and a share as a percentage without guessing from the header.
+ */
 export interface ExportResult {
-  headers: string[];
-  rows: CsvRow[];
+  columns: ExportColumn[];
+  rows: ExportRow[];
+}
+
+function col(header: string, kind: ColumnKind): ExportColumn {
+  return { header, kind };
+}
+
+/**
+ * «بله» / «خیر» rather than `TRUE`/`FALSE` or `1`/`0`.
+ *
+ * A boolean cell renders in Excel's own language, which on most machines is
+ * English — the one English word in an otherwise Persian file.
+ */
+function yesNo(value: boolean, t: Dictionary): string {
+  return value ? t.common.yes : t.common.no;
 }
 
 /** `2026-09-15` in the venue's own timezone, never the host's. */
@@ -100,7 +120,14 @@ async function salesDataset(
   const e = t.exports.columns;
 
   return {
-    headers: [e.date, e.revenue, e.cost, e.grossProfit, e.orders, e.averageOrderValue],
+    columns: [
+      col(e.date, "date"),
+      col(e.revenue, "money"),
+      col(e.cost, "money"),
+      col(e.grossProfit, "money"),
+      col(e.orders, "integer"),
+      col(e.averageOrderValue, "money"),
+    ],
     rows: summary.series.map((point) => [
       point.date,
       point.revenue,
@@ -147,24 +174,25 @@ async function ordersDataset(
   });
 
   const e = t.exports.columns;
+  const v = t.exports.values;
 
   return {
-    headers: [
-      e.orderNumber,
-      e.date,
-      e.time,
-      e.branch,
-      e.table,
-      e.status,
-      e.paymentMethod,
-      e.paymentStatus,
-      e.subtotal,
-      e.discount,
-      e.serviceCharge,
-      e.tax,
-      e.tip,
-      e.total,
-      e.cost,
+    columns: [
+      col(e.orderNumber, "id"),
+      col(e.date, "date"),
+      col(e.time, "time"),
+      col(e.branch, "text"),
+      col(e.table, "id"),
+      col(e.status, "text"),
+      col(e.paymentMethod, "text"),
+      col(e.paymentStatus, "text"),
+      col(e.subtotal, "money"),
+      col(e.discount, "money"),
+      col(e.serviceCharge, "money"),
+      col(e.tax, "money"),
+      col(e.tip, "money"),
+      col(e.total, "money"),
+      col(e.cost, "money"),
     ],
     rows: orders.map((order) => [
       order.orderNumber,
@@ -172,9 +200,10 @@ async function ordersDataset(
       clockTime(order.placedAt),
       order.restaurant.name,
       order.tableNumber,
-      order.status,
-      order.paymentMethod,
-      order.paymentStatus,
+      // Labels in the reader's language, not the stored codes.
+      t.orderStatus[order.status],
+      v.paymentMethod[order.paymentMethod],
+      v.paymentStatus[order.paymentStatus],
       order.subtotal,
       order.discount,
       order.serviceCharge,
@@ -225,23 +254,23 @@ async function orderItemsDataset(
   const e = t.exports.columns;
 
   return {
-    headers: [
-      e.orderNumber,
-      e.date,
-      e.status,
-      e.product,
-      e.category,
-      e.options,
-      e.quantity,
-      e.unitPrice,
-      e.unitCost,
-      e.lineTotal,
-      e.note,
+    columns: [
+      col(e.orderNumber, "id"),
+      col(e.date, "date"),
+      col(e.status, "text"),
+      col(e.product, "text"),
+      col(e.category, "text"),
+      col(e.options, "text"),
+      col(e.quantity, "integer"),
+      col(e.unitPrice, "money"),
+      col(e.unitCost, "money"),
+      col(e.lineTotal, "money"),
+      col(e.note, "text"),
     ],
     rows: items.map((item) => [
       item.order.orderNumber,
       isoDay(item.order.placedAt),
-      item.order.status,
+      t.orderStatus[item.order.status],
       item.nameSnapshot,
       // Null once the product is deleted — the line keeps its own name, but the
       // category is only reachable through the product that no longer exists.
@@ -280,15 +309,15 @@ async function productsDataset(
   const e = t.exports.columns;
 
   return {
-    headers: [
-      e.product,
-      e.quantity,
-      e.revenue,
-      e.cost,
-      e.grossProfit,
-      e.margin,
-      e.revenueShare,
-      e.standing,
+    columns: [
+      col(e.product, "text"),
+      col(e.quantity, "integer"),
+      col(e.revenue, "money"),
+      col(e.cost, "money"),
+      col(e.grossProfit, "money"),
+      col(e.margin, "percent"),
+      col(e.revenueShare, "percent"),
+      col(e.standing, "text"),
     ],
     rows: rows.map((row) => [
       row.name,
@@ -317,7 +346,12 @@ async function categoriesDataset(
   const e = t.exports.columns;
 
   return {
-    headers: [e.category, e.quantity, e.revenue, e.revenueShare],
+    columns: [
+      col(e.category, "text"),
+      col(e.quantity, "integer"),
+      col(e.revenue, "money"),
+      col(e.revenueShare, "percent"),
+    ],
     rows: slices.map((slice) => [
       slice.name,
       slice.quantity,
@@ -349,31 +383,30 @@ async function customersDataset(
   const e = t.exports.columns;
 
   return {
-    headers: [
-      e.customerName,
-      e.phone,
-      e.firstOrder,
-      e.lastOrder,
-      e.daysSinceLastOrder,
-      e.orders,
-      e.totalSpend,
-      e.averageOrderValue,
-      e.typicalInterval,
-      e.segment,
-      e.valueTier,
-      e.marketingConsent,
-    ],
-    rows: customers.map((customer) => [
-      customer.name,
+    columns: [
+      col(e.customerName, "text"),
       /*
         The phone as text, not a number.
 
         `09121234567` parsed as a number loses its leading zero and becomes
-        9121234567 — which is not a phone number and cannot be dialled. Excel
-        does this eagerly, so the value is emitted with a guard that keeps it a
-        string. This is the one place a formatted cell is correct.
+        9121234567 — which is not a phone number and cannot be dialled. The
+        `phone` kind makes the Excel cell text and gives the CSV its guard.
       */
-      `'${customer.phone}`,
+      col(e.phone, "phone"),
+      col(e.firstOrder, "date"),
+      col(e.lastOrder, "date"),
+      col(e.daysSinceLastOrder, "integer"),
+      col(e.orders, "integer"),
+      col(e.totalSpend, "money"),
+      col(e.averageOrderValue, "money"),
+      col(e.typicalInterval, "integer"),
+      col(e.segment, "text"),
+      col(e.valueTier, "text"),
+      col(e.marketingConsent, "text"),
+    ],
+    rows: customers.map((customer) => [
+      customer.name,
+      customer.phone,
       customer.firstOrderAt ? isoDay(customer.firstOrderAt) : null,
       customer.lastOrderAt ? isoDay(customer.lastOrderAt) : null,
       customer.daysSinceLastOrder,
@@ -383,7 +416,7 @@ async function customersDataset(
       customer.typicalInterval,
       t.customers.segments[customer.segment],
       t.customers.valueTiers[customer.valueTier],
-      customer.marketingConsent,
+      yesNo(customer.marketingConsent, t),
     ]),
   };
 }
@@ -418,15 +451,22 @@ async function inventoryDataset(
   const e = t.exports.columns;
 
   return {
-    headers: [e.item, e.unit, e.inStock, e.lowStockAt, e.isLow, e.active],
+    columns: [
+      col(e.item, "text"),
+      col(e.unit, "text"),
+      col(e.inStock, "quantity"),
+      col(e.lowStockAt, "quantity"),
+      col(e.isLow, "text"),
+      col(e.active, "text"),
+    ],
     rows: items.map((item) => [
       item.name,
       // The label in the reader's language, not the stored code.
       t.costing.units[item.unit as keyof typeof t.costing.units] ?? item.unit,
       fromMilli(item.quantityMilli),
       fromMilli(item.lowStockMilli),
-      isLowStock(item),
-      item.isActive,
+      yesNo(isLowStock(item), t),
+      yesNo(item.isActive, t),
     ]),
   };
 }
@@ -449,22 +489,27 @@ async function pnlDataset(
 
   // The finance page's own labels, so a line in the file reads as the line on
   // the screen rather than as a second vocabulary for the same figures.
-  const rows: CsvRow[] = [
+  const rows: ExportRow[] = [
     [f.totalRevenue, finance.revenue],
     [f.totalCost, finance.cost],
     [f.grossProfit, finance.grossProfit],
     [f.totalExpenses, finance.expenses],
     [finance.netProfit < 0 ? f.netLoss : f.netProfit, finance.netProfit],
-    [f.margin, finance.margin],
+    // The one line in the amount column that is not Toman.
+    [f.margin, { value: finance.margin, kind: "percent" }],
   ];
 
   // The expense breakdown, attributed under its total by naming rather than by
   // formatting — a CSV has no indentation, so the label carries it.
   for (const line of finance.expensesByCategory) {
-    rows.push([`${f.totalExpenses}: ${line.category}`, line.amount]);
+    // The finance page's label for a built-in category; an owner's own
+    // category is printed as they wrote it.
+    const label =
+      f.categories[line.category as keyof typeof f.categories] ?? line.category;
+    rows.push([`${f.totalExpenses}: ${label}`, line.amount]);
   }
 
-  return { headers: [e.item, e.amount], rows };
+  return { columns: [col(e.item, "text"), col(e.amount, "money")], rows };
 }
 
 // -------------------------------- dispatch ---------------------------------
@@ -511,17 +556,17 @@ async function tablesDataset(
   const measured = report.views.status === "measured";
 
   return {
-    headers: [
-      e.table,
-      e.tableLabel,
-      e.orders,
-      e.revenue,
-      e.averageOrderValue,
-      e.menuVisits,
-      e.ordersPerVisit,
-      e.revenueShare,
-      e.tableActivity,
-      e.lastOrder,
+    columns: [
+      col(e.table, "id"),
+      col(e.tableLabel, "text"),
+      col(e.orders, "integer"),
+      col(e.revenue, "money"),
+      col(e.averageOrderValue, "money"),
+      col(e.menuVisits, "integer"),
+      col(e.ordersPerVisit, "ratio"),
+      col(e.revenueShare, "percent"),
+      col(e.tableActivity, "text"),
+      col(e.lastOrder, "date"),
     ],
     rows: report.rows.map((row) => [
       row.number,

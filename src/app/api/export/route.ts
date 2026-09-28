@@ -6,6 +6,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { getI18n } from "@/lib/i18n";
 import { ExportQuerySchema } from "@/lib/validation";
 import { exportFilename, toCsv } from "@/lib/export/csv";
+import { toXlsx, XLSX_CONTENT_TYPE } from "@/lib/export/xlsx";
 import {
   SENSITIVE_DATASETS,
   buildExport,
@@ -20,7 +21,7 @@ export const runtime = "nodejs";
  *
  * A single route rather than one per dataset, because the differences between
  * them are entirely in *what rows to build* — the authentication, the tenant
- * resolution, the rate limiting, the CSV encoding, the filename and the
+ * resolution, the rate limiting, the file format, the filename and the
  * download headers are identical, and eight copies of that is eight places for
  * one of them to drift.
  *
@@ -92,7 +93,7 @@ export const GET = route(async (request: Request) => {
   const window =
     query.from && query.to ? { from: query.from, to: query.to } : (query.days ?? 30);
 
-  const { headers, rows } = await buildExport(dataset, restaurantId, window, t);
+  const { columns, rows } = await buildExport(dataset, restaurantId, window, t);
 
   /*
     An empty period is refused rather than delivered as a header-only file.
@@ -131,16 +132,34 @@ export const GET = route(async (request: Request) => {
     });
   }
 
-  const filename = exportFilename(dataset, venue.slug, exportDayKey());
+  const format = query.format ?? "xlsx";
+  const filename = exportFilename(dataset, venue.slug, exportDayKey(), format);
 
-  return new Response(toCsv(headers, rows), {
+  /*
+    The body in the chosen format. Both writers take the same columns and rows,
+    so the two files cannot disagree about what the export contains.
+
+    For CSV, `charset=utf-8` goes alongside the byte-order mark the file already
+    carries: the header tells a browser, the mark tells Excel.
+  */
+  const [body, contentType] =
+    format === "csv"
+      ? [
+          toCsv(
+            columns.map((c) => c.header),
+            rows,
+            columns.map((c) => c.kind),
+          ),
+          "text/csv; charset=utf-8",
+        ]
+      : [
+          new Uint8Array(toXlsx({ name: t.exports.datasets[dataset], columns, rows })),
+          XLSX_CONTENT_TYPE,
+        ];
+
+  return new Response(body, {
     headers: {
-      /*
-        `charset=utf-8` alongside the byte-order mark the CSV already carries.
-        Belt and braces: the header tells a browser, the mark tells Excel, and
-        Persian product names need both to survive the round trip.
-      */
-      "content-type": "text/csv; charset=utf-8",
+      "content-type": contentType,
       "content-disposition": `attachment; filename="${filename}"`,
       /*
         Never cached, anywhere.

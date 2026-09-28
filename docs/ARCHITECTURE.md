@@ -20,8 +20,9 @@ time: how the pieces fit, and where to go to change something.
 | Tests      | Vitest                                                                                       |
 
 **No UI component library, no state library, no chart library, no spreadsheet
-library.** Charts are hand-drawn SVG in `src/components/charts.tsx`; CSV is
-written by `src/lib/export/csv.ts`. This is deliberate — see "Constraints".
+library.** Charts are hand-drawn SVG in `src/components/charts.tsx`; Excel
+files are written by `src/lib/export/xlsx.ts` (a zip of XML over Node's `zlib`)
+and CSV by `src/lib/export/csv.ts`. This is deliberate — see "Constraints".
 
 ---
 
@@ -39,7 +40,7 @@ src/
 ├── components/          Shared UI. `ui/` holds the primitives.
 ├── lib/                 All business logic and data access
 │   ├── auth/            Session, guards
-│   ├── export/          CSV writer and dataset projections
+│   ├── export/          Excel + CSV writers, the shared sheet style, dataset projections
 │   ├── i18n/            fa.ts defines the Dictionary type; en.ts must match
 │   ├── images/          Upload processing
 │   ├── payments/        Zarinpal behind a provider interface
@@ -182,6 +183,20 @@ Page → `analytics.ts` (or `chain.ts` for a chain, `admin.ts` for the platform)
 layers.** Exports are projections of those same providers — `export/datasets.ts`
 maps each dataset to the provider it renders, so a file and a screen cannot
 disagree.
+
+### A file is exported
+
+`GET /api/export?dataset=…` → `datasets.ts` returns typed columns (money,
+percent, date, phone…) and rows → `xlsx.ts` by default, or `csv.ts` with
+`format=csv`. **Excel is the default because CSV breaks on Iranian machines:** a
+Windows set to the Persian format expects `؛` between fields, so a comma file
+opens with each row in one column, and a CSV cannot carry direction, font or
+number formats at all. Every sheet is right-to-left, Tahoma, right-aligned with
+right-to-left reading order, with a frozen, filtered header. That look lives in
+`sheet-style.ts` alone, and `xlsx.test.ts` fails if a colour or font appears in
+the writer. Text passes through `normalisePersian` (`ي`→`ی`, `ك`→`ک`) and
+is never reshaped. Excel shapes Persian itself, and pre-shaped glyphs are what
+break it.
 
 ---
 
@@ -328,7 +343,8 @@ Deployment is covered end to end in `LINUX-DEPLOY.md`.
 | Add a menu design               | `templates/<name>/`, register it in `registry.ts`                                                       |
 | Change the QR link              | `dashboard/qr/manager.tsx`. **Printed codes embed the URL — changing it invalidates them**              |
 | Add a report                    | A pure module + a `-server.ts`, then a page                                                             |
-| Add an export                   | `export/datasets.ts` — project an existing provider, do not recompute                                   |
+| Add an export                   | `export/datasets.ts` — project an existing provider, do not recompute; give every column a kind         |
+| Change how exported files look  | `export/sheet-style.ts` — font, colours, alignment, number formats, widths; the only place              |
 | Change the SMS broadcast price  | `SMS_PRICE_PER_PART` in `.env` — per SMS part, per recipient                                            |
 | Change who can see a section    | `staff-tabs.ts`                                                                                         |
 | Change subscription behaviour   | `plans.ts`, `subscription/`                                                                             |

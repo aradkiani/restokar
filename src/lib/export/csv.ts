@@ -1,19 +1,26 @@
+import {
+  cellParts,
+  normalisePersian,
+  type CellValue,
+  type ColumnKind,
+  type ExportRow,
+} from "./cells";
+
 /**
- * Turning rows of business data into a file a spreadsheet will open correctly.
+ * Turning rows of business data into a plain CSV file.
  *
  * Free of database and framework imports, like every other domain module here.
  * What is worth testing is the escaping, the encoding and the formula guard —
  * all three are decisions about whether an owner's file arrives intact or
  * corrupted, and none of them can be checked by looking at the happy path.
  *
- * ### Why CSV and not `.xlsx`
+ * ### The second format, not the default
  *
- * A UTF-8 CSV with a byte-order mark opens directly in Excel with Persian text
- * intact and numeric columns still numeric, which is the whole of what an owner
- * needs to hand a file to their accountant. A real `.xlsx` writer would be the
- * first heavy dependency in a codebase that has deliberately avoided them — no
- * chart library, no state library, no UI kit — for marginal benefit over a
- * format every spreadsheet on earth already reads.
+ * Owners download `.xlsx` (`xlsx.ts`). A CSV cannot carry direction, fonts or
+ * number formats, and on a Windows set to the Persian format Excel expects `؛`
+ * between fields, so a comma-separated file opens with every row in one column.
+ * CSV stays for the other consumers — an accountant's import tool, a script —
+ * which read commas and UTF-8 regardless of the machine's region.
  */
 
 /** Windows line endings: Excel is the primary consumer and it prefers CRLF. */
@@ -73,15 +80,8 @@ function escapeCell(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-/**
- * What a cell may hold.
- *
- * Deliberately narrow. `Date` is absent: a date has to be rendered in the
- * venue's own timezone and calendar, which is a decision `datasets.ts` makes
- * with the platform's existing time helpers — accepting a `Date` here would
- * invite this module to invent a second answer.
- */
-export type CsvValue = string | number | boolean | null | undefined;
+/** What a cell may hold — the shared definition, see `cells.ts`. */
+export type CsvValue = CellValue;
 
 /**
  * A cell's final text.
@@ -94,8 +94,12 @@ export type CsvValue = string | number | boolean | null | undefined;
  * Null and undefined become empty rather than "null": a blank cell is what a
  * spreadsheet user reads as "no value", and it keeps a numeric column numeric
  * instead of poisoning it with text.
+ *
+ * Text is written with Persian letters in place of their Arabic look-alikes
+ * (`normalisePersian`), so a filter on the column does not split one dish in
+ * two. A phone number keeps its leading zero behind the same apostrophe guard.
  */
-function formatCell(value: CsvValue): string {
+function formatCell(value: CsvValue, kind: ColumnKind): string {
   if (value === null || value === undefined) return "";
 
   // Non-finite numbers have no spreadsheet representation; a blank is honest
@@ -106,22 +110,44 @@ function formatCell(value: CsvValue): string {
 
   if (typeof value === "boolean") return value ? "1" : "0";
 
-  return guardFormula(value);
+  /*
+    `09121234567` read as a number loses its leading zero and cannot be dialled.
+    Excel does this eagerly, so the value carries the text marker. In `.xlsx`
+    the cell is typed as text instead and needs no marker.
+  */
+  if (kind === "phone" && value !== "") return `'${value}`;
+
+  return guardFormula(normalisePersian(value));
 }
 
 /** One row, already ordered to match the header. */
-export type CsvRow = readonly CsvValue[];
+export type CsvRow = ExportRow;
 
 /**
  * A complete CSV document, ready to be sent as a file.
  *
  * Returns a string rather than a Response so this stays testable without a
- * framework; the route wraps it.
+ * framework; the route wraps it. `kinds` is optional because only a phone
+ * column is written differently; without it every column is text.
  */
-export function toCsv(headers: readonly string[], rows: readonly CsvRow[]): string {
-  const lines = [headers, ...rows].map((row) =>
-    row.map((cell) => escapeCell(formatCell(cell))).join(","),
-  );
+export function toCsv(
+  headers: readonly string[],
+  rows: readonly CsvRow[],
+  kinds: readonly ColumnKind[] = [],
+): string {
+  const kindOf = (i: number): ColumnKind => kinds[i] ?? "text";
+
+  const lines = [
+    headers.map((header) => escapeCell(formatCell(header, "text"))).join(","),
+    ...rows.map((row) =>
+      row
+        .map((cell, i) => {
+          const { value, kind } = cellParts(cell, kindOf(i));
+          return escapeCell(formatCell(value, kind));
+        })
+        .join(","),
+    ),
+  ];
 
   /*
     A trailing newline, which is what POSIX tools expect and what stops the last
@@ -150,6 +176,7 @@ export function exportFilename(
   dataset: string,
   venueSlug: string,
   isoDate: string,
+  extension: "csv" | "xlsx",
 ): string {
   const safeSlug = venueSlug
     .toLowerCase()
@@ -158,5 +185,5 @@ export function exportFilename(
 
   const parts = ["restokar", safeSlug || "venue", dataset, isoDate].filter(Boolean);
 
-  return `${parts.join("-")}.csv`;
+  return `${parts.join("-")}.${extension}`;
 }
