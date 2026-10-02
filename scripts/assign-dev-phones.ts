@@ -26,7 +26,10 @@ import { normalisePhone } from "../src/lib/phone";
  *   npx tsx scripts/assign-dev-phones.ts --apply   # write it
  */
 
-const SHARED_NUMBER_KEEPER = { phone: process.env.OWNER_TEST_PHONE ?? "", slug: "سنتی-حشمت" };
+const SHARED_NUMBER_KEEPER = {
+  phone: process.env.OWNER_TEST_PHONE ?? "",
+  slug: "سنتی-حشمت",
+};
 const MOBILE = /^09\d{9}$/;
 
 interface UserRow {
