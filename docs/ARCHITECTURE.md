@@ -347,6 +347,30 @@ the old client and returns confusing 500s while the typecheck stays green.
 
 Deployment is covered end to end in `LINUX-DEPLOY.md`.
 
+### The admin edits the public site
+
+`/admin/site` and `/admin/content/[key]` → `/api/admin/content/[key]` → `cms/content-server.ts`.
+What is editable is declared in `cms/schema.ts`: every document, its fields and
+a default for each — the site's own text, so an empty table renders the site
+unchanged and a broken value falls back field by field. Values are stored as
+JSON in `ContentDocument` (`draft` and `published`); publishing copies the
+draft to `published`, writes a `ContentVersion` and expires the cache tag
+`cms:<key>`, so the change is live on the next request. Preview is Next's
+draft mode **plus** a SUPER_ADMIN check — the cookie alone shows nothing. Long
+text uses a small markup (`cms/markup.ts`) rendered by `RichText` as React
+elements; there is no `dangerouslySetInnerHTML` and links are limited to
+https, mailto, tel and site paths.
+
+### The admin changes a plan
+
+`/admin/plans/[id]` → `PATCH /api/admin/plans/[id]` → `plan-admin-server.ts`.
+`plan-edit.ts` holds the rules (shared with the form's confirm dialog); every
+save is versioned in `PlanVersion` and audited as `PLAN_UPDATED`. Prices
+reach the pricing pages and checkout at once (`effectivePrice` in
+`plan-terms.ts`, promotion included); **limits do not reach existing
+subscribers** — each subscription keeps `limitsSnapshot` from when its period
+was bought, and enforcement reads that first.
+
 ---
 
 ## Where to change things
@@ -366,7 +390,8 @@ Deployment is covered end to end in `LINUX-DEPLOY.md`.
 | Change how exported files look  | `export/sheet-style.ts` — font, colours, alignment, number formats, widths; the only place              |
 | Change the SMS broadcast price  | `SMS_PRICE_PER_PART` in `.env` — per SMS part, per recipient                                            |
 | Change who can see a section    | `staff-tabs.ts`                                                                                         |
-| Change subscription behaviour   | `plans.ts`, `subscription/`                                                                             |
+| Change subscription behaviour   | `plans.ts`, `plan-terms.ts` (price in force, limit snapshots), `subscription/`                          |
+| Add an editable text or page    | `cms/schema.ts` — a field with a default; then read it with `getContent` on the page                    |
 | Add UI copy                     | `i18n/fa.ts` first — it defines the type, so a missing English key is a compile error                   |
 
 ---
