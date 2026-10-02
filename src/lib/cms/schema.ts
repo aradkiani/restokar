@@ -438,7 +438,16 @@ export function getDocumentDef(key: string): DocumentDef | null {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-function resolveField(def: FieldDef, stored: unknown): unknown {
+/**
+ * "render": what a page shows — an empty English value falls back to the
+ * default English text, then to the Persian.
+ * "edit": what the editor shows — an empty English value stays empty (the
+ * editor shows the fallback as a placeholder), so saving never copies the
+ * Persian text into the English field.
+ */
+export type ResolveMode = "render" | "edit";
+
+function resolveField(def: FieldDef, stored: unknown, mode: ResolveMode): unknown {
   switch (def.type) {
     case "text":
     case "textarea":
@@ -449,10 +458,13 @@ function resolveField(def: FieldDef, stored: unknown): unknown {
       const value = isRecord(stored) ? stored : {};
       const faValue =
         typeof value.fa === "string" && value.fa.trim() ? value.fa : def.default.fa;
+      const storedEn = typeof value.en === "string" && value.en.trim() ? value.en : "";
       const enValue =
-        typeof value.en === "string" && value.en.trim()
-          ? value.en
-          : def.default.en || faValue;
+        mode === "edit"
+          ? // Once the field has been saved, an empty English stays empty in
+            // the editor: the default English may no longer match the Persian.
+            storedEn || (isRecord(stored) ? "" : def.default.en)
+          : storedEn || def.default.en || faValue;
       return { fa: faValue, en: enValue } satisfies Localized;
     }
     case "number":
@@ -466,11 +478,11 @@ function resolveField(def: FieldDef, stored: unknown): unknown {
       return typeof stored === "boolean" ? stored : def.default;
     case "list": {
       if (!Array.isArray(stored))
-        return def.default.map((item) => resolveItem(def.item, item));
+        return def.default.map((item) => resolveItem(def.item, item, mode));
       return stored
         .slice(0, def.maxItems)
         .filter(isRecord)
-        .map((item) => resolveItem(def.item, item));
+        .map((item) => resolveItem(def.item, item, mode));
     }
     case "url":
     case "image":
@@ -487,19 +499,24 @@ function resolveField(def: FieldDef, stored: unknown): unknown {
  * the admin may have reordered or removed items, so "the third default" means
  * nothing for an edited list.
  */
-function resolveItem(fields: FieldDef[], item: Record<string, unknown>) {
+function resolveItem(
+  fields: FieldDef[],
+  item: Record<string, unknown>,
+  mode: ResolveMode,
+) {
   const out: Record<string, unknown> = {};
   for (const field of fields) {
     const value = item[field.key];
     if ((field.type === "text" || field.type === "textarea") && field.localized) {
       const record = isRecord(value) ? value : {};
       const faValue = typeof record.fa === "string" ? record.fa : "";
+      const enValue = typeof record.en === "string" && record.en.trim() ? record.en : "";
       out[field.key] = {
         fa: faValue,
-        en: typeof record.en === "string" && record.en.trim() ? record.en : faValue,
+        en: enValue || (mode === "edit" ? "" : faValue),
       } satisfies Localized;
     } else {
-      out[field.key] = resolveField(field, value);
+      out[field.key] = resolveField(field, value, mode);
     }
   }
   return out;
@@ -509,10 +526,12 @@ function resolveItem(fields: FieldDef[], item: Record<string, unknown>) {
 export function resolveDocument(
   def: DocumentDef,
   stored: unknown,
+  mode: ResolveMode = "render",
 ): Record<string, unknown> {
   const values = isRecord(stored) ? stored : {};
   const out: Record<string, unknown> = {};
-  for (const field of def.fields) out[field.key] = resolveField(field, values[field.key]);
+  for (const field of def.fields)
+    out[field.key] = resolveField(field, values[field.key], mode);
   return out;
 }
 

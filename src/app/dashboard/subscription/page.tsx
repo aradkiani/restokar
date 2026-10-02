@@ -6,7 +6,9 @@ import { getSubscriptionState } from "@/lib/plans";
 import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 import { Badge, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { SUBSCRIPTION_CHECKOUT_ENABLED } from "@/lib/features";
-import { CONTACT } from "@/lib/constants";
+import { getSiteInfo } from "@/lib/cms/content-server";
+import { effectivePrice } from "@/lib/plan-terms";
+import { planLines } from "@/lib/plan-features";
 import { dailyViews, viewsToday } from "@/lib/menu-views";
 import { PlanPicker } from "./plan-picker";
 
@@ -22,7 +24,7 @@ export default async function SubscriptionPage({
   const { t, locale } = await getI18n();
   const { payment, ref } = await searchParams;
 
-  const [state, plans, payments, views, todayViews] = await Promise.all([
+  const [state, plans, payments, views, todayViews, site] = await Promise.all([
     getSubscriptionState(restaurantId),
     prisma.plan.findMany({ where: { isPublic: true }, orderBy: { sortOrder: "asc" } }),
     prisma.payment.findMany({
@@ -38,7 +40,9 @@ export default async function SubscriptionPage({
     // views yet today the newest row is yesterday's, and calling that "today"
     // would report a number the venue has not earned.
     viewsToday(restaurantId),
+    getSiteInfo(locale),
   ]);
+  const now = new Date();
 
   /*
     The ceiling for the venue's current plan, taken from the list already
@@ -149,15 +153,19 @@ export default async function SubscriptionPage({
               {t.landing.paymentsPausedBody}
             </p>
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-ink-800">
-              <a href={CONTACT.phoneHref} className="inline-flex min-h-11 items-center">
-                <span dir="ltr">{CONTACT.phone}</span>
-              </a>
-              <a
-                href={`mailto:${CONTACT.email}`}
-                className="inline-flex min-h-11 items-center"
-              >
-                <span dir="ltr">{CONTACT.email}</span>
-              </a>
+              {site.phone && (
+                <a href={site.phone.href} className="inline-flex min-h-11 items-center">
+                  <span dir="ltr">{site.phone.display}</span>
+                </a>
+              )}
+              {site.email && (
+                <a
+                  href={"mailto:" + site.email}
+                  className="inline-flex min-h-11 items-center"
+                >
+                  <span dir="ltr">{site.email}</span>
+                </a>
+              )}
             </div>
           </CardBody>
         </Card>
@@ -171,16 +179,14 @@ export default async function SubscriptionPage({
             .map((plan) => ({
               code: plan.code,
               name: locale === "en" ? plan.nameEn : plan.name,
-              description: plan.description,
-              monthlyPrice: plan.monthlyPrice,
-              yearlyPrice: plan.yearlyPrice,
-              maxProducts: plan.maxProducts,
-              maxCategories: plan.maxCategories,
-              maxDailyViews: plan.maxDailyViews,
-              maxTables: plan.maxTables,
-              allowsOnlinePay: plan.allowsOnlinePay,
-              allowsAnalytics: plan.allowsAnalytics,
-              sortOrder: plan.sortOrder,
+              description:
+                locale === "en"
+                  ? plan.descriptionEn || plan.description
+                  : plan.description,
+              recommended: plan.isRecommended,
+              monthly: effectivePrice(plan, "monthly", now),
+              yearly: effectivePrice(plan, "yearly", now),
+              lines: planLines(plan, t, locale),
             }))}
         />
       )}

@@ -283,15 +283,3 @@ export function needsRefund(order: {
     order.refundedAt === null
   );
 }
-
-// -------------------------------- contact ----------------------------------
-
-/**
- * Placeholder contact details for the marketing site. Replace before launch —
- * these are referenced from the landing page footer and contact section.
- */
-export const CONTACT = {
-  phone: "021-00000000",
-  phoneHref: "tel:+982100000000",
-  email: "hello@restokar.ir",
-} as const;

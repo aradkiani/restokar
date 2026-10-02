@@ -103,4 +103,25 @@ describe("content schema", () => {
       announcementLive({ ...base, announcementEndsAt: "2026-09-30T00:00:00Z" }, now),
     ).toBe(false);
   });
+
+  it("keeps an empty English empty in the editor, but falls back on the page", () => {
+    const stored = {
+      heroTitle: { fa: "عنوان تازه", en: "" },
+      features: [{ title: { fa: "منو", en: "" }, text: { fa: "متن", en: "" } }],
+    };
+    const page = resolveDocument(home, stored);
+    const editor = resolveDocument(home, stored, "edit");
+    const firstTitle = (values: Record<string, unknown>) =>
+      (values.features as Record<string, unknown>[])[0]!.title;
+
+    // The page: English default for a top-level field, Persian for a list item.
+    expect(pick(page.heroTitle, "en")).toBe(en.landing.heroTitle);
+    expect(pick(firstTitle(page), "en")).toBe("منو");
+
+    // The editor: nothing copied in, so saving cannot store Persian as English.
+    expect(pick(editor.heroTitle, "en")).toBe("");
+    expect(pick(firstTitle(editor), "en")).toBe("");
+    // A field never saved still starts from the site's English text.
+    expect(pick(editor.heroSubtitle, "en")).toBe(en.landing.heroSubtitle);
+  });
 });

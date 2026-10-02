@@ -4,7 +4,8 @@ import { draftMode } from "next/headers";
 import { prisma } from "../prisma";
 import { getSessionUser, type SessionUser } from "../auth/session";
 import { recordAudit } from "../audit";
-import { DOCUMENTS, getDocumentDef, resolveDocument } from "./schema";
+import { DOCUMENTS, getDocumentDef, pick, resolveDocument } from "./schema";
+import { siteInfo, type SiteInfo } from "./site-info";
 import { Prisma } from "@/generated/prisma/client";
 
 /**
@@ -68,6 +69,22 @@ export async function getContent(key: string): Promise<Record<string, unknown>> 
   return resolveDocument(def, await cachedPublished(key));
 }
 
+/** The site settings, ready to render in one language. */
+export async function getSiteInfo(locale: string): Promise<SiteInfo> {
+  return siteInfo(await getContent("site"), locale);
+}
+
+/** The FAQ in one language; questions left empty are skipped. */
+export async function getFaq(locale: string): Promise<{ q: string; a: string }[]> {
+  const { items } = await getContent("faq");
+  return (Array.isArray(items) ? items : [])
+    .map((item: Record<string, unknown>) => ({
+      q: pick(item.q, locale).trim(),
+      a: pick(item.a, locale).trim(),
+    }))
+    .filter((item) => item.q && item.a);
+}
+
 // --------------------------------------------------------------- admin side
 
 export interface EditorState {
@@ -86,7 +103,7 @@ export async function getEditorState(key: string): Promise<EditorState> {
   const row = await prisma.contentDocument.findUnique({ where: { key } });
   return {
     key,
-    values: resolveDocument(def, row?.draft ?? row?.published ?? null),
+    values: resolveDocument(def, row?.draft ?? row?.published ?? null, "edit"),
     hasDraft: row?.draft != null,
     version: row?.version ?? 0,
     draftUpdatedAt: row?.draftUpdatedAt?.toISOString() ?? null,

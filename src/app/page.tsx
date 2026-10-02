@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -17,12 +18,17 @@ import {
   Wallet,
 } from "lucide-react";
 import { getI18n } from "@/lib/i18n";
-import { CONTACT } from "@/lib/constants";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
-import { formatMoney, formatNumber, formatYear } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { FaqList } from "@/components/marketing/faq-list";
+import { PlanGrid } from "@/components/marketing/plan-grid";
+import { SiteFooter } from "@/components/marketing/site-footer";
+import { AnnouncementBar } from "@/components/marketing/announcement-bar";
+import { PreviewBanner } from "@/components/marketing/preview-banner";
+import { getContent, getFaq, getSiteInfo } from "@/lib/cms/content-server";
+import { pick } from "@/lib/cms/schema";
 import { TEMPLATES } from "@/templates/registry";
 import {
   PUBLIC_REGISTRATION_ENABLED,
@@ -32,6 +38,8 @@ import {
 // Next.js requires route segment config to be a statically analyzable
 // literal — it cannot be an imported constant.
 export const revalidate = 300;
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function HomePage() {
   const [{ t, locale, dir }, user, plans, demoMenus, stats] = await Promise.all([
@@ -60,6 +68,16 @@ export default async function HomePage() {
     ]),
   ]);
 
+  const [home, site, faq] = await Promise.all([
+    getContent("home"),
+    getSiteInfo(locale),
+    getFaq(locale),
+  ]);
+  const h = (key: string) => pick(home[key], locale);
+  const ctaLabel = PUBLIC_REGISTRATION_ENABLED
+    ? h("heroCtaPrimary")
+    : h("ctaContactSupport");
+
   const Arrow = dir === "rtl" ? ArrowLeft : ArrowRight;
   const [restaurantCount, orderCount] = stats;
 
@@ -71,25 +89,42 @@ export default async function HomePage() {
       (templateOrder.get(a.templateId) ?? 99) - (templateOrder.get(b.templateId) ?? 99),
   );
 
-  const features = [
-    { icon: Smartphone, title: t.features.menuTitle, text: t.features.menuText },
-    { icon: QrCode, title: t.features.qrTitle, text: t.features.qrText },
-    { icon: ClipboardList, title: t.features.orderTitle, text: t.features.orderText },
-    { icon: ChefHat, title: t.features.kitchenTitle, text: t.features.kitchenText },
-    { icon: BarChart3, title: t.features.analyticsTitle, text: t.features.analyticsText },
-    { icon: Wallet, title: t.features.financeTitle, text: t.features.financeText },
-    { icon: CreditCard, title: t.features.paymentTitle, text: t.features.paymentText },
-    { icon: Palette, title: t.features.brandTitle, text: t.features.brandText },
+  // Text is editable; icons stay in code and go round in order, so an added
+  // card gets one too.
+  const FEATURE_ICONS = [
+    Smartphone,
+    QrCode,
+    ClipboardList,
+    ChefHat,
+    BarChart3,
+    Wallet,
+    CreditCard,
+    Palette,
   ];
+  const STEP_ICONS = [UtensilsCrossed, Palette, QrCode, Sparkles];
+  const listOf = (value: unknown) =>
+    (Array.isArray(value) ? value : []) as Record<string, unknown>[];
 
-  const steps = [
-    { title: t.landing.step1Title, text: t.landing.step1Text, icon: UtensilsCrossed },
-    { title: t.landing.step2Title, text: t.landing.step2Text, icon: Palette },
-    { title: t.landing.step3Title, text: t.landing.step3Text, icon: QrCode },
-  ];
+  const features = listOf(home.features)
+    .map((item, index) => ({
+      icon: FEATURE_ICONS[index % FEATURE_ICONS.length]!,
+      title: pick(item.title, locale),
+      text: pick(item.text, locale),
+    }))
+    .filter((item) => item.title);
+
+  const steps = listOf(home.steps)
+    .map((item, index) => ({
+      icon: STEP_ICONS[index % STEP_ICONS.length]!,
+      title: pick(item.title, locale),
+      text: pick(item.text, locale),
+    }))
+    .filter((item) => item.title);
 
   return (
     <>
+      <PreviewBanner />
+      <AnnouncementBar announcement={site.announcement} />
       <SiteHeader isAuthed={Boolean(user)} signupOpen={PUBLIC_REGISTRATION_ENABLED} />
 
       <main id="main">
@@ -115,19 +150,19 @@ export default async function HomePage() {
           <div className="relative mx-auto max-w-4xl px-5 pt-16 pb-20 text-center sm:pt-24">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface/70 px-3.5 py-1.5 text-xs font-bold text-brand-800 ring-1 ring-brand-200 backdrop-blur">
               <Sparkles className="size-3.5" />
-              {t.landing.heroBadge}
+              {h("heroBadge")}
             </span>
 
             <h1 className="mt-6 text-4xl leading-[1.15] font-black text-ink-900 sm:text-6xl">
-              {t.landing.heroTitle}
+              {h("heroTitle")}
               <br />
               <span className="bg-gradient-to-l from-brand-600 to-accent-600 bg-clip-text text-transparent">
-                {t.landing.heroTitleAccent}
+                {h("heroTitleAccent")}
               </span>
             </h1>
 
             <p className="mx-auto mt-6 max-w-2xl text-base leading-9 text-ink-600 sm:text-lg">
-              {t.landing.heroSubtitle}
+              {h("heroSubtitle")}
             </p>
 
             <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
@@ -135,34 +170,31 @@ export default async function HomePage() {
                 href="/register"
                 className="group inline-flex h-13 items-center gap-2 rounded-full bg-brand-600 px-7 text-base font-bold text-white shadow-[var(--shadow-glow)] transition-all hover:bg-brand-700 hover:shadow-[var(--shadow-lift)]"
               >
-                {PUBLIC_REGISTRATION_ENABLED
-                  ? t.landing.heroCtaPrimary
-                  : t.landing.ctaContactSupport}
+                {ctaLabel}
                 <Arrow className="size-4.5 transition-transform group-hover:-translate-x-0.5 rtl:group-hover:translate-x-0.5" />
               </Link>
               <a
                 href="#demo"
                 className="inline-flex h-13 items-center gap-2 rounded-full border border-ink-300 bg-surface/80 px-7 text-base font-bold text-ink-800 backdrop-blur transition-colors hover:border-ink-400"
               >
-                {t.landing.heroCtaSecondary}
+                {h("heroCtaSecondary")}
               </a>
             </div>
 
-            <p className="mt-4 text-xs font-semibold text-ink-500">
-              {t.landing.heroNote}
-            </p>
+            <p className="mt-4 text-xs font-semibold text-ink-500">{h("heroNote")}</p>
 
-            <dl className="mx-auto mt-14 grid max-w-lg grid-cols-3 gap-4">
-              {[
-                {
-                  value: formatNumber(Math.max(restaurantCount, 1), locale),
-                  label: t.landing.statsRestaurants,
-                },
-                {
-                  value: formatNumber(Math.max(orderCount, 1), locale),
-                  label: t.landing.statsOrders,
-                },
-                /*
+            {site.showStats && (
+              <dl className="mx-auto mt-14 grid max-w-lg grid-cols-3 gap-4">
+                {[
+                  {
+                    value: formatNumber(Math.max(restaurantCount, 1), locale),
+                    label: t.landing.statsRestaurants,
+                  },
+                  {
+                    value: formatNumber(Math.max(orderCount, 1), locale),
+                    label: t.landing.statsOrders,
+                  },
+                  /*
                   The third figure was a hard-coded «٪۹۹.۹» uptime claim, sitting
                   between two counts genuinely read from the database. The
                   service has never been measured for availability, and an
@@ -170,24 +202,25 @@ export default async function HomePage() {
                   reports the template catalogue instead, straight from the
                   registry that renders it.
                 */
-                {
-                  value: formatNumber(TEMPLATES.length, locale),
-                  label: t.landing.statsTemplates,
-                },
-              ].map((stat) => (
-                <div key={stat.label}>
-                  <dt className="sr-only">{stat.label}</dt>
-                  <dd>
-                    <span className="block text-2xl font-black text-ink-900 sm:text-3xl">
-                      {stat.value}
-                    </span>
-                    <span className="mt-0.5 block text-xs font-semibold text-ink-500">
-                      {stat.label}
-                    </span>
-                  </dd>
-                </div>
-              ))}
-            </dl>
+                  {
+                    value: formatNumber(TEMPLATES.length, locale),
+                    label: t.landing.statsTemplates,
+                  },
+                ].map((stat) => (
+                  <div key={stat.label}>
+                    <dt className="sr-only">{stat.label}</dt>
+                    <dd>
+                      <span className="block text-2xl font-black text-ink-900 sm:text-3xl">
+                        {stat.value}
+                      </span>
+                      <span className="mt-0.5 block text-xs font-semibold text-ink-500">
+                        {stat.label}
+                      </span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
           </div>
         </section>
 
@@ -196,17 +229,17 @@ export default async function HomePage() {
           <div className="mx-auto max-w-6xl px-5">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-black text-ink-900 sm:text-4xl">
-                {t.landing.featuresTitle}
+                {h("featuresTitle")}
               </h2>
               <p className="mt-3 text-base leading-8 text-ink-600">
-                {t.landing.featuresSubtitle}
+                {h("featuresSubtitle")}
               </p>
             </div>
 
             <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {features.map(({ icon: Icon, title, text }) => (
+              {features.map(({ icon: Icon, title, text }, index) => (
                 <article
-                  key={title}
+                  key={index}
                   className="group rounded-[var(--radius-lg)] border border-ink-200 bg-ink-50/60 p-5 transition-all hover:-translate-y-1 hover:border-brand-200 hover:bg-surface hover:shadow-[var(--shadow-lift)]"
                 >
                   <span className="grid size-11 place-items-center rounded-[var(--radius-md)] bg-brand-100 text-brand-700 transition-colors group-hover:bg-brand-600 group-hover:text-white">
@@ -225,14 +258,14 @@ export default async function HomePage() {
           <div className="mx-auto max-w-5xl px-5">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-black text-ink-900 sm:text-4xl">
-                {t.landing.howTitle}
+                {h("howTitle")}
               </h2>
-              <p className="mt-3 text-base text-ink-600">{t.landing.howSubtitle}</p>
+              <p className="mt-3 text-base text-ink-600">{h("howSubtitle")}</p>
             </div>
 
             <ol className="mt-12 grid gap-6 md:grid-cols-3">
               {steps.map((step, index) => (
-                <li key={step.title} className="relative">
+                <li key={index} className="relative">
                   <div className="rounded-[var(--radius-lg)] border border-ink-200 bg-surface p-6 shadow-[var(--shadow-soft)]">
                     <div className="flex items-center gap-3">
                       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ink-900 text-sm font-black text-white tabular-nums">
@@ -255,8 +288,8 @@ export default async function HomePage() {
         <section id="demo" className="scroll-mt-20 bg-ink-950 py-14 text-white sm:py-20">
           <div className="mx-auto max-w-6xl px-5">
             <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-black sm:text-4xl">{t.landing.demoTitle}</h2>
-              <p className="mt-3 text-base text-ink-300">{t.landing.demoSubtitle}</p>
+              <h2 className="text-3xl font-black sm:text-4xl">{h("demoTitle")}</h2>
+              <p className="mt-3 text-base text-ink-300">{h("demoSubtitle")}</p>
             </div>
 
             {showcase.length > 0 ? (
@@ -349,7 +382,7 @@ export default async function HomePage() {
               <h2 className="text-3xl font-black text-ink-900 sm:text-4xl">
                 {t.nav.pricing}
               </h2>
-              <p className="mt-3 text-base text-ink-600">{t.landing.ctaSubtitle}</p>
+              <p className="mt-3 text-base text-ink-600">{h("pricingSubtitle")}</p>
 
               {/* Prices stay visible — they are still what the venue pays. Only
                   the way to pay has moved offline, and saying so here is more
@@ -361,81 +394,13 @@ export default async function HomePage() {
               )}
             </div>
 
-            <div className="mt-12 grid gap-5 md:grid-cols-3">
-              {plans.map((plan, index) => {
-                const highlighted = index === 1;
-                return (
-                  <div
-                    key={plan.id}
-                    className={`relative flex flex-col rounded-[var(--radius-lg)] border p-6 ${
-                      highlighted
-                        ? "border-brand-400 bg-surface shadow-[var(--shadow-lift)] ring-2 ring-brand-500/20 md:-my-3"
-                        : "border-ink-200 bg-surface shadow-[var(--shadow-soft)]"
-                    }`}
-                  >
-                    {highlighted && (
-                      <span className="absolute start-1/2 -top-3 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[11px] font-black text-white">
-                        {t.subscription.popular}
-                      </span>
-                    )}
-
-                    <h3 className="text-lg font-black text-ink-900">
-                      {locale === "en" ? plan.nameEn : plan.name}
-                    </h3>
-                    {plan.description && (
-                      <p className="mt-1.5 text-xs leading-6 text-ink-500">
-                        {plan.description}
-                      </p>
-                    )}
-
-                    <p className="mt-5">
-                      <span className="text-3xl font-black text-ink-900">
-                        {formatMoney(plan.monthlyPrice, locale)}
-                      </span>
-                      <span className="ms-1.5 text-xs font-semibold text-ink-500">
-                        {t.common.toman} / {t.subscription.perMonth}
-                      </span>
-                    </p>
-
-                    <ul className="mt-6 flex-1 space-y-2.5 text-sm text-ink-700">
-                      <li>
-                        {plan.maxProducts < 0
-                          ? t.subscription.unlimited
-                          : formatNumber(plan.maxProducts, locale)}{" "}
-                        {t.subscription.limitProducts}
-                      </li>
-                      <li>
-                        {plan.maxCategories < 0
-                          ? t.subscription.unlimited
-                          : formatNumber(plan.maxCategories, locale)}{" "}
-                        {t.subscription.limitCategories}
-                      </li>
-                      <li>
-                        {plan.maxTables < 0
-                          ? t.subscription.unlimited
-                          : formatNumber(plan.maxTables, locale)}{" "}
-                        {t.subscription.limitTables}
-                      </li>
-                      {plan.allowsAnalytics && <li>{t.dashboard.analytics}</li>}
-                      {plan.allowsOnlinePay && <li>{t.features.paymentTitle}</li>}
-                    </ul>
-
-                    <Link
-                      href="/register"
-                      className={`mt-6 inline-flex h-11 items-center justify-center rounded-full text-sm font-bold transition-colors ${
-                        highlighted
-                          ? "bg-brand-600 text-white hover:bg-brand-700"
-                          : "border border-ink-300 text-ink-800 hover:border-ink-400"
-                      }`}
-                    >
-                      {PUBLIC_REGISTRATION_ENABLED
-                        ? t.landing.heroCtaPrimary
-                        : t.landing.ctaContactSupport}
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
+            <PlanGrid
+              plans={plans}
+              t={t}
+              locale={locale}
+              ctaLabel={ctaLabel}
+              heading="h3"
+            />
           </div>
         </section>
 
@@ -443,9 +408,9 @@ export default async function HomePage() {
         <section id="faq" className="scroll-mt-20 bg-surface py-14 sm:py-20">
           <div className="mx-auto max-w-3xl px-5">
             <h2 className="text-center text-3xl font-black text-ink-900 sm:text-4xl">
-              {t.landing.faqTitle}
+              {h("faqTitle")}
             </h2>
-            <FaqList className="mt-10" />
+            <FaqList items={faq} className="mt-10" />
           </div>
         </section>
 
@@ -453,9 +418,9 @@ export default async function HomePage() {
         <section id="contact" className="scroll-mt-20 py-14 sm:py-20">
           <div className="mx-auto max-w-4xl px-5">
             <div className="rounded-[var(--radius-xl)] bg-ink-950 p-8 text-center text-white sm:p-12">
-              <h2 className="text-3xl font-black sm:text-4xl">{t.landing.ctaTitle}</h2>
+              <h2 className="text-3xl font-black sm:text-4xl">{h("ctaTitle")}</h2>
               <p className="mx-auto mt-3 max-w-xl text-base leading-8 text-ink-300">
-                {t.landing.contactSubtitle}
+                {h("contactSubtitle")}
               </p>
 
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -463,68 +428,43 @@ export default async function HomePage() {
                   href="/register"
                   className="inline-flex h-12 items-center gap-2 rounded-full bg-brand-500 px-7 text-base font-bold text-ink-950 transition-colors hover:bg-brand-400"
                 >
-                  {PUBLIC_REGISTRATION_ENABLED
-                    ? t.landing.heroCtaPrimary
-                    : t.landing.ctaContactSupport}
+                  {ctaLabel}
                   <Arrow className="size-4.5" />
                 </Link>
               </div>
 
               <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-ink-300">
-                <a
-                  href={CONTACT.phoneHref}
-                  className="inline-flex min-h-11 items-center gap-2 hover:text-white"
-                >
-                  <Phone className="size-4" />
-                  <span dir="ltr">{CONTACT.phone}</span>
-                </a>
-                <a
-                  href={`mailto:${CONTACT.email}`}
-                  className="inline-flex min-h-11 items-center gap-2 hover:text-white"
-                >
-                  <Mail className="size-4" />
-                  <span dir="ltr">{CONTACT.email}</span>
-                </a>
-                <span className="inline-flex items-center gap-2">
-                  <MapPin className="size-4" />
-                  {locale === "fa" ? "تهران، ایران" : "Tehran, Iran"}
-                </span>
+                {site.phone && (
+                  <a
+                    href={site.phone.href}
+                    className="inline-flex min-h-11 items-center gap-2 hover:text-white"
+                  >
+                    <Phone className="size-4" />
+                    <span dir="ltr">{site.phone.display}</span>
+                  </a>
+                )}
+                {site.email && (
+                  <a
+                    href={"mailto:" + site.email}
+                    className="inline-flex min-h-11 items-center gap-2 hover:text-white"
+                  >
+                    <Mail className="size-4" />
+                    <span dir="ltr">{site.email}</span>
+                  </a>
+                )}
+                {site.address && (
+                  <span className="inline-flex items-center gap-2">
+                    <MapPin className="size-4" />
+                    {site.address}
+                  </span>
+                )}
               </div>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-ink-200 bg-surface py-8">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5">
-          <div className="flex items-center gap-2.5">
-            <span className="grid size-8 place-items-center rounded-lg bg-brand-500 text-ink-950">
-              <ChefHat className="size-4" />
-            </span>
-            <span className="text-sm font-black text-ink-900">{t.common.appName}</span>
-          </div>
-
-          <nav className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-ink-600">
-            <a href="#features" className="hover:text-ink-900">
-              {t.nav.features}
-            </a>
-            <a href="#pricing" className="hover:text-ink-900">
-              {t.nav.pricing}
-            </a>
-            <a href="#faq" className="hover:text-ink-900">
-              {t.nav.faq}
-            </a>
-            <Link href="/login" className="hover:text-ink-900">
-              {t.nav.login}
-            </Link>
-          </nav>
-
-          <p className="text-xs text-ink-500">
-            © {formatYear(new Date().getFullYear(), locale)} {t.common.appName} —{" "}
-            {t.landing.footerRights}
-          </p>
-        </div>
-      </footer>
+      <SiteFooter site={site} t={t} locale={locale} />
     </>
   );
 }
