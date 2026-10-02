@@ -21,8 +21,10 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:tenants": "tsx prisma/seed-tenants.ts",
     "db:seed:sandbox": "tsx prisma/seed-sandbox.ts",
+    "db:seed:launch": "tsx prisma/seed-launch.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "db:snapshot": "tsx scripts/db-snapshot.ts save",
     "db:snapshot:list": "tsx scripts/db-snapshot.ts list",
     "db:restore": "tsx scripts/db-snapshot.ts restore",
@@ -37,7 +39,6 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
-    "bcryptjs": "^3.0.2",
     "clsx": "^2.1.1",
     "jose": "^6.2.8",
     "lucide-react": "^1.29.0",
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.2",
     "@types/nodemailer": "^8.0.1",
