@@ -482,7 +482,10 @@ export function KitchenBoard({
                   <span>
                     {t.kitchen.table} {localizeDigits(call.tableNumber, locale)}
                   </span>
-                  <span className="font-normal opacity-70">
+                  {/* Read from the clock, so the server and the phone can land
+                      either side of a minute; the board re-renders on mount and
+                      on every poll, which settles it. */}
+                  <span className="font-normal opacity-70" suppressHydrationWarning>
                     {formatRelative(call.createdAt, locale)}
                   </span>
                   <Check className="size-3.5 shrink-0" />
@@ -686,7 +689,11 @@ export function KitchenBoard({
                           </span>
                         )}
 
-                        <span className="text-[11px] text-ink-400">
+                        {/* Clock-derived; see the staff-call label above. */}
+                        <span
+                          className="text-[11px] text-ink-400"
+                          suppressHydrationWarning
+                        >
                           {formatRelative(order.placedAt, locale)}
                         </span>
                       </div>
