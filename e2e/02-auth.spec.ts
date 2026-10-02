@@ -125,8 +125,12 @@ test.describe("new owner signs up alone", () => {
       await page.getByLabel("کد تأیید").fill(KNOWN_CODE);
       await page.waitForURL(/\/dashboard/);
 
-      // A brand-new owner should be told what to do first.
-      await expect(page.locator("main")).toContainText(/شروع|اولین|منو/);
+      // A brand-new owner is told what to do first, with nothing ticked yet.
+      await expect(page.getByText("قدم‌های اول")).toBeVisible();
+      await expect(page.locator("main")).toContainText("۰ از ۵ انجام شده");
+      await expect(
+        page.getByRole("link", { name: /دسته‌بندی‌ها و غذاها را با قیمت وارد کنید/ }),
+      ).toHaveAttribute("href", "/dashboard/menu");
       const menu = await page.request.get(`/menu/${slug}`);
       expect(menu.status()).toBe(200);
       expect(errors).toEqual([]);

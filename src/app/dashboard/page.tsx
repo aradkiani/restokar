@@ -40,6 +40,8 @@ import { RankedBars, StatTile, TrendChart } from "@/components/charts";
 import { OrderStatusBadge } from "@/components/order-status-badge";
 import { cn } from "@/lib/utils";
 import type { Locale } from "@/lib/i18n";
+import { firstSteps, showFirstSteps } from "@/lib/first-steps";
+import { DEFAULT_TEMPLATE_ID } from "@/templates/registry";
 
 export const metadata: Metadata = { title: "پیشخوان" };
 export const dynamic = "force-dynamic";
@@ -91,7 +93,16 @@ export default async function DashboardOverviewPage() {
       where: { id: restaurantId },
       select: {
         slug: true,
-        _count: { select: { products: true, categories: true, tables: true } },
+        parentRestaurantId: true,
+        logoUrl: true,
+        tagline: true,
+        phone: true,
+        address: true,
+        templateId: true,
+        theme: true,
+        _count: {
+          select: { products: true, categories: true, tables: true, orders: true },
+        },
       },
     }),
     getTodayComparison(restaurantId),
@@ -124,6 +135,22 @@ export default async function DashboardOverviewPage() {
       })
     : [];
   const lowStock = watched.filter(isLowStock);
+
+  // Only the owner of a venue with its own menu sets these things up; a
+  // branch serves its chain's menu and design.
+  const setup =
+    user.role === "OWNER" && counts && !counts.parentRestaurantId
+      ? firstSteps(
+          {
+            ...counts,
+            products: counts._count.products,
+            tables: counts._count.tables,
+            orders: counts._count.orders,
+          },
+          DEFAULT_TEMPLATE_ID,
+        )
+      : null;
+  const showSetup = setup !== null && showFirstSteps(setup, counts?._count.orders ?? 0);
 
   const quickActions = (
     [
@@ -177,6 +204,64 @@ export default async function DashboardOverviewPage() {
           <ArrowUpRight className="size-4" />
         </Link>
       </header>
+
+      {showSetup && setup && (
+        <Card>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>{t.dashboard.firstStepsTitle}</CardTitle>
+              <p className="mt-1 text-xs text-ink-500">
+                {t.dashboard.firstStepsSubtitle}
+              </p>
+            </div>
+            <span className="text-xs font-bold text-ink-600">
+              {t.dashboard.firstStepsProgress
+                .replace(
+                  "{done}",
+                  formatNumber(setup.filter((s) => s.done).length, locale),
+                )
+                .replace("{total}", formatNumber(setup.length, locale))}
+            </span>
+          </CardHeader>
+          <CardBody className="p-0">
+            <ol className="divide-y divide-ink-100">
+              {setup.map((step, index) => (
+                <li key={step.key}>
+                  <Link
+                    href={step.href}
+                    target={step.key === "order" ? "_blank" : undefined}
+                    className="flex min-h-12 items-center gap-3 px-5 py-3 text-sm hover:bg-ink-50"
+                  >
+                    <span
+                      className={cn(
+                        "grid size-7 shrink-0 place-items-center rounded-full text-xs font-black",
+                        step.done
+                          ? "bg-emerald-600 text-white"
+                          : "bg-ink-100 text-ink-600",
+                      )}
+                    >
+                      {step.done ? (
+                        <Check className="size-4" />
+                      ) : (
+                        formatNumber(index + 1, locale)
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "flex-1 font-bold",
+                        step.done ? "text-ink-400 line-through" : "text-ink-800",
+                      )}
+                    >
+                      {t.dashboard.firstSteps[step.key]}
+                    </span>
+                    {!step.done && <ArrowUpRight className="size-4 text-ink-400" />}
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </CardBody>
+        </Card>
+      )}
 
       {/*
         Ingredients that have reached their warning level.

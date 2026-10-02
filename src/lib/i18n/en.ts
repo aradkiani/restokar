@@ -156,6 +156,16 @@ export const en: Dictionary = {
       "Online sign-up is currently unavailable. Contact support to have your account created with your own mobile number — you will sign in with that number.",
   },
   dashboard: {
+    firstStepsTitle: "First steps",
+    firstStepsSubtitle: "Five short tasks and your menu is ready for guests.",
+    firstStepsProgress: "{done} of {total} done",
+    firstSteps: {
+      details: "Add your name, logo, phone and address",
+      menu: "Add categories and dishes with prices",
+      design: "Choose how your menu looks",
+      tables: "Create tables and print their QR codes",
+      order: "Place a test order from your own phone",
+    },
     overview: "Overview",
     menu: "Menu",
     categories: "Categories",
