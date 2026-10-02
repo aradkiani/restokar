@@ -1,7 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { netRevenue } from "./analytics";
-import { DAY_MS } from "./constants";
+import { netRevenue, resolveRange } from "./analytics";
 import { COUNTED_ORDER } from "./order-status";
 
 /**
@@ -29,6 +28,8 @@ export interface SiteSummary {
   managerPhone: string | null;
   orders: number;
   revenue: number;
+  /** Cost of goods sold, from the cost snapshotted on each order. */
+  cost: number;
   expenses: number;
   net: number;
 }
@@ -43,7 +44,9 @@ export async function getChainSummary(
   parentRestaurantId: string,
   days = 30,
 ): Promise<ChainSummary> {
-  const since = new Date(Date.now() - days * DAY_MS);
+  // The same zone-anchored trading-day window as each site's own finance
+  // page, so the two pages agree on which orders and expenses fall inside it.
+  const { from, to } = resolveRange(days);
 
   const venues = await prisma.restaurant.findMany({
     where: {
@@ -78,22 +81,33 @@ export async function getChainSummary(
       where: {
         restaurantId: { in: ids },
         ...COUNTED_ORDER,
-        placedAt: { gte: since },
+        placedAt: { gte: from, lte: to },
       },
-      select: { restaurantId: true, total: true, tax: true, tip: true },
+      select: {
+        restaurantId: true,
+        total: true,
+        tax: true,
+        tip: true,
+        costTotal: true,
+      },
     }),
     prisma.expense.groupBy({
       by: ["restaurantId"],
-      where: { restaurantId: { in: ids }, occurredAt: { gte: since } },
+      where: { restaurantId: { in: ids }, occurredAt: { gte: from, lte: to } },
       _sum: { amount: true },
     }),
   ]);
 
-  const revenueBy = new Map<string, { orders: number; revenue: number }>();
+  const revenueBy = new Map<string, { orders: number; revenue: number; cost: number }>();
   for (const order of orders) {
-    const bucket = revenueBy.get(order.restaurantId) ?? { orders: 0, revenue: 0 };
+    const bucket = revenueBy.get(order.restaurantId) ?? {
+      orders: 0,
+      revenue: 0,
+      cost: 0,
+    };
     bucket.orders += 1;
     bucket.revenue += netRevenue(order);
+    bucket.cost += order.costTotal;
     revenueBy.set(order.restaurantId, bucket);
   }
 
@@ -102,7 +116,7 @@ export async function getChainSummary(
   );
 
   const sites: SiteSummary[] = venues.map((venue) => {
-    const counted = revenueBy.get(venue.id) ?? { orders: 0, revenue: 0 };
+    const counted = revenueBy.get(venue.id) ?? { orders: 0, revenue: 0, cost: 0 };
     const spent = expenseBy.get(venue.id) ?? 0;
     return {
       id: venue.id,
@@ -113,8 +127,12 @@ export async function getChainSummary(
       managerPhone: venue.members[0]?.phone ?? null,
       orders: counted.orders,
       revenue: counted.revenue,
+      cost: counted.cost,
       expenses: spent,
-      net: counted.revenue - spent,
+      // Revenue less the cost of what was sold less expenses — the same net
+      // profit the site's own finance page shows. It used to skip the cost of
+      // goods, so a branch at a loss on its own page showed a profit here.
+      net: counted.revenue - counted.cost - spent,
     };
   });
 
