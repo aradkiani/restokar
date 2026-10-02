@@ -7,6 +7,9 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { publishOrderEvent } from "@/lib/events";
 import { RATE_LIMITS } from "@/lib/constants";
 import { markBroadcastPaid } from "@/lib/sms-broadcast-server";
+import { cancelUnpaidOnlineOrder } from "@/lib/orders";
+import { snapshotLimits } from "@/lib/plan-terms";
+import type { Prisma } from "@/generated/prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,6 +75,7 @@ export async function GET(request: Request) {
       where: { id: payment.id },
       data: { status: "FAILED", failureReason: (error as Error).message.slice(0, 200) },
     });
+    await releaseUnpaidOrder(payment);
     return NextResponse.redirect(failureUrl);
   }
 
@@ -83,6 +87,7 @@ export async function GET(request: Request) {
         failureReason: result.message?.slice(0, 200) ?? result.status,
       },
     });
+    await releaseUnpaidOrder(payment);
     return NextResponse.redirect(failureUrl);
   }
 
@@ -110,7 +115,10 @@ export async function GET(request: Request) {
 
     if (payment.purpose === "SUBSCRIPTION" && payment.subscription) {
       const subscription = payment.subscription;
-      const months = subscription.interval === "yearly" ? 12 : 1;
+      // What was bought is what the payment recorded at checkout. Payments made
+      // before that column existed fall back to the subscription's own plan.
+      const interval = payment.interval ?? subscription.interval;
+      const months = interval === "yearly" ? 12 : 1;
 
       // Extend from the later of "now" and the current period end, so paying
       // early tops up rather than truncates the remaining time.
@@ -124,7 +132,19 @@ export async function GET(request: Request) {
 
       await tx.subscription.update({
         where: { id: subscription.id },
-        data: { status: "ACTIVE", currentPeriodEnd: nextEnd, canceledAt: null },
+        data: {
+          status: "ACTIVE",
+          currentPeriodEnd: nextEnd,
+          canceledAt: null,
+          planId: payment.planId ?? subscription.planId,
+          interval,
+          // A renewal takes the plan's terms as they stood when it was paid
+          // for: the limits captured at checkout, or — for a payment from
+          // before that was recorded — the plan as it reads now.
+          limitsSnapshot: hasLimits(payment.planSnapshot)
+            ? (payment.planSnapshot as Prisma.InputJsonValue)
+            : snapshotLimits(subscription.plan),
+        },
       });
     }
 
@@ -160,6 +180,35 @@ export async function GET(request: Request) {
   return NextResponse.redirect(
     resultUrl(purpose, slug, token, "success", result.refId ?? null),
   );
+}
+
+/** Whether a stored plan snapshot carries the limit fields. */
+function hasLimits(snapshot: unknown): boolean {
+  return (
+    typeof snapshot === "object" &&
+    snapshot !== null &&
+    typeof (snapshot as Record<string, unknown>).maxTables === "number"
+  );
+}
+
+/**
+ * A guest's online payment failed or was abandoned at the gateway: if the
+ * kitchen has not started the order, cancel it, so it stops counting as a sale
+ * and its ingredients go back on the shelf. An order already being prepared is
+ * left for staff, who can take the money at the counter instead.
+ */
+async function releaseUnpaidOrder(payment: {
+  purpose: string;
+  orderId: string | null;
+  restaurantId: string;
+}) {
+  if (payment.purpose !== "ORDER" || !payment.orderId) return;
+  try {
+    await cancelUnpaidOnlineOrder(payment.restaurantId, payment.orderId);
+  } catch (error) {
+    // The guest is still redirected; the 15-minute sweep catches what this missed.
+    console.error("[payments] could not release unpaid order", error);
+  }
 }
 
 /**

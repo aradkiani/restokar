@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { getPublicMenu } from "@/lib/menu";
+import { getPublicMenu, pausedVenue } from "@/lib/menu";
+import { MenuPaused } from "./paused";
 import type { Locale } from "@/lib/i18n";
 import { getDictionary } from "@/lib/i18n/client";
 import { localizedText } from "@/lib/i18n/content";
@@ -96,7 +97,13 @@ export default async function PublicMenuPage({ params, searchParams }: PageProps
   const { table, lang } = await searchParams;
 
   const menu = await getPublicMenu(slug);
-  if (!menu) notFound();
+  if (!menu) {
+    // A lapsed subscription takes the menu offline, but the QR code on the
+    // table still leads here: say so politely rather than "not found".
+    const paused = await pausedVenue(slug);
+    if (paused) return <MenuPaused name={paused.name} />;
+    notFound();
+  }
 
   // The guest's remembered choice is scoped to this venue by cookie path, and
   // is deliberately NOT the platform-wide locale cookie: an owner's dashboard

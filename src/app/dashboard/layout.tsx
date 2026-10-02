@@ -4,6 +4,7 @@ import { getI18n } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionState } from "@/lib/plans";
 import { getThemePreference } from "@/lib/appearance-server";
+import { allowsBranches } from "@/lib/plan-terms";
 import { DashboardShell } from "./shell";
 
 export default async function DashboardLayout({
@@ -26,7 +27,9 @@ export default async function DashboardLayout({
         slug: true,
         logoUrl: true,
         parentRestaurantId: true,
-        subscription: { select: { plan: { select: { allowsBranches: true } } } },
+        subscription: {
+          select: { limitsSnapshot: true, plan: { select: { allowsBranches: true } } },
+        },
       },
     }),
     getSubscriptionState(user.restaurantId),
@@ -50,7 +53,13 @@ export default async function DashboardLayout({
       isChainOwner={
         user.role === "OWNER" &&
         !restaurant.parentRestaurantId &&
-        Boolean(restaurant.subscription?.plan.allowsBranches)
+        Boolean(
+          restaurant.subscription &&
+          allowsBranches(
+            restaurant.subscription.limitsSnapshot,
+            restaurant.subscription.plan.allowsBranches,
+          ),
+        )
       }
       subscription={
         subscription

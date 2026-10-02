@@ -1,17 +1,7 @@
 "use client";
 
 import * as React from "react";
-import AuroraTemplate from "./aurora";
-import NoirTemplate from "./noir";
-import EmberTemplate from "./ember";
-import LinenTemplate from "./linen";
-import BazaarTemplate from "./bazaar";
-import AtlasTemplate from "./atlas";
-import ReelTemplate from "./reel";
-import BloomTemplate from "./bloom";
-import KashiTemplate from "./kashi";
-import QalamTemplate from "./qalam";
-import VitrinTemplate from "./vitrin";
+import dynamic from "next/dynamic";
 import { DEFAULT_TEMPLATE_ID } from "./registry";
 import { MenuRuntimeProvider } from "./shared/runtime";
 import { localizeMenuData } from "./shared/localize";
@@ -27,19 +17,23 @@ import { getDictionary } from "@/lib/i18n/client";
  * it": a restaurant row stores the string `templateId` and nothing else, so the
  * component rendered for it is always whatever the platform currently ships
  * under that key.
+ *
+ * Each template is its own chunk. A guest's phone downloads the one design
+ * their venue uses, not all eleven; the server still renders it in full, so
+ * the menu text arrives in the HTML as before.
  */
 const TEMPLATE_COMPONENTS: Record<string, React.ComponentType<TemplateProps>> = {
-  aurora: AuroraTemplate,
-  noir: NoirTemplate,
-  ember: EmberTemplate,
-  linen: LinenTemplate,
-  bazaar: BazaarTemplate,
-  atlas: AtlasTemplate,
-  reel: ReelTemplate,
-  bloom: BloomTemplate,
-  kashi: KashiTemplate,
-  qalam: QalamTemplate,
-  vitrin: VitrinTemplate,
+  aurora: dynamic(() => import("./aurora")),
+  noir: dynamic(() => import("./noir")),
+  ember: dynamic(() => import("./ember")),
+  linen: dynamic(() => import("./linen")),
+  bazaar: dynamic(() => import("./bazaar")),
+  atlas: dynamic(() => import("./atlas")),
+  reel: dynamic(() => import("./reel")),
+  bloom: dynamic(() => import("./bloom")),
+  kashi: dynamic(() => import("./kashi")),
+  qalam: dynamic(() => import("./qalam")),
+  vitrin: dynamic(() => import("./vitrin")),
 };
 
 export function MenuView({

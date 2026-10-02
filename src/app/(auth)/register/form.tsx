@@ -71,7 +71,7 @@ export function RegisterForm({ origin }: { origin: string }) {
     setLoading(true);
     const result = await requestCode(
       "/api/auth/otp",
-      { phone: parsed.data.phone, purpose: "SIGNUP" },
+      { phone: parsed.data.phone, purpose: "SIGNUP", slug: parsed.data.slug },
       t,
     );
     setLoading(false);
@@ -86,6 +86,9 @@ export function RegisterForm({ origin }: { origin: string }) {
         codeLength: result.codeLength ?? 5,
         cooldownSeconds: result.retryAfterSeconds,
       });
+    } else if (result.code === "SLUG_TAKEN") {
+      // Before any code is sent: the person picks another address and goes on.
+      setFieldErrors({ slug: t.auth.slugTaken });
     } else {
       setFieldErrors(localizeFieldErrors(result.fieldErrors, t));
       setError(result.fieldErrors ? null : result.error);

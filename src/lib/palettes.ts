@@ -237,7 +237,3 @@ export function auditPalette(palette: Palette): PaletteAudit {
 export function auditAllPalettes(): PaletteAudit[] {
   return PALETTES.map(auditPalette);
 }
-
-export function getPalette(id: string): Palette | undefined {
-  return PALETTES.find((p) => p.id === id);
-}

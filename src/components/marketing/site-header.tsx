@@ -35,11 +35,11 @@ export function SiteHeader({
   }, []);
 
   const links = [
-    { href: "#features", label: t.nav.features },
-    { href: "#how", label: t.nav.howItWorks },
-    { href: "#demo", label: t.nav.demo },
-    { href: "#pricing", label: t.nav.pricing },
-    { href: "#faq", label: t.nav.faq },
+    { href: "/#features", label: t.nav.features },
+    { href: "/#how", label: t.nav.howItWorks },
+    { href: "/#demo", label: t.nav.demo },
+    { href: "/#pricing", label: t.nav.pricing },
+    { href: "/#faq", label: t.nav.faq },
   ];
 
   async function toggleLocale() {

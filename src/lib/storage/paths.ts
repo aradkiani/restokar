@@ -49,6 +49,21 @@ export function uploadUrl(restaurantId: string, filename: string): string {
 }
 
 /**
+ * The platform's own images (logo, social card) — uploaded by the admin, kept
+ * beside the tenants' folders so they share the /uploads/ URL contract and the
+ * backup. Tenant folders are cuids, so "site" can never collide with one.
+ */
+export const SITE_UPLOAD_SEGMENT = "site";
+
+export function siteUploadDir(): string {
+  return path.join(UPLOADS_ROOT, SITE_UPLOAD_SEGMENT);
+}
+
+export function siteUploadUrl(filename: string): string {
+  return `${UPLOADS_URL_PREFIX}/${SITE_UPLOAD_SEGMENT}/${filename}`;
+}
+
+/**
  * Maps a request's path segments onto a real file, or refuses.
  *
  * Serving uploads through a route handler rather than as static files means

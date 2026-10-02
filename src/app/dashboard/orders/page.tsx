@@ -4,6 +4,7 @@ import { getI18n } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { staffCallVisibleSince } from "@/lib/constants";
 import { boardInclude, boardWhere, toBoardOrder } from "@/lib/kitchen-board";
+import { expireAbandonedOnlineOrders } from "@/lib/orders";
 import { KitchenBoard, type KitchenOrder } from "./board";
 
 export const metadata: Metadata = { title: "سفارش‌ها" };
@@ -12,6 +13,9 @@ export const dynamic = "force-dynamic";
 export default async function OrdersPage() {
   const { restaurantId } = await requirePageTab("orders", "/dashboard/orders");
   const { locale } = await getI18n();
+
+  // Online orders whose guest never finished paying leave the board here.
+  await expireAbandonedOnlineOrders(restaurantId);
 
   // The window and the DTO are shared with /api/orders, so the first paint and
   // the first refresh agree on which orders are on the board.

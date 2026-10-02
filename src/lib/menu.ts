@@ -449,6 +449,29 @@ export function menuOwnerId(restaurant: {
 }
 
 /**
+ * A venue whose menu is offline only because its subscription lapsed: its
+ * name, so the page can say «temporarily unavailable» instead of «not found».
+ * Returns null for anything else — unknown, disabled or unpublished addresses
+ * still get the plain 404. A printed QR code on a table should not tell a
+ * guest the restaurant does not exist.
+ */
+export async function pausedVenue(slug: string): Promise<{ name: string } | null> {
+  const venue = await prisma.restaurant.findUnique({
+    where: { slug: decodeSlug(slug) },
+    select: {
+      name: true,
+      isActive: true,
+      isPublished: true,
+      subscription: { select: { status: true } },
+      parentRestaurant: { select: { subscription: { select: { status: true } } } },
+    },
+  });
+  if (!venue || !venue.isActive || !venue.isPublished) return null;
+  const subscription = venue.subscription ?? venue.parentRestaurant?.subscription;
+  return subscription ? { name: venue.name } : null;
+}
+
+/**
  * The guest-facing menu. Returns null — which the page turns into a 404 — when
  * the restaurant is disabled, unpublished, or its subscription has lapsed.
  *

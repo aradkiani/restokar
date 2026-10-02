@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ImageIcon, LayoutGrid, List, Minus, Plus, Receipt, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, Select } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
@@ -131,9 +131,6 @@ export function ManualOrderForm({
   const [customerPhone, setCustomerPhone] = React.useState("");
   const [tableNumber, setTableNumber] = React.useState("");
   const [note, setNote] = React.useState("");
-  const [paymentMethod, setPaymentMethod] = React.useState<"CASH_ON_SITE" | "ONLINE">(
-    "CASH_ON_SITE",
-  );
   const [busy, setBusy] = React.useState(false);
 
   // Restore the last-used mode. Read once on mount rather than stored on the
@@ -278,7 +275,10 @@ export function ManualOrderForm({
       customerPhone: customerPhone.trim() || undefined,
       tableNumber,
       note: note.trim() || undefined,
-      paymentMethod,
+      // A manual order is settled at the counter. It never opens a gateway, so
+      // the «پرداخت آنلاین» it used to offer created an order nobody could
+      // ever mark paid.
+      paymentMethod: "CASH_ON_SITE",
       items: lines.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
@@ -481,19 +481,6 @@ export function ManualOrderForm({
                 rows={2}
                 className="w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface p-3 text-sm leading-7"
               />
-            </Field>
-
-            <Field label={t.manualOrder.paymentMethod} htmlFor="mo-payment">
-              <Select
-                id="mo-payment"
-                value={paymentMethod}
-                onChange={(e) =>
-                  setPaymentMethod(e.target.value as "CASH_ON_SITE" | "ONLINE")
-                }
-              >
-                <option value="CASH_ON_SITE">{t.manualOrder.cash}</option>
-                <option value="ONLINE">{t.manualOrder.online}</option>
-              </Select>
             </Field>
           </CardBody>
         </Card>

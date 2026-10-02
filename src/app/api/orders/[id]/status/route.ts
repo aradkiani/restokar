@@ -1,13 +1,17 @@
 import { ok, parseBody, route } from "@/lib/api";
-import { requireTenant } from "@/lib/auth/guards";
+import { requireTab } from "@/lib/auth/guards";
 import { OrderStatusSchema } from "@/lib/validation";
 import { updateOrderStatus } from "@/lib/orders";
 
 export const runtime = "nodejs";
 
-/** Kitchen workflow transition. `requireTenant` allows OWNER and STAFF alike. */
+/**
+ * Kitchen workflow transition, for anyone holding the `orders` section —
+ * owners and branch managers by role, staff by grant. Which moves are allowed
+ * is decided by updateOrderStatus.
+ */
 export const PATCH = route(async (request: Request, context: unknown) => {
-  const { restaurantId } = await requireTenant();
+  const { restaurantId } = await requireTab("orders");
   const { id } = await (context as { params: Promise<{ id: string }> }).params;
 
   const { status } = await parseBody(request, OrderStatusSchema);

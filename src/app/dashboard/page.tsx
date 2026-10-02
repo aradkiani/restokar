@@ -17,6 +17,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { requirePageBranchOperator } from "@/lib/auth/guards";
+import { canAccessTab, type StaffTab } from "@/lib/staff-tabs";
 import { formatQuantity, isLowStock } from "@/lib/inventory";
 import { getI18n } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
@@ -39,6 +40,8 @@ import { RankedBars, StatTile, TrendChart } from "@/components/charts";
 import { OrderStatusBadge } from "@/components/order-status-badge";
 import { cn } from "@/lib/utils";
 import type { Locale } from "@/lib/i18n";
+import { firstSteps, showFirstSteps } from "@/lib/first-steps";
+import { DEFAULT_TEMPLATE_ID } from "@/templates/registry";
 
 export const metadata: Metadata = { title: "پیشخوان" };
 export const dynamic = "force-dynamic";
@@ -46,6 +49,17 @@ export const dynamic = "force-dynamic";
 export default async function DashboardOverviewPage() {
   const { restaurantId, user } = await requirePageBranchOperator("/dashboard");
   const { t, locale } = await getI18n();
+
+  /*
+    A branch manager lands here too, but a branch owns no menu and no shelves —
+    both belong to the chain owner. Counting products, scoring menu health or
+    reading stock by the branch's own id always produced zeros, and shortcuts
+    to sections the manager cannot open bounced them to the order board. Each
+    menu- or stock-shaped part of the page now appears only to someone who can
+    act on it.
+  */
+  const canMenu = canAccessTab(user, "menu");
+  const ownsStock = user.role === "OWNER";
 
   const [
     today,
@@ -79,11 +93,20 @@ export default async function DashboardOverviewPage() {
       where: { id: restaurantId },
       select: {
         slug: true,
-        _count: { select: { products: true, categories: true, tables: true } },
+        parentRestaurantId: true,
+        logoUrl: true,
+        tagline: true,
+        phone: true,
+        address: true,
+        templateId: true,
+        theme: true,
+        _count: {
+          select: { products: true, categories: true, tables: true, orders: true },
+        },
       },
     }),
     getTodayComparison(restaurantId),
-    getMenuHealth(restaurantId),
+    canMenu ? getMenuHealth(restaurantId) : Promise.resolve(null),
     getPendingStaffCalls(restaurantId),
     getPeakHours(restaurantId),
   ]);
@@ -97,26 +120,61 @@ export default async function DashboardOverviewPage() {
     keeps the set small, and a venue's ingredient list is tens of rows, not
     thousands.
   */
-  const watched = await prisma.inventoryItem.findMany({
-    where: { restaurantId, lowStockMilli: { gt: 0 }, isActive: true },
-    orderBy: { name: "asc" },
-    take: 200,
-    select: {
-      id: true,
-      name: true,
-      unit: true,
-      quantityMilli: true,
-      lowStockMilli: true,
-    },
-  });
+  const watched = ownsStock
+    ? await prisma.inventoryItem.findMany({
+        where: { restaurantId, lowStockMilli: { gt: 0 }, isActive: true },
+        orderBy: { name: "asc" },
+        take: 200,
+        select: {
+          id: true,
+          name: true,
+          unit: true,
+          quantityMilli: true,
+          lowStockMilli: true,
+        },
+      })
+    : [];
   const lowStock = watched.filter(isLowStock);
 
-  const quickActions = [
-    { href: "/dashboard/menu", label: t.menuBuilder.addProduct, icon: Plus },
-    { href: "/dashboard/design", label: t.dashboard.design, icon: Palette },
-    { href: "/dashboard/qr", label: t.dashboard.qr, icon: QrCode },
-    { href: "/dashboard/analytics", label: t.dashboard.analytics, icon: TrendingUp },
-  ];
+  // Only the owner of a venue with its own menu sets these things up; a
+  // branch serves its chain's menu and design.
+  const setup =
+    user.role === "OWNER" && counts && !counts.parentRestaurantId
+      ? firstSteps(
+          {
+            ...counts,
+            products: counts._count.products,
+            tables: counts._count.tables,
+            orders: counts._count.orders,
+          },
+          DEFAULT_TEMPLATE_ID,
+        )
+      : null;
+  const showSetup = setup !== null && showFirstSteps(setup, counts?._count.orders ?? 0);
+
+  const quickActions = (
+    [
+      {
+        href: "/dashboard/menu",
+        label: t.menuBuilder.addProduct,
+        icon: Plus,
+        tab: "menu",
+      },
+      {
+        href: "/dashboard/design",
+        label: t.dashboard.design,
+        icon: Palette,
+        tab: "design",
+      },
+      { href: "/dashboard/qr", label: t.dashboard.qr, icon: QrCode, tab: "qr" },
+      {
+        href: "/dashboard/analytics",
+        label: t.dashboard.analytics,
+        icon: TrendingUp,
+        tab: "analytics",
+      },
+    ] satisfies { href: string; label: string; icon: typeof Plus; tab: StaffTab }[]
+  ).filter((action) => canAccessTab(user, action.tab));
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -126,10 +184,15 @@ export default async function DashboardOverviewPage() {
             {t.dashboard.welcome}، {user.name.split(" ")[0]}
           </h1>
           <p className="mt-1 text-sm text-ink-500">
-            {formatNumber(counts?._count.products ?? 0, locale)} {t.dashboard.products} ·{" "}
-            {formatNumber(counts?._count.categories ?? 0, locale)}{" "}
-            {t.dashboard.categories} · {formatNumber(counts?._count.tables ?? 0, locale)}{" "}
-            {t.dashboard.tables}
+            {canMenu && (
+              <>
+                {formatNumber(counts?._count.products ?? 0, locale)}{" "}
+                {t.dashboard.products} ·{" "}
+                {formatNumber(counts?._count.categories ?? 0, locale)}{" "}
+                {t.dashboard.categories} ·{" "}
+              </>
+            )}
+            {formatNumber(counts?._count.tables ?? 0, locale)} {t.dashboard.tables}
           </p>
         </div>
         <Link
@@ -141,6 +204,64 @@ export default async function DashboardOverviewPage() {
           <ArrowUpRight className="size-4" />
         </Link>
       </header>
+
+      {showSetup && setup && (
+        <Card>
+          <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>{t.dashboard.firstStepsTitle}</CardTitle>
+              <p className="mt-1 text-xs text-ink-500">
+                {t.dashboard.firstStepsSubtitle}
+              </p>
+            </div>
+            <span className="text-xs font-bold text-ink-600">
+              {t.dashboard.firstStepsProgress
+                .replace(
+                  "{done}",
+                  formatNumber(setup.filter((s) => s.done).length, locale),
+                )
+                .replace("{total}", formatNumber(setup.length, locale))}
+            </span>
+          </CardHeader>
+          <CardBody className="p-0">
+            <ol className="divide-y divide-ink-100">
+              {setup.map((step, index) => (
+                <li key={step.key}>
+                  <Link
+                    href={step.href}
+                    target={step.key === "order" ? "_blank" : undefined}
+                    className="flex min-h-12 items-center gap-3 px-5 py-3 text-sm hover:bg-ink-50"
+                  >
+                    <span
+                      className={cn(
+                        "grid size-7 shrink-0 place-items-center rounded-full text-xs font-black",
+                        step.done
+                          ? "bg-emerald-600 text-white"
+                          : "bg-ink-100 text-ink-600",
+                      )}
+                    >
+                      {step.done ? (
+                        <Check className="size-4" />
+                      ) : (
+                        formatNumber(index + 1, locale)
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "flex-1 font-bold",
+                        step.done ? "text-ink-400 line-through" : "text-ink-800",
+                      )}
+                    >
+                      {t.dashboard.firstSteps[step.key]}
+                    </span>
+                    {!step.done && <ArrowUpRight className="size-4 text-ink-400" />}
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </CardBody>
+        </Card>
+      )}
 
       {/*
         Ingredients that have reached their warning level.
@@ -353,54 +474,56 @@ export default async function DashboardOverviewPage() {
         </Card>
 
         {/* --------------------------------------------- what needs fixing */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.dashboard.menuHealth}</CardTitle>
-            <Link
-              href="/dashboard/menu"
-              className="text-xs font-bold text-brand-700 hover:underline"
-            >
-              {t.dashboard.menu}
-            </Link>
-          </CardHeader>
-          <CardBody>
-            <ul className="space-y-2">
-              <HealthRow
-                label={t.dashboard.healthMissingCost}
-                count={health.missingCost}
-                total={health.total}
-                locale={locale}
-                /* The costliest gap: a product with no cost reports 100%
+        {health && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.dashboard.menuHealth}</CardTitle>
+              <Link
+                href="/dashboard/menu"
+                className="text-xs font-bold text-brand-700 hover:underline"
+              >
+                {t.dashboard.menu}
+              </Link>
+            </CardHeader>
+            <CardBody>
+              <ul className="space-y-2">
+                <HealthRow
+                  label={t.dashboard.healthMissingCost}
+                  count={health.missingCost}
+                  total={health.total}
+                  locale={locale}
+                  /* The costliest gap: a product with no cost reports 100%
                    margin, so the finance page flatters exactly the items
                    nobody has costed. */
-                severe
-              />
-              {/* Omitted entirely for a venue that has turned photos off:
+                  severe
+                />
+                {/* Omitted entirely for a venue that has turned photos off:
                   showing "۰ از ۹" would still frame photography as a measure
                   it is being scored against. */}
-              {health.missingImage !== null && (
+                {health.missingImage !== null && (
+                  <HealthRow
+                    label={t.dashboard.healthMissingImage}
+                    count={health.missingImage}
+                    total={health.total}
+                    locale={locale}
+                  />
+                )}
                 <HealthRow
-                  label={t.dashboard.healthMissingImage}
-                  count={health.missingImage}
+                  label={t.dashboard.healthMissingDescription}
+                  count={health.missingDescription}
                   total={health.total}
                   locale={locale}
                 />
-              )}
-              <HealthRow
-                label={t.dashboard.healthMissingDescription}
-                count={health.missingDescription}
-                total={health.total}
-                locale={locale}
-              />
-              <HealthRow
-                label={t.dashboard.healthUnavailable}
-                count={health.unavailable}
-                total={health.total}
-                locale={locale}
-              />
-            </ul>
-          </CardBody>
-        </Card>
+                <HealthRow
+                  label={t.dashboard.healthUnavailable}
+                  count={health.unavailable}
+                  total={health.total}
+                  locale={locale}
+                />
+              </ul>
+            </CardBody>
+          </Card>
+        )}
       </div>
 
       <Card>

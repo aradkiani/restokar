@@ -39,10 +39,6 @@ export const SMS_AUDIENCES = ["all", ...CUSTOMER_SEGMENTS] as const;
 
 export type SmsAudience = (typeof SMS_AUDIENCES)[number];
 
-export function isSmsAudience(value: string): value is SmsAudience {
-  return (SMS_AUDIENCES as readonly string[]).includes(value);
-}
-
 export interface SelectedRecipients {
   /** Canonical, unique, consented mobiles, in first-seen order. */
   phones: string[];

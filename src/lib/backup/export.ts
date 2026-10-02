@@ -42,6 +42,13 @@ import { writeTarGz, type ArchiveEntry } from "./archive";
  */
 const TABLE_ORDER = [
   "Plan",
+  // A plan's edit history; references Plan only.
+  "PlanVersion",
+  // The public site's editable text and its published versions. Platform
+  // data rather than customer data, but losing it would silently put the
+  // site back to its built-in text, legal pages included.
+  "ContentDocument",
+  "ContentVersion",
   "User",
   "Restaurant",
   "Subscription",

@@ -13,8 +13,9 @@ import { linkCustomer } from "./customers-server";
 import { zonedMoment, type ZonedMoment } from "./time";
 import { deductStock, restoreStockForOrder } from "./stock";
 import { randomToken } from "./utils";
-import { MAX_INT4 } from "./constants";
+import { MAX_INT4, ONLINE_PAYMENT_WINDOW_MINUTES } from "./constants";
 import { PAYMENTS_ENABLED } from "./features";
+import { canMoveOrder } from "./order-flow";
 import type { OrderStatus } from "@/generated/prisma/enums";
 
 export const OrderItemInput = z.object({
@@ -85,6 +86,15 @@ export const CreateOrderInput = z.object({
    * able to set to any number they liked.
    */
   discountCode: z.string().trim().max(24).optional(),
+  /**
+   * The phone's key for this checkout attempt (see `Order.clientKey`). Random
+   * and unguessable; it only ever returns an order the same table and name
+   * already placed.
+   */
+  clientKey: z
+    .string()
+    .regex(/^[A-Za-z0-9-]{16,64}$/)
+    .optional(),
   items: z
     .array(OrderItemInput)
     .min(1, "سبد خرید شما خالی است")
@@ -365,6 +375,51 @@ export interface CreatedOrder {
    * value rather than from the request body it was asked to ignore.
    */
   customerPhone: string | null;
+  /** True when this is an earlier order returned for a repeated attempt. */
+  replayed: boolean;
+}
+
+/**
+ * The order an earlier, identical checkout attempt already placed, if any.
+ *
+ * Returned only to the same table and name: the key is random, but an order's
+ * tracking token is not something to hand to a request that merely knows it.
+ */
+async function replayedOrder(
+  restaurantId: string,
+  input: CreateOrderInput,
+): Promise<CreatedOrder | null> {
+  if (!input.clientKey) return null;
+  const existing = await prisma.order.findUnique({
+    where: { restaurantId_clientKey: { restaurantId, clientKey: input.clientKey } },
+    select: {
+      id: true,
+      orderNumber: true,
+      publicToken: true,
+      total: true,
+      customerPhone: true,
+      paymentMethod: true,
+      tableNumber: true,
+      customerName: true,
+    },
+  });
+  if (!existing) return null;
+  if (
+    existing.tableNumber !== input.tableNumber ||
+    existing.customerName !== input.customerName
+  ) {
+    throw new HttpError(409, "این سفارش قبلاً ثبت شده است.", "ORDER_KEY_REUSED");
+  }
+  return {
+    id: existing.id,
+    orderNumber: existing.orderNumber,
+    publicToken: existing.publicToken,
+    total: existing.total,
+    customerPhone: existing.customerPhone,
+    restaurantId,
+    paymentMethod: existing.paymentMethod,
+    replayed: true,
+  };
 }
 
 /**
@@ -413,6 +468,33 @@ async function resolveDiscountCode(args: {
 }
 
 /**
+ * Places an order — once per checkout attempt.
+ *
+ * A repeated attempt (same `clientKey`) gets the order the first one placed,
+ * whether it arrives after the first has finished (found before anything is
+ * written) or at the same moment (the second insert loses on the unique key
+ * and is answered with the winner's order).
+ */
+export async function createOrder(
+  input: CreateOrderInput,
+  options: { isManual?: boolean } = {},
+): Promise<CreatedOrder> {
+  try {
+    return await placeOrder(input, options);
+  } catch (error) {
+    if (input.clientKey && (error as { code?: string })?.code === "P2002") {
+      const venue = await prisma.restaurant.findUnique({
+        where: { slug: input.slug },
+        select: { id: true },
+      });
+      const replay = venue ? await replayedOrder(venue.id, input) : null;
+      if (replay) return replay;
+    }
+    throw error;
+  }
+}
+
+/**
  * Places an order.
  *
  * Prices are read from the database and snapshotted onto the order rather than
@@ -420,7 +502,7 @@ async function resolveDiscountCode(args: {
  * per-restaurant order number is allocated by an atomic increment inside the
  * same transaction, so two simultaneous guests cannot receive the same number.
  */
-export async function createOrder(
+async function placeOrder(
   input: CreateOrderInput,
   /**
    * Server-side facts about the order that no client may assert.
@@ -512,6 +594,12 @@ export async function createOrder(
   // pricing rules come from whoever owns the menu.
   const restaurant = { ...venue, ...menuOwner, id: venue.id };
 
+  // A repeat of an attempt that already succeeded: answer with that order,
+  // before anything below could refuse it (a dish sold out in between) or
+  // place it a second time.
+  const replay = await replayedOrder(restaurant.id, input);
+  if (replay) return replay;
+
   // Same reasoning as `isPublished` above: this switch decides whether *guests*
   // may order from their phone. A venue that takes orders only by telephone has
   // it off by design, and that is precisely who needs the manual tab.
@@ -531,6 +619,16 @@ export async function createOrder(
    * Enforced here, in the domain function, rather than in the route: every
    * caller that can create an order goes through this.
    */
+  // A manual order is taken at the counter and never opens a gateway, so an
+  // online one could never be paid: refused rather than left stuck forever.
+  if (staffOrigin && input.paymentMethod === "ONLINE") {
+    throw new HttpError(
+      422,
+      "سفارش دستی فقط با پرداخت در محل ثبت می‌شود",
+      "MANUAL_ORDER_ONLINE",
+    );
+  }
+
   if (
     input.paymentMethod === "ONLINE" &&
     (!PAYMENTS_ENABLED || !restaurant.onlinePaymentEnabled)
@@ -794,6 +892,7 @@ export async function createOrder(
         orderNumber,
         publicToken,
         isManual: options.isManual ?? false,
+        clientKey: input.clientKey ?? null,
         tableNumber: input.tableNumber,
         customerName: input.customerName,
         /*
@@ -885,6 +984,7 @@ export async function createOrder(
     ...order,
     restaurantId: restaurant.id,
     paymentMethod: input.paymentMethod,
+    replayed: false,
   };
 }
 
@@ -914,6 +1014,13 @@ export async function updateOrderStatus(
 
   if (!existing) throw new HttpError(404, "Order not found", "ORDER_NOT_FOUND");
   if (existing.status === status) return;
+  if (!canMoveOrder(existing.status, status)) {
+    throw new HttpError(
+      409,
+      "این تغییر وضعیت برای این سفارش مجاز نیست",
+      "INVALID_TRANSITION",
+    );
+  }
 
   const timestampField = STATUS_TIMESTAMP[status];
 
@@ -924,20 +1031,29 @@ export async function updateOrderStatus(
     credit stock for an order that is still live.
   */
   await prisma.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: orderId },
+    // Conditional on the status read above. Two taps on «لغو» from two screens
+    // used to both pass the check and both put the ingredients back; now the
+    // second finds the order already moved and changes nothing.
+    const moved = await tx.order.updateMany({
+      where: { id: orderId, status: existing.status },
       data: {
         status,
         ...(timestampField ? { [timestampField]: new Date() } : {}),
       },
     });
+    if (moved.count === 0) {
+      throw new HttpError(
+        409,
+        "وضعیت این سفارش همین حالا تغییر کرد؛ صفحه را دوباره ببینید",
+        "ORDER_CHANGED",
+      );
+    }
 
     await tx.orderEvent.create({ data: { orderId, status } });
 
-    // Only on the way *into* CANCELED, and `existing.status === status` above
-    // has already returned for a repeat, so this cannot run twice for one
-    // cancellation — the ledger check in restoreStockForOrder is the belt to
-    // that brace.
+    // Only on the way *into* CANCELED, and only by the request that won the
+    // conditional update above. The unique ledger index on (order, item,
+    // reason) is the database-level belt to that brace.
     if (status === "CANCELED") await restoreStockForOrder(tx, orderId);
   });
 
@@ -954,10 +1070,15 @@ export async function updateOrderStatus(
 /**
  * Records that a guest settled their bill in cash at the table.
  *
- * Restricted to `CASH_ON_SITE`. An online order's payment status is written by
- * the gateway callback after a server-to-server verification, and letting a
- * staff member flip that by hand would make the one field that proves money
- * moved editable from the floor.
+ * A paid online order is never touched: its status was written by the gateway
+ * after a server-to-server verification, and letting a staff member flip that
+ * by hand would make the one field that proves money moved editable from the
+ * floor.
+ *
+ * An online order whose payment never completed is different: the guest is
+ * paying at the counter instead. Marking it paid records exactly that — the
+ * method becomes «پرداخت در محل» — so the order is no longer stuck as unpaid
+ * forever, which it used to be.
  *
  * Idempotent, because two people clearing tables will both tap it.
  */
@@ -973,7 +1094,9 @@ export async function markOrderPaid(
 
   if (!existing) throw new HttpError(404, "Order not found", "ORDER_NOT_FOUND");
 
-  if (existing.paymentMethod !== "CASH_ON_SITE") {
+  const settlingUnpaidOnline =
+    existing.paymentMethod === "ONLINE" && existing.paymentStatus !== "PAID" && paid;
+  if (existing.paymentMethod !== "CASH_ON_SITE" && !settlingUnpaidOnline) {
     throw new HttpError(
       409,
       "Online payments are settled by the gateway",
@@ -994,7 +1117,11 @@ export async function markOrderPaid(
   */
   await prisma.order.update({
     where: { id: orderId },
-    data: { paymentStatus: next, paidAt: paid ? new Date() : null },
+    data: {
+      paymentStatus: next,
+      paidAt: paid ? new Date() : null,
+      ...(settlingUnpaidOnline ? { paymentMethod: "CASH_ON_SITE" as const } : {}),
+    },
   });
 
   // The board and the guest's tracking page both listen, so the badge turns
@@ -1011,51 +1138,68 @@ export async function markOrderPaid(
 }
 
 /**
- * Records a tip the guest handed over after the fact.
+ * Cancels an online order whose payment did not complete — but only while the
+ * kitchen has not started it. Returns whether it cancelled anything.
  *
- * Most tips in an Iranian venue are cash left on the table, so they never pass
- * through the checkout the guest used and the order has no way to know about
- * them. Staff record them here instead.
- *
- * `total` moves with the tip because it represents the money that actually
- * changed hands, but revenue does not: `netRevenue` subtracts tax and tips, so
- * a recorded tip shows up as money received and belonging to staff, and never
- * inflates the venue's sales or its profit. The tip component is replaced
- * rather than added to, which is what makes correcting a mistyped amount work.
+ * Called when the gateway reports a failed or abandoned payment, and by the
+ * sweep below for guests who never came back from the gateway at all. Without
+ * this an unpaid online order stayed on the board, counted as a sale and held
+ * its ingredients indefinitely.
  */
-export async function setOrderTip(
+export async function cancelUnpaidOnlineOrder(
   restaurantId: string,
   orderId: string,
-  tip: number,
-): Promise<{ tip: number; total: number }> {
-  const existing = await prisma.order.findFirst({
+): Promise<boolean> {
+  const order = await prisma.order.findFirst({
     where: { id: orderId, restaurantId },
-    select: { id: true, tip: true, total: true, publicToken: true },
+    select: { status: true, paymentMethod: true, paymentStatus: true },
   });
+  if (
+    !order ||
+    order.paymentMethod !== "ONLINE" ||
+    order.paymentStatus === "PAID" ||
+    order.status !== "RECEIVED"
+  ) {
+    return false;
+  }
+  try {
+    await updateOrderStatus(restaurantId, orderId, "CANCELED");
+    return true;
+  } catch (error) {
+    // Someone moved it in the meantime — the kitchen took it, or it was paid.
+    if (error instanceof HttpError && error.code === "ORDER_CHANGED") return false;
+    throw error;
+  }
+}
 
-  if (!existing) throw new HttpError(404, "Order not found", "ORDER_NOT_FOUND");
-
-  const next = Math.max(0, Math.round(tip));
-  // The bill without any tip, so re-recording never compounds.
-  const payable = existing.total - existing.tip;
-
-  if (next === existing.tip) return { tip: next, total: existing.total };
-
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { tip: next, total: payable + next },
-    select: { tip: true, total: true },
+/**
+ * Cancels this venue's online orders that have waited for payment longer than
+ * ONLINE_PAYMENT_WINDOW_MINUTES without the kitchen starting them.
+ *
+ * Run lazily whenever the order board loads or refreshes, which is exactly
+ * when someone would otherwise see a ghost order. Cheap: it reads only received,
+ * unpaid online orders of one venue. A guest who pays after the window lands
+ * in the refund queue (cancelled but paid), which is the existing path for
+ * exactly that case.
+ */
+export async function expireAbandonedOnlineOrders(restaurantId: string): Promise<number> {
+  const cutoff = new Date(Date.now() - ONLINE_PAYMENT_WINDOW_MINUTES * 60_000);
+  const stale = await prisma.order.findMany({
+    where: {
+      restaurantId,
+      status: "RECEIVED",
+      paymentMethod: "ONLINE",
+      paymentStatus: { not: "PAID" },
+      placedAt: { lt: cutoff },
+    },
+    select: { id: true },
+    take: 50,
   });
-
-  publishOrderEvent({
-    type: "order.updated",
-    restaurantId,
-    orderId,
-    publicToken: existing.publicToken,
-    at: new Date().toISOString(),
-  });
-
-  return updated;
+  let cancelled = 0;
+  for (const order of stale) {
+    if (await cancelUnpaidOnlineOrder(restaurantId, order.id)) cancelled += 1;
+  }
+  return cancelled;
 }
 
 /** The guest's view, addressed by unguessable token rather than by id. */

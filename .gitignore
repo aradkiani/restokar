@@ -60,3 +60,8 @@ desktop.ini
 *.bak
 *.orig
 *~
+
+# Playwright end-to-end output
+/test-results/
+/playwright-report/
+/blob-report/

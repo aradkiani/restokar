@@ -11,3 +11,7 @@ package-lock.json
 
 # Editor/agent tooling, not project source.
 .claude/
+
+# Playwright end-to-end output
+test-results/
+playwright-report/

@@ -14,8 +14,6 @@
 /** One day in milliseconds. Repeated inline in four modules before this. */
 export const DAY_MS = 86_400_000;
 
-export const MINUTE_MS = 60_000;
-
 // ------------------------------ auth / session -----------------------------
 
 /** How long a session cookie stays valid. */
@@ -31,6 +29,14 @@ export const TRIAL_DAYS = 14;
  * printed QR codes on its tables should not go dark the moment a card expires.
  */
 export const GRACE_DAYS = 3;
+
+/**
+ * How long a guest's online order waits for its payment before it is
+ * cancelled, provided the kitchen has not started it. Long enough to finish a
+ * slow bank page; short enough that the board is not haunted by guests who
+ * closed the tab.
+ */
+export const ONLINE_PAYMENT_WINDOW_MINUTES = 15;
 
 /** Warn the owner in the dashboard when the period ends within this window. */
 export const RENEWAL_WARNING_DAYS = 5;
@@ -228,18 +234,6 @@ export const ORDER_POLL_MS = 30_000;
 export const DELIVERED_VISIBLE_MINUTES = 90;
 export const DELIVERED_VISIBLE_MS = DELIVERED_VISIBLE_MINUTES * 60_000;
 
-/**
- * The cutoff a delivered order must fall after to still appear on the board.
- *
- * A function rather than an inline `Date.now()` in the page: reading the clock
- * during a component's render is exactly what `react-hooks/purity` forbids, and
- * every other time window in this codebase (`resolveRange`, `startOfDay`) is
- * derived the same way.
- */
-export function deliveredVisibleSince(): Date {
-  return new Date(Date.now() - DELIVERED_VISIBLE_MS);
-}
-
 // -------------------------------- refunds ----------------------------------
 
 /**
@@ -275,15 +269,3 @@ export function needsRefund(order: {
     order.refundedAt === null
   );
 }
-
-// -------------------------------- contact ----------------------------------
-
-/**
- * Placeholder contact details for the marketing site. Replace before launch —
- * these are referenced from the landing page footer and contact section.
- */
-export const CONTACT = {
-  phone: "021-00000000",
-  phoneHref: "tel:+982100000000",
-  email: "hello@restokar.ir",
-} as const;

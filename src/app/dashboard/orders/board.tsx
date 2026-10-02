@@ -37,6 +37,7 @@ import {
   needsRefund,
 } from "@/lib/constants";
 import { isRetired } from "@/lib/order-retirement";
+import { NEXT_STATUS } from "@/lib/order-flow";
 import { OrderDetailDialog } from "./order-detail";
 import type { Locale } from "@/lib/i18n";
 
@@ -79,11 +80,8 @@ const COLUMNS: { status: Exclude<Status, "CANCELED">; tone: string }[] = [
 ];
 
 /** The next status each column's action moves an order to. */
-const NEXT: Record<string, Status> = {
-  RECEIVED: "PREPARING",
-  PREPARING: "READY",
-  READY: "DELIVERED",
-};
+/** The forward move from each status — the same table the server enforces. */
+const NEXT = NEXT_STATUS as Partial<Record<string, Status>>;
 
 export function KitchenBoard({
   initialOrders,
@@ -484,7 +482,10 @@ export function KitchenBoard({
                   <span>
                     {t.kitchen.table} {localizeDigits(call.tableNumber, locale)}
                   </span>
-                  <span className="font-normal opacity-70">
+                  {/* Read from the clock, so the server and the phone can land
+                      either side of a minute; the board re-renders on mount and
+                      on every poll, which settles it. */}
+                  <span className="font-normal opacity-70" suppressHydrationWarning>
                     {formatRelative(call.createdAt, locale)}
                   </span>
                   <Check className="size-3.5 shrink-0" />
@@ -622,7 +623,10 @@ export function KitchenBoard({
                           find. Online orders keep the plain badge: their status
                           comes from the gateway and must not be editable here.
                         */}
-                        {order.paymentMethod === "CASH_ON_SITE" ? (
+                        {/* An online order whose payment never completed is
+                          settled the same way: the guest pays at the counter. */}
+                        {order.paymentMethod === "CASH_ON_SITE" ||
+                        order.paymentStatus !== "PAID" ? (
                           <button
                             type="button"
                             disabled={busyId === order.id}
@@ -685,7 +689,11 @@ export function KitchenBoard({
                           </span>
                         )}
 
-                        <span className="text-[11px] text-ink-400">
+                        {/* Clock-derived; see the staff-call label above. */}
+                        <span
+                          className="text-[11px] text-ink-400"
+                          suppressHydrationWarning
+                        >
                           {formatRelative(order.placedAt, locale)}
                         </span>
                       </div>

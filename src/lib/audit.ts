@@ -49,24 +49,3 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
     console.error("[audit] failed to record entry", entry.action, error);
   }
 }
-
-/**
- * Tenant-scoped read for the dashboard. Ordering is newest-first because the
- * question an owner asks is "what just happened?", not "what happened first?".
- */
-export async function listAuditLog(restaurantId: string, take = 50) {
-  return prisma.auditLog.findMany({
-    where: { restaurantId },
-    orderBy: { createdAt: "desc" },
-    take,
-    select: {
-      id: true,
-      action: true,
-      summary: true,
-      actorLabel: true,
-      actorRole: true,
-      entityType: true,
-      createdAt: true,
-    },
-  });
-}

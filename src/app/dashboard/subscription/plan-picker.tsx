@@ -7,23 +7,24 @@ import { Badge } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
-import { formatMoney, formatNumber } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Locale } from "@/lib/i18n";
+import type { EffectivePrice } from "@/lib/plan-terms";
 
+/**
+ * Everything is worked out on the server — the price in force (a promotion
+ * included) and the card's lines — so the amount shown here is the amount the
+ * checkout route will charge.
+ */
 export interface PlanOption {
   code: string;
   name: string;
   description: string | null;
-  monthlyPrice: number;
-  yearlyPrice: number;
-  maxProducts: number;
-  maxCategories: number;
-  maxTables: number;
-  maxDailyViews: number;
-  allowsOnlinePay: boolean;
-  allowsAnalytics: boolean;
-  sortOrder: number;
+  recommended: boolean;
+  monthly: EffectivePrice;
+  yearly: EffectivePrice;
+  lines: string[];
 }
 
 export function PlanPicker({
@@ -65,9 +66,6 @@ export function PlanPicker({
     window.location.href = result.data.paymentUrl;
   }
 
-  const limitLabel = (value: number, unit: string) =>
-    value < 0 ? t.subscription.unlimited : `${formatNumber(value, locale)} ${unit}`;
-
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -100,11 +98,10 @@ export function PlanPicker({
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
-        {plans.map((plan, index) => {
+        {plans.map((plan) => {
           const isCurrent = plan.code === currentPlanCode;
-          const price = interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
-          // The middle tier is the intended default — highlight it.
-          const highlighted = index === 1;
+          const price = interval === "yearly" ? plan.yearly : plan.monthly;
+          const highlighted = plan.recommended;
 
           return (
             <div
@@ -134,8 +131,13 @@ export function PlanPicker({
               )}
 
               <p className="mt-4">
+                {price.regular !== null && (
+                  <s className="me-2 text-sm font-bold text-ink-400">
+                    {formatMoney(price.regular, locale)}
+                  </s>
+                )}
                 <span className="text-2xl font-black text-ink-900">
-                  {formatMoney(price, locale)}
+                  {formatMoney(price.amount, locale)}
                 </span>
                 <span className="ms-1.5 text-xs font-semibold text-ink-500">
                   {t.common.toman} /{" "}
@@ -146,24 +148,12 @@ export function PlanPicker({
               </p>
 
               <ul className="mt-5 flex-1 space-y-2.5 text-sm">
-                {[
-                  limitLabel(plan.maxProducts, t.subscription.limitProducts),
-                  limitLabel(plan.maxCategories, t.subscription.limitCategories),
-                  limitLabel(plan.maxTables, t.subscription.limitTables),
-                  limitLabel(plan.maxDailyViews, t.subscription.limitDailyViews),
-                  plan.allowsAnalytics ? t.dashboard.analytics : null,
-                  plan.allowsOnlinePay ? t.features.paymentTitle : null,
-                ]
-                  .filter(Boolean)
-                  .map((feature) => (
-                    <li
-                      key={feature as string}
-                      className="flex items-start gap-2 text-ink-700"
-                    >
-                      <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-                      {feature}
-                    </li>
-                  ))}
+                {plan.lines.map((line) => (
+                  <li key={line} className="flex items-start gap-2 text-ink-700">
+                    <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                    {line}
+                  </li>
+                ))}
               </ul>
 
               <Button

@@ -6,6 +6,7 @@ import { AdminAccountSchema } from "@/lib/validation";
 import { subscriptionEndFromDays } from "@/lib/onboarding";
 import { recordAudit } from "@/lib/audit";
 import { DEFAULT_TEMPLATE_ID } from "@/templates/registry";
+import { snapshotLimits } from "@/lib/plan-terms";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,7 @@ export const POST = route(async (request: Request) => {
   const [existingUser, existingRestaurant, plan] = await Promise.all([
     prisma.user.findUnique({ where: { phone: input.ownerPhone }, select: { id: true } }),
     prisma.restaurant.findUnique({ where: { slug: input.slug }, select: { id: true } }),
-    prisma.plan.findUnique({ where: { code: input.planCode }, select: { id: true } }),
+    prisma.plan.findUnique({ where: { code: input.planCode } }),
   ]);
 
   if (existingUser) return fail(409, "Phone number unavailable", "PHONE_TAKEN");
@@ -84,6 +85,7 @@ export const POST = route(async (request: Request) => {
           status: "ACTIVE",
           interval: "monthly",
           currentPeriodEnd,
+          limitsSnapshot: snapshotLimits(plan),
         },
       });
 

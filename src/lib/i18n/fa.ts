@@ -60,6 +60,14 @@ export const fa = {
     register: "شروع رایگان",
     dashboard: "پیشخوان",
     logout: "خروج",
+    about: "درباره ما",
+    contactUs: "تماس با ما",
+    terms: "قوانین و مقررات",
+    privacy: "حریم خصوصی",
+    refund: "شرایط بازگشت وجه",
+    legal: "اطلاعات",
+    social: "ما را دنبال کنید",
+    trustSeal: "نماد اعتماد الکترونیکی",
   },
   landing: {
     heroBadge: "بدون نصب اپلیکیشن، بدون سخت‌افزار خاص",
@@ -159,6 +167,16 @@ export const fa = {
       "در حال حاضر ثبت‌نام آنلاین در دسترس نیست. برای ساخت حساب و راه‌اندازی منوی رستوران خود، با پشتیبانی تماس بگیرید؛ حساب شما را با شمارهٔ موبایل خودتان می‌سازیم و با همان شماره وارد می‌شوید.",
   },
   dashboard: {
+    firstStepsTitle: "قدم‌های اول",
+    firstStepsSubtitle: "پنج کار کوتاه تا منوی شما آمادهٔ مهمان‌ها شود.",
+    firstStepsProgress: "{done} از {total} انجام شده",
+    firstSteps: {
+      details: "نام، لوگو، تلفن و نشانی مجموعه را کامل کنید",
+      menu: "دسته‌بندی‌ها و غذاها را با قیمت وارد کنید",
+      design: "ظاهر منو را انتخاب کنید",
+      tables: "میزها را بسازید و بارکدها را چاپ کنید",
+      order: "با گوشی خودتان یک سفارش آزمایشی بدهید",
+    },
     overview: "پیشخوان",
     menu: "مدیریت منو",
     categories: "دسته‌بندی‌ها",
@@ -1674,6 +1692,14 @@ export const fa = {
   },
   finance: {
     title: "مدیریت مالی",
+    /**
+     * Said under the category field. The category used to be called «مواد
+     * اولیه», which invited owners to record ingredient purchases here — and
+     * those are already in the cost of each dish sold, so they came off the
+     * profit twice.
+     */
+    expenseCategoryHint:
+      "خرید مواد اولیهٔ غذاها را اینجا ثبت نکنید؛ بهای آن‌ها در «بهای تمام‌شده» هر غذا حساب می‌شود.",
     subtitle: "درآمد، هزینه و سود خالص",
     totalRevenue: "کل درآمد",
     totalCost: "بهای تمام‌شده",
@@ -1702,7 +1728,7 @@ export const fa = {
       rent: "اجاره",
       salary: "حقوق پرسنل",
       utilities: "قبوض",
-      supplies: "مواد اولیه",
+      supplies: "ملزومات مصرفی",
       marketing: "تبلیغات",
       other: "سایر",
     },
@@ -1979,6 +2005,9 @@ export const fa = {
   },
   admin: {
     title: "مدیریت پلتفرم",
+    siteContent: "محتوای سایت",
+    siteSettings: "تنظیمات سایت",
+    auditLog: "گزارش تغییرات",
     restaurants: "رستوران‌ها",
     users: "کاربران",
     plans: "پلن‌ها",
@@ -2080,6 +2109,10 @@ export const fa = {
     notFoundHint: "آدرسی که وارد کرده‌اید وجود ندارد.",
     restaurantNotFound: "رستوران پیدا نشد",
     restaurantNotFoundHint: "این آدرس منو معتبر نیست یا غیرفعال شده است.",
+    /** {name} is the venue's own name. */
+    menuPaused: "منوی «{name}» موقتاً در دسترس نیست",
+    menuPausedHint:
+      "لطفاً سفارش خود را از کارکنان مجموعه بپرسید. به‌زودی دوباره در خدمت شما هستیم.",
     serverError: "خطای سرور",
     serverErrorHint: "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
     unauthorized: "دسترسی ندارید",

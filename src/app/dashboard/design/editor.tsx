@@ -195,7 +195,12 @@ export function DesignEditor({
         </div>
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+      {/*
+        minmax(0, 1fr), not the implicit auto column: an auto column grows to its
+        widest child, and the device preview is a phone wide plus its bezel, so
+        on a phone the whole page scrolled sideways by the bezel's width.
+      */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-5">
           {/* ------------------------------------------------ template picker */}
           <Card>

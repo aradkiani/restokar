@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./prisma";
 import { HttpError } from "./auth/guards";
 import { DAY_MS, RENEWAL_WARNING_DAYS } from "./constants";
+import { effectiveLimits } from "./plan-terms";
 
 /**
  * Plan enforcement.
@@ -36,12 +37,16 @@ export async function getPlanLimits(restaurantId: string): Promise<PlanLimits> {
   // an admin; treat it as unrestricted rather than locking the owner out.
   if (!subscription) return UNLIMITED;
 
+  // The limits of the period this venue paid for, not the plan as it reads
+  // today: an admin editing a plan must not change an existing subscriber's
+  // limits until they renew.
+  const limits = effectiveLimits(subscription.limitsSnapshot, subscription.plan);
   return {
-    maxProducts: subscription.plan.maxProducts,
-    maxCategories: subscription.plan.maxCategories,
-    maxTables: subscription.plan.maxTables,
-    allowsOnlinePay: subscription.plan.allowsOnlinePay,
-    allowsAnalytics: subscription.plan.allowsAnalytics,
+    maxProducts: limits.maxProducts,
+    maxCategories: limits.maxCategories,
+    maxTables: limits.maxTables,
+    allowsOnlinePay: limits.allowsOnlinePay,
+    allowsAnalytics: limits.allowsAnalytics,
   };
 }
 

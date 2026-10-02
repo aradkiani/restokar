@@ -9,8 +9,10 @@ import {
 } from "@/lib/auth/otp-server";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DAY_MS, RATE_LIMITS, TRIAL_DAYS } from "@/lib/constants";
+import { getContent } from "@/lib/cms/content-server";
 import { PUBLIC_REGISTRATION_ENABLED } from "@/lib/features";
 import { DEFAULT_TEMPLATE_ID } from "@/templates/registry";
+import { snapshotLimits } from "@/lib/plan-terms";
 
 export const runtime = "nodejs";
 
@@ -61,6 +63,10 @@ export const POST = route(async (request: Request) => {
     orderBy: { sortOrder: "asc" },
   });
 
+  // The trial length is set by the platform admin in the site settings.
+  const site = await getContent("site");
+  const trialDays = typeof site.trialDays === "number" ? site.trialDays : TRIAL_DAYS;
+
   let user: { id: string; role: "OWNER"; restaurantId: string };
 
   try {
@@ -105,9 +111,10 @@ export const POST = route(async (request: Request) => {
           data: {
             restaurantId: restaurant.id,
             planId: starterPlan.id,
+            limitsSnapshot: snapshotLimits(starterPlan),
             status: "TRIALING",
             interval: "monthly",
-            currentPeriodEnd: new Date(Date.now() + TRIAL_DAYS * DAY_MS),
+            currentPeriodEnd: new Date(Date.now() + trialDays * DAY_MS),
           },
         });
       }

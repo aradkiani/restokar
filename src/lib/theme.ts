@@ -36,8 +36,6 @@ export const FONT_OPTIONS = [
   { id: "samim", labelFa: "صمیم", labelEn: "Samim" },
 ] as const;
 
-export const FONT_IDS = FONT_OPTIONS.map((f) => f.id);
-
 export const SURFACE_STYLES = ["flat", "glass", "elevated"] as const;
 
 export const ThemeSchema = z.object({

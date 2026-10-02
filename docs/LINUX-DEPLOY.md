@@ -488,7 +488,7 @@ Sign in at `https://yourdomain.com/login`. You should land on `/admin`, where
 
 ## 13. Turn on backups
 
-Every 12 hours the whole of the customers' data — all 20 database tables plus
+Every 12 hours the whole of the customers' data — every database table plus
 every uploaded photo — is archived and emailed to you.
 
 ### Mail credentials
@@ -698,6 +698,15 @@ blocks a launch; all of them are worth revisiting once real traffic exists.
 - [ ] One restore has been rehearsed: `npm run backup:restore -- <archive>`
 - [ ] `timedatectl` shows `Asia/Tehran`
 - [ ] Demo seed was **not** run
+- [ ] `/admin/site`: the real phone, email and address are entered and published
+      (an empty phone is simply not shown — the site never shows a placeholder)
+- [ ] `/admin/content`: the terms, privacy, refund, about and contact pages have
+      been read — ideally by a lawyer — edited and published. They ship as
+      drafts written for launch, not as legal advice
+- [ ] `/admin/plans`: prices and feature lines are what you intend to sell
+- [ ] eNamad: apply once the pages above are live, then enter the id and code it
+      gives you at `/admin/site` so the seal appears in the footer. Zarinpal asks
+      for the same pages when reviewing a merchant account
 - [ ] Payments: leave off until Zarinpal is live, then set `ENABLE_PAYMENTS="true"`,
       `PAYMENT_PROVIDER="zarinpal"`, a real `ZARINPAL_MERCHANT_ID`, and
       `ZARINPAL_SANDBOX="false"` — and test one real transaction
