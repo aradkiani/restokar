@@ -37,6 +37,7 @@ import {
   needsRefund,
 } from "@/lib/constants";
 import { isRetired } from "@/lib/order-retirement";
+import { NEXT_STATUS } from "@/lib/order-flow";
 import { OrderDetailDialog } from "./order-detail";
 import type { Locale } from "@/lib/i18n";
 
@@ -79,11 +80,8 @@ const COLUMNS: { status: Exclude<Status, "CANCELED">; tone: string }[] = [
 ];
 
 /** The next status each column's action moves an order to. */
-const NEXT: Record<string, Status> = {
-  RECEIVED: "PREPARING",
-  PREPARING: "READY",
-  READY: "DELIVERED",
-};
+/** The forward move from each status — the same table the server enforces. */
+const NEXT = NEXT_STATUS as Partial<Record<string, Status>>;
 
 export function KitchenBoard({
   initialOrders,
@@ -622,7 +620,10 @@ export function KitchenBoard({
                           find. Online orders keep the plain badge: their status
                           comes from the gateway and must not be editable here.
                         */}
-                        {order.paymentMethod === "CASH_ON_SITE" ? (
+                        {/* An online order whose payment never completed is
+                          settled the same way: the guest pays at the counter. */}
+                        {order.paymentMethod === "CASH_ON_SITE" ||
+                        order.paymentStatus !== "PAID" ? (
                           <button
                             type="button"
                             disabled={busyId === order.id}

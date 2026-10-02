@@ -1645,6 +1645,9 @@ model StockMovement {
   createdAt DateTime @default(now())
 
   @@index([itemId, createdAt])
+  /// An order takes, or gives back, each ingredient at most once. Rows with no
+  /// order (manual adjustments) never collide: NULLs are distinct in Postgres.
+  @@unique([orderId, itemId, reason])
   @@index([orderId])
 }
 

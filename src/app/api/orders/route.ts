@@ -2,6 +2,7 @@ import { ok, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireTab } from "@/lib/auth/guards";
 import { boardInclude, boardWhere, toBoardOrder } from "@/lib/kitchen-board";
+import { expireAbandonedOnlineOrders } from "@/lib/orders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,10 @@ export const GET = route(async (request: Request) => {
   const { restaurantId } = await requireTab("orders");
   const url = new URL(request.url);
   const scope = url.searchParams.get("scope") ?? "active";
+
+  // The board refreshes through here, so abandoned online payments are
+  // cleared on the same cadence the kitchen looks at the screen.
+  if (scope === "active") await expireAbandonedOnlineOrders(restaurantId);
 
   const orders = await prisma.order.findMany({
     where: scope === "active" ? boardWhere(restaurantId) : { restaurantId },

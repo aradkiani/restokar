@@ -32,6 +32,14 @@ export const TRIAL_DAYS = 14;
  */
 export const GRACE_DAYS = 3;
 
+/**
+ * How long a guest's online order waits for its payment before it is
+ * cancelled, provided the kitchen has not started it. Long enough to finish a
+ * slow bank page; short enough that the board is not haunted by guests who
+ * closed the tab.
+ */
+export const ONLINE_PAYMENT_WINDOW_MINUTES = 15;
+
 /** Warn the owner in the dashboard when the period ends within this window. */
 export const RENEWAL_WARNING_DAYS = 5;
 
