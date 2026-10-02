@@ -6,7 +6,11 @@ import {
   BarChart3,
   Building2,
   Clock,
+  FileText,
+  Globe,
+  History,
   LayoutDashboard,
+  Package,
   LifeBuoy,
   MessageSquareText,
   Settings,
@@ -32,6 +36,10 @@ export function AdminNav() {
     { href: "/admin/expiring", label: t.admin.expiringSoon, icon: Clock },
     { href: "/admin/support", label: t.admin.support, icon: LifeBuoy },
     { href: "/admin/sms", label: t.admin.smsQueue, icon: MessageSquareText },
+    { href: "/admin/plans", label: t.admin.plans, icon: Package },
+    { href: "/admin/site", label: t.admin.siteSettings, icon: Globe },
+    { href: "/admin/content", label: t.admin.siteContent, icon: FileText },
+    { href: "/admin/audit", label: t.admin.auditLog, icon: History },
     { href: "/admin/settings", label: t.admin.settings, icon: Settings },
   ];
 
