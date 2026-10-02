@@ -27,6 +27,14 @@ export const POST = route(async (request: Request) => {
     return fail(403, "Registration is currently by invitation", "REGISTRATION_CLOSED");
   }
 
+  if (input.purpose === "SIGNUP" && input.slug) {
+    const taken = await prisma.restaurant.findUnique({
+      where: { slug: input.slug },
+      select: { id: true },
+    });
+    if (taken) return fail(409, "Menu address already taken", "SLUG_TAKEN");
+  }
+
   const holder = await prisma.user.findUnique({
     where: { phone: input.phone },
     select: { isActive: true },

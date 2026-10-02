@@ -208,7 +208,7 @@ and CHECK-constrained. Codes are issued and checked in `auth/otp-server.ts` on
 top of the pure rules in `sms/otp.ts`:
 
 - Stored as an HMAC keyed with AUTH_SECRET and bound to number and purpose
-  (`SIGNUP`, `LOGIN`, `CHANGE_PHONE`); single use; 2-minute expiry; locked
+  (`SIGNUP`, `LOGIN`, `CHANGE_PHONE`); single use; 3-minute expiry; locked
   after 5 wrong guesses; a new request deletes the previous unanswered codes.
 - 60 s resend cooldown, plus limits per number and per address (`OTP_LIMITS`).
 - **No answer reveals whether a number is registered.** Sign-in texts only an

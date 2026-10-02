@@ -58,6 +58,13 @@ export const otpCodeSchema = z
 export const OtpRequestSchema = z.object({
   phone: mobileSchema,
   purpose: z.enum(["LOGIN", "SIGNUP"]),
+  /**
+   * Sign-up only: the menu address the person chose, checked before a code is
+   * sent so a taken address is reported now rather than after they have typed
+   * the code. Addresses are public (every menu is at /menu/<slug>), so this
+   * reveals nothing. Format is validated by the register route itself.
+   */
+  slug: z.string().trim().max(60).optional(),
 });
 
 /**

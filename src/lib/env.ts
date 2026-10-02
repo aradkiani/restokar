@@ -138,7 +138,9 @@ const EnvSchema = z.object({
   // --------------------------------- OTP -----------------------------------
   /** 5 or 6: shorter is guessable within the attempt limit, longer is mistyped. */
   OTP_CODE_LENGTH: z.coerce.number().int().min(5).max(6).default(5),
-  OTP_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
+  // Three minutes: SMS in Iran can take most of a minute to arrive, and two
+  // left too little time to type the code. Five wrong tries still lock it.
+  OTP_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(180),
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
   OTP_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),
 });

@@ -44,7 +44,7 @@ export interface PatternSpec {
 export const PATTERNS: Record<MessageType, PatternSpec> = {
   OTP: {
     variables: ["code"],
-    suggestedText: "کد تایید شما: {0}\nاین کد تا ۲ دقیقه معتبر است.",
+    suggestedText: "کد تایید شما: {0}\nاین کد تا ۳ دقیقه معتبر است.",
     purpose: "Verifies that a person owns the phone number they typed.",
   },
 };
