@@ -532,6 +532,16 @@ export async function createOrder(
    * Enforced here, in the domain function, rather than in the route: every
    * caller that can create an order goes through this.
    */
+  // A manual order is taken at the counter and never opens a gateway, so an
+  // online one could never be paid: refused rather than left stuck forever.
+  if (staffOrigin && input.paymentMethod === "ONLINE") {
+    throw new HttpError(
+      422,
+      "سفارش دستی فقط با پرداخت در محل ثبت می‌شود",
+      "MANUAL_ORDER_ONLINE",
+    );
+  }
+
   if (
     input.paymentMethod === "ONLINE" &&
     (!PAYMENTS_ENABLED || !restaurant.onlinePaymentEnabled)
