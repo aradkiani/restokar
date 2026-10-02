@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "./prisma";
 import { endOfDayInZone, startOfDayInZone, zonedParts } from "./time";
 import { COUNTED_ORDER } from "./order-status";
+import { menuOwnerId } from "./menu";
 
 /**
  * Reporting for a single tenant. Every function takes `restaurantId` as its
@@ -483,9 +484,18 @@ export async function getProductProfitability(
   restaurantId: string,
   window: number | DateRange,
 ) {
+  // Dishes belong to whoever owns the menu — for a branch, its chain — while
+  // the sales are the branch's own. Reading products by the branch id left a
+  // branch manager's table empty although the branch had sold plenty.
+  const venue = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { id: true, parentRestaurantId: true },
+  });
+  const ownerId = venue ? menuOwnerId(venue) : restaurantId;
+
   const [products, sold] = await Promise.all([
     prisma.product.findMany({
-      where: { restaurantId },
+      where: { restaurantId: ownerId },
       select: { id: true, name: true, price: true, costPrice: true },
       orderBy: { name: "asc" },
     }),
