@@ -148,7 +148,10 @@ export async function requireAdmin(): Promise<SessionUser> {
 
 export async function requirePageTenant(returnTo: string): Promise<TenantContext> {
   const user = await requirePageUser(returnTo);
-  if (!user.restaurantId) redirect("/register/restaurant");
+  // No venue: the platform admin belongs in the console; anyone else is sent to
+  // the homepage. (This pointed at /register/restaurant, which does not exist,
+  // and /login would bounce a signed-in caller straight back here.)
+  if (!user.restaurantId) redirect(user.role === "SUPER_ADMIN" ? "/admin" : "/");
   return { user, restaurantId: user.restaurantId };
 }
 
