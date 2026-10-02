@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requirePageBranchOperator } from "@/lib/auth/guards";
+import { requirePageTab } from "@/lib/auth/guards";
 import { getI18n } from "@/lib/i18n";
 import { buildFinancialReport } from "@/lib/reports";
 import { deriveReportInsights } from "@/lib/report-insights";
@@ -35,7 +35,10 @@ export default async function FinancialReportPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { restaurantId } = await requirePageBranchOperator("/dashboard/finance/report");
+  // The finance section, like the finance page and /api/reports/financial —
+  // a staff member granted finance used to see the figures but be sent away
+  // from their printable report.
+  const { restaurantId } = await requirePageTab("finance", "/dashboard/finance/report");
   const { t, locale } = await getI18n();
 
   const raw = await searchParams;
