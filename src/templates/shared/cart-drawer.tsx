@@ -25,6 +25,16 @@ type Step = "cart" | "details";
  * Cart + checkout in one sheet. Kept to two steps because a guest sitting at a
  * table with a phone in one hand will abandon anything longer.
  */
+/** A random key for one checkout attempt (see `attempt` in CartDrawer). */
+function newAttemptKey(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  // randomUUID needs a secure context; a phone on the venue's LAN over plain
+  // http in development does not have one.
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 export function CartDrawer() {
   const { t, locale, data, preview, presetTable } = useMenu();
   const cart = useCart();
@@ -61,6 +71,16 @@ export function CartDrawer() {
   const [submitting, setSubmitting] = React.useState(false);
   /** Guards double submission ahead of the re-render — see `submitOrder`. */
   const submitLock = React.useRef(false);
+  /*
+    One key per checkout attempt, kept while the attempt is retried unchanged.
+
+    If the connection drops after the server saved the order but before the
+    answer arrived, the guest sees an error and taps again. Sending the same
+    key makes the server return the order it already placed instead of making
+    (and charging) a second one. Changing anything — a dish, the name, the
+    table — is a new attempt with a new key.
+  */
+  const attempt = React.useRef<{ signature: string; key: string } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [tipPercent, setTipPercent] = React.useState(0);
 
@@ -221,14 +241,11 @@ export function CartDrawer() {
     submitLock.current = true;
     setSubmitting(true);
     try {
-      const response = await fetch("/api/public/orders", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          slug: data.restaurant.slug,
-          tableNumber: table,
-          customerName: name,
-          /*
+      const order = {
+        slug: data.restaurant.slug,
+        tableNumber: table,
+        customerName: name,
+        /*
             Sent only when the venue asks for it.
 
             Belt and braces: the server drops a number that arrives while the
@@ -236,36 +253,44 @@ export function CartDrawer() {
             typed a number before the owner switched collection off does not
             have it travel over the wire for nothing.
           */
-          customerPhone: data.restaurant.phoneCollectionEnabled
-            ? toEnglishDigits(customerPhone.trim()) || undefined
+        customerPhone: data.restaurant.phoneCollectionEnabled
+          ? toEnglishDigits(customerPhone.trim()) || undefined
+          : undefined,
+        note: note.trim() || undefined,
+        paymentMethod,
+        // The server recomputes everything from its own prices; this is only
+        // the guest's chosen tip, and it is re-checked and capped there.
+        tip: tipAmount,
+        // The code only, never the amount it is worth. The server looks that
+        // up, the same way it does for product prices and option deltas.
+        discountCode: discountCode.trim() || undefined,
+        items: cart.lines.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          note: line.note || undefined,
+          // Ids only. The server looks up what each choice costs; nothing
+          // here tells it a price.
+          choiceIds: line.options.length
+            ? line.options.map((o) => o.choiceId)
             : undefined,
-          note: note.trim() || undefined,
-          paymentMethod,
-          // The server recomputes everything from its own prices; this is only
-          // the guest's chosen tip, and it is re-checked and capped there.
-          tip: tipAmount,
-          // The code only, never the amount it is worth. The server looks that
-          // up, the same way it does for product prices and option deltas.
-          discountCode: discountCode.trim() || undefined,
-          items: cart.lines.map((line) => ({
-            productId: line.productId,
-            quantity: line.quantity,
-            note: line.note || undefined,
-            // Ids only. The server looks up what each choice costs; nothing
-            // here tells it a price.
-            choiceIds: line.options.length
-              ? line.options.map((o) => o.choiceId)
-              : undefined,
-            // Why this line is here, for the owner's upsell figures. A claim
-            // only: the server checks it against the venue's own suggestions
-            // and ignores it if no such suggestion exists, and it can never
-            // affect what is charged.
-            recommendedFrom: line.recommendedFrom ?? undefined,
-            // Likewise a claim: the server confirms the dish really was being
-            // promoted before crediting the sale to merchandising.
-            fromFeatured: line.fromFeatured || undefined,
-          })),
-        }),
+          // Why this line is here, for the owner's upsell figures. A claim
+          // only: the server checks it against the venue's own suggestions
+          // and ignores it if no such suggestion exists, and it can never
+          // affect what is charged.
+          recommendedFrom: line.recommendedFrom ?? undefined,
+          // Likewise a claim: the server confirms the dish really was being
+          // promoted before crediting the sale to merchandising.
+          fromFeatured: line.fromFeatured || undefined,
+        })),
+      };
+      const signature = JSON.stringify(order);
+      if (attempt.current?.signature !== signature) {
+        attempt.current = { signature, key: newAttemptKey() };
+      }
+      const response = await fetch("/api/public/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...order, clientKey: attempt.current.key }),
       });
 
       const payload = await response.json();

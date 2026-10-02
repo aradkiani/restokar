@@ -1817,6 +1817,12 @@ model Order {
   /// to be counted as scans that never happened.
   isManual Boolean @default(false)
 
+  /// A random key the guest's phone attaches to one checkout attempt. If the
+  /// connection drops after the order is saved and the phone sends the same
+  /// attempt again, the order already made is returned instead of a second
+  /// one being placed (and charged). Null for staff orders and older rows.
+  clientKey String?
+
   subtotal Int
   discount Int @default(0)
 
@@ -1897,6 +1903,7 @@ model Order {
   updatedAt DateTime @updatedAt
 
   @@unique([restaurantId, orderNumber])
+  @@unique([restaurantId, clientKey])
   @@index([restaurantId, status])
   @@index([restaurantId, placedAt])
   /// Backs the customer aggregation: every per-customer figure groups on this

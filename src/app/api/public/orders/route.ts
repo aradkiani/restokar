@@ -22,7 +22,19 @@ export const POST = route(async (request: Request) => {
   const input = await parseBody(request, CreateOrderInput);
   const order = await createOrder(input);
 
-  if (order.paymentMethod !== "ONLINE") {
+  /*
+    A repeated attempt for an order that is already paid or cancelled has
+    nothing left to pay: send the guest to its status page rather than
+    opening a second payment for it.
+  */
+  const settled =
+    order.replayed &&
+    order.paymentMethod === "ONLINE" &&
+    (await prisma.order.count({
+      where: { id: order.id, OR: [{ paymentStatus: "PAID" }, { status: "CANCELED" }] },
+    })) > 0;
+
+  if (order.paymentMethod !== "ONLINE" || settled) {
     return ok({
       orderId: order.id,
       orderNumber: order.orderNumber,

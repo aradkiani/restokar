@@ -86,6 +86,15 @@ export const CreateOrderInput = z.object({
    * able to set to any number they liked.
    */
   discountCode: z.string().trim().max(24).optional(),
+  /**
+   * The phone's key for this checkout attempt (see `Order.clientKey`). Random
+   * and unguessable; it only ever returns an order the same table and name
+   * already placed.
+   */
+  clientKey: z
+    .string()
+    .regex(/^[A-Za-z0-9-]{16,64}$/)
+    .optional(),
   items: z
     .array(OrderItemInput)
     .min(1, "سبد خرید شما خالی است")
@@ -366,6 +375,51 @@ export interface CreatedOrder {
    * value rather than from the request body it was asked to ignore.
    */
   customerPhone: string | null;
+  /** True when this is an earlier order returned for a repeated attempt. */
+  replayed: boolean;
+}
+
+/**
+ * The order an earlier, identical checkout attempt already placed, if any.
+ *
+ * Returned only to the same table and name: the key is random, but an order's
+ * tracking token is not something to hand to a request that merely knows it.
+ */
+async function replayedOrder(
+  restaurantId: string,
+  input: CreateOrderInput,
+): Promise<CreatedOrder | null> {
+  if (!input.clientKey) return null;
+  const existing = await prisma.order.findUnique({
+    where: { restaurantId_clientKey: { restaurantId, clientKey: input.clientKey } },
+    select: {
+      id: true,
+      orderNumber: true,
+      publicToken: true,
+      total: true,
+      customerPhone: true,
+      paymentMethod: true,
+      tableNumber: true,
+      customerName: true,
+    },
+  });
+  if (!existing) return null;
+  if (
+    existing.tableNumber !== input.tableNumber ||
+    existing.customerName !== input.customerName
+  ) {
+    throw new HttpError(409, "این سفارش قبلاً ثبت شده است.", "ORDER_KEY_REUSED");
+  }
+  return {
+    id: existing.id,
+    orderNumber: existing.orderNumber,
+    publicToken: existing.publicToken,
+    total: existing.total,
+    customerPhone: existing.customerPhone,
+    restaurantId,
+    paymentMethod: existing.paymentMethod,
+    replayed: true,
+  };
 }
 
 /**
@@ -414,6 +468,33 @@ async function resolveDiscountCode(args: {
 }
 
 /**
+ * Places an order — once per checkout attempt.
+ *
+ * A repeated attempt (same `clientKey`) gets the order the first one placed,
+ * whether it arrives after the first has finished (found before anything is
+ * written) or at the same moment (the second insert loses on the unique key
+ * and is answered with the winner's order).
+ */
+export async function createOrder(
+  input: CreateOrderInput,
+  options: { isManual?: boolean } = {},
+): Promise<CreatedOrder> {
+  try {
+    return await placeOrder(input, options);
+  } catch (error) {
+    if (input.clientKey && (error as { code?: string })?.code === "P2002") {
+      const venue = await prisma.restaurant.findUnique({
+        where: { slug: input.slug },
+        select: { id: true },
+      });
+      const replay = venue ? await replayedOrder(venue.id, input) : null;
+      if (replay) return replay;
+    }
+    throw error;
+  }
+}
+
+/**
  * Places an order.
  *
  * Prices are read from the database and snapshotted onto the order rather than
@@ -421,7 +502,7 @@ async function resolveDiscountCode(args: {
  * per-restaurant order number is allocated by an atomic increment inside the
  * same transaction, so two simultaneous guests cannot receive the same number.
  */
-export async function createOrder(
+async function placeOrder(
   input: CreateOrderInput,
   /**
    * Server-side facts about the order that no client may assert.
@@ -512,6 +593,12 @@ export async function createOrder(
   // Order ownership and the operational switches stay with the branch; the
   // pricing rules come from whoever owns the menu.
   const restaurant = { ...venue, ...menuOwner, id: venue.id };
+
+  // A repeat of an attempt that already succeeded: answer with that order,
+  // before anything below could refuse it (a dish sold out in between) or
+  // place it a second time.
+  const replay = await replayedOrder(restaurant.id, input);
+  if (replay) return replay;
 
   // Same reasoning as `isPublished` above: this switch decides whether *guests*
   // may order from their phone. A venue that takes orders only by telephone has
@@ -805,6 +892,7 @@ export async function createOrder(
         orderNumber,
         publicToken,
         isManual: options.isManual ?? false,
+        clientKey: input.clientKey ?? null,
         tableNumber: input.tableNumber,
         customerName: input.customerName,
         /*
@@ -896,6 +984,7 @@ export async function createOrder(
     ...order,
     restaurantId: restaurant.id,
     paymentMethod: input.paymentMethod,
+    replayed: false,
   };
 }
 

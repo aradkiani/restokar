@@ -87,6 +87,44 @@ test.describe("diner at the table", () => {
     expect(order.subtotal).toBe(latte.price);
   });
 
+  test("a checkout sent twice after a dropped connection is one order", async ({
+    request,
+  }) => {
+    const dish = await one<{ id: string }>(
+      `SELECT p.id FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
+        WHERE r.slug = 'cafe-narenj' AND p."isAvailable"
+          AND NOT EXISTS (SELECT 1 FROM "ProductOptionGroup" g WHERE g."productId" = p.id)
+        ORDER BY p.price LIMIT 1`,
+    );
+    const clientKey = `e2e-${Date.now()}-retry-key`;
+    const order = {
+      slug: "cafe-narenj",
+      tableNumber: "3",
+      customerName: "آزمون تکرار",
+      clientKey,
+      items: [{ productId: dish.id, quantity: 1 }],
+    };
+
+    const first = await (
+      await request.post("/api/public/orders", { data: order })
+    ).json();
+    const second = await (
+      await request.post("/api/public/orders", { data: order })
+    ).json();
+    expect(second.data.publicToken).toBe(first.data.publicToken);
+    const { count } = await one<{ count: string }>(
+      `SELECT count(*) FROM "Order" WHERE "clientKey" = $1`,
+      [clientKey],
+    );
+    expect(Number(count)).toBe(1);
+
+    // The key alone does not hand over someone else's order.
+    const other = await request.post("/api/public/orders", {
+      data: { ...order, customerName: "کس دیگر" },
+    });
+    expect(other.status()).toBe(409);
+  });
+
   test("an unavailable dish cannot be ordered", async ({ request }) => {
     const soldOut = await one<{ id: string }>(
       `SELECT p.id FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
