@@ -242,7 +242,11 @@ export function ExpensesPanel({
           </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t.finance.expenseCategory} htmlFor="e-category">
+            <Field
+              label={t.finance.expenseCategory}
+              hint={t.finance.expenseCategoryHint}
+              htmlFor="e-category"
+            >
               <Select
                 id="e-category"
                 value={form.category}

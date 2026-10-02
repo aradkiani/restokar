@@ -1490,6 +1490,8 @@ export const en: Dictionary = {
   },
   finance: {
     title: "Financial management",
+    expenseCategoryHint:
+      "Do not record food ingredients here; their cost is already in each dish's cost of goods.",
     subtitle: "Revenue, expenses and net profit",
     totalRevenue: "Total revenue",
     totalCost: "Cost of goods",
@@ -1518,7 +1520,7 @@ export const en: Dictionary = {
       rent: "Rent",
       salary: "Salaries",
       utilities: "Utilities",
-      supplies: "Supplies",
+      supplies: "Consumables",
       marketing: "Marketing",
       other: "Other",
     },
@@ -1894,6 +1896,8 @@ export const en: Dictionary = {
     notFoundHint: "The address you entered does not exist.",
     restaurantNotFound: "Restaurant not found",
     restaurantNotFoundHint: "This menu address is invalid or has been disabled.",
+    menuPaused: "The menu of «{name}» is temporarily unavailable",
+    menuPausedHint: "Please ask the staff for your order. We will be back shortly.",
     serverError: "Server error",
     serverErrorHint: "Something went wrong. Please try again.",
     unauthorized: "Access denied",

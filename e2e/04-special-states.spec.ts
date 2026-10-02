@@ -33,14 +33,11 @@ test.describe("owners in special states", () => {
     await expect(page.locator("main")).toContainText("تومان");
   });
 
-  test("what an expired venue's guests see (recorded, policy decision)", async ({
+  test("an expired venue's guests are told the menu is paused, not missing", async ({
     page,
   }) => {
-    const response = await page.goto("/menu/cafe-ghadimi");
-    test.info().annotations.push({
-      type: "observation",
-      description: `expired venue menu status ${response?.status()}`,
-    });
-    expect(response?.status()).toBe(200);
+    await page.goto("/menu/cafe-ghadimi");
+    await expect(page.locator("main")).toContainText("موقتاً در دسترس نیست");
+    await expect(page.locator("main")).toContainText("کافه قدیمی");
   });
 });
