@@ -13,6 +13,11 @@ import type { Locale } from "@/lib/i18n";
  * Everything is styled with the tenant's --m-* custom properties.
  */
 
+const STEPPER_LABELS = {
+  fa: { decrease: "کم کردن", increase: "اضافه کردن" },
+  en: { decrease: "Decrease", increase: "Increase" },
+} as const;
+
 export function QuantityStepper({
   value,
   onChange,
@@ -29,6 +34,7 @@ export function QuantityStepper({
   locale?: Locale;
 }) {
   const box = size === "sm" ? "size-8" : "size-10";
+  // Screen readers read these on the English menu too; they were Persian only.
   return (
     <div
       className="inline-flex items-center gap-1 rounded-full p-1"
@@ -40,7 +46,7 @@ export function QuantityStepper({
         type="button"
         onClick={() => onChange(Math.max(min, value - 1))}
         disabled={value <= min}
-        aria-label="کم کردن"
+        aria-label={STEPPER_LABELS[locale].decrease}
         className={cn(
           box,
           "grid place-items-center rounded-full transition-transform active:scale-90 disabled:opacity-40",
@@ -59,7 +65,7 @@ export function QuantityStepper({
       <button
         type="button"
         onClick={() => onChange(value + 1)}
-        aria-label="اضافه کردن"
+        aria-label={STEPPER_LABELS[locale].increase}
         className={cn(
           box,
           "grid place-items-center rounded-full transition-transform active:scale-90",
