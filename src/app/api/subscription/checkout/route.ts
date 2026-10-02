@@ -5,6 +5,7 @@ import { HttpError, requireOwner } from "@/lib/auth/guards";
 import { createPaymentProvider } from "@/lib/payments";
 import { env } from "@/lib/env";
 import { SUBSCRIPTION_CHECKOUT_ENABLED } from "@/lib/features";
+import { effectivePrice, snapshotLimits } from "@/lib/plan-terms";
 
 export const runtime = "nodejs";
 
@@ -51,7 +52,9 @@ export const POST = route(async (request: Request) => {
     );
   }
 
-  const amount = input.interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
+  // The same function the pricing page shows prices with, promotions included.
+  const price = effectivePrice(plan, input.interval, new Date());
+  const amount = price.amount;
   if (amount <= 0) throw new HttpError(400, "This plan is not purchasable", "FREE_PLAN");
 
   /*
@@ -70,6 +73,7 @@ export const POST = route(async (request: Request) => {
         interval: input.interval,
         status: "PAST_DUE",
         currentPeriodEnd: new Date(),
+        limitsSnapshot: snapshotLimits(plan),
       },
     }));
 
@@ -95,17 +99,11 @@ export const POST = route(async (request: Request) => {
       planId: plan.id,
       interval: input.interval,
       planSnapshot: {
-        code: plan.code,
         name: plan.name,
         interval: input.interval,
         amount,
-        maxProducts: plan.maxProducts,
-        maxCategories: plan.maxCategories,
-        maxTables: plan.maxTables,
-        maxDailyViews: plan.maxDailyViews,
-        allowsBranches: plan.allowsBranches,
-        allowsOnlinePay: plan.allowsOnlinePay,
-        allowsAnalytics: plan.allowsAnalytics,
+        regularAmount: price.regular ?? amount,
+        ...snapshotLimits(plan),
       },
     },
   });

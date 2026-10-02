@@ -133,6 +133,12 @@ enum AuditAction {
   /// An account moved to a new sign-in number, proved by a code sent to it.
   /// The old and new numbers are in `metadata`.
   PHONE_CHANGED
+  /// The platform admin published a public page or the site settings.
+  CONTENT_PUBLISHED
+  /// The platform admin copied an earlier version of a page into its draft.
+  CONTENT_RESTORED
+  /// The platform admin changed a plan; old and new values are in `metadata`.
+  PLAN_UPDATED
 }
 
 /// Where a campaign is in its life.
@@ -557,6 +563,22 @@ model Plan {
   isPublic           Boolean @default(true)
   sortOrder          Int     @default(0)
 
+  descriptionEn     String?
+  /// Shown with a «پیشنهادی» badge. Replaces "the second card", which was
+  /// hard-coded in three places.
+  isRecommended     Boolean       @default(false)
+  /// Feature lines on the plan card, [{ fa, en }]. Null means the built-in
+  /// lists. Display only: what a plan allows is in the limit fields above.
+  features          Json?
+  /// A promotional price, in force between the two dates (either may be open).
+  promoMonthlyPrice Int?
+  promoYearlyPrice  Int?
+  promoStartsAt     DateTime?
+  promoEndsAt       DateTime?
+  /// Bumped on every edit; the previous state is kept in PlanVersion.
+  version           Int           @default(0)
+  versions          PlanVersion[]
+
   subscriptions Subscription[]
   /// Subscription payments that bought this plan. Restrict: a plan that has
   /// been paid for cannot be deleted, only hidden.
@@ -578,6 +600,10 @@ model Subscription {
   startedAt        DateTime           @default(now())
   currentPeriodEnd DateTime
   canceledAt       DateTime?
+  /// The plan's limits as they stood when this period was bought (or the
+  /// trial began). Enforcement reads this before the live plan, so editing a
+  /// plan never changes what an existing subscriber already has.
+  limitsSnapshot   Json?
 
   payments   Payment[]
   extensions SubscriptionExtension[]
@@ -1647,10 +1673,10 @@ model StockMovement {
 
   createdAt DateTime @default(now())
 
-  @@index([itemId, createdAt])
   /// An order takes, or gives back, each ingredient at most once. Rows with no
   /// order (manual adjustments) never collide: NULLs are distinct in Postgres.
   @@unique([orderId, itemId, reason])
+  @@index([itemId, createdAt])
   @@index([orderId])
 }
 
@@ -2122,6 +2148,54 @@ model RateLimit {
   resetAt DateTime
 
   @@index([resetAt])
+}
+
+/// One earlier state of a plan, kept on every edit so it can be inspected or
+/// restored.
+model PlanVersion {
+  id        String   @id @default(cuid())
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  version   Int
+  data      Json
+  createdAt DateTime @default(now())
+  /// The admin who made the change this version records.
+  createdBy String?
+
+  @@unique([planId, version])
+}
+
+/// One editable public document: the site settings or a page. Its fields are
+/// defined in code (src/lib/cms/schema.ts); only the values live here, and
+/// every field falls back to its built-in default.
+model ContentDocument {
+  key            String           @id
+  /// What the admin is editing; seen only in preview until published.
+  draft          Json?
+  /// What the public site shows.
+  published      Json?
+  version        Int              @default(0)
+  draftUpdatedAt DateTime?
+  draftUpdatedBy String?
+  publishedAt    DateTime?
+  publishedBy    String?
+  versions       ContentVersion[]
+  updatedAt      DateTime         @updatedAt
+}
+
+/// Every published state of a document, for history and restore.
+model ContentVersion {
+  id           String          @id @default(cuid())
+  documentKey  String
+  document     ContentDocument @relation(fields: [documentKey], references: [key], onDelete: Cascade)
+  version      Int
+  data         Json
+  publishedAt  DateTime        @default(now())
+  publishedBy  String?
+  /// Set when this version was made by restoring an earlier one.
+  restoredFrom Int?
+
+  @@unique([documentKey, version])
 }
 
 /// Singleton row of operator-editable platform settings.

@@ -11,6 +11,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DAY_MS, RATE_LIMITS, TRIAL_DAYS } from "@/lib/constants";
 import { PUBLIC_REGISTRATION_ENABLED } from "@/lib/features";
 import { DEFAULT_TEMPLATE_ID } from "@/templates/registry";
+import { snapshotLimits } from "@/lib/plan-terms";
 
 export const runtime = "nodejs";
 
@@ -105,6 +106,7 @@ export const POST = route(async (request: Request) => {
           data: {
             restaurantId: restaurant.id,
             planId: starterPlan.id,
+            limitsSnapshot: snapshotLimits(starterPlan),
             status: "TRIALING",
             interval: "monthly",
             currentPeriodEnd: new Date(Date.now() + TRIAL_DAYS * DAY_MS),

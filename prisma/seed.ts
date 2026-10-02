@@ -90,6 +90,7 @@ const PLANS = [
     name: "متوسط",
     nameEn: "Medium",
     description: "برای رستوران‌های فعال — تا ۲۵ میز",
+    isRecommended: true,
     monthlyPrice: 899_000,
     yearlyPrice: 8_990_000,
     maxProducts: -1,
@@ -177,10 +178,12 @@ const PLANS = [
     description: "برای کافه‌های کوچک و تازه‌کار",
     monthlyPrice: 149_000,
     yearlyPrice: 1_490_000,
-    maxProducts: 40,
-    maxCategories: 8,
+    // Product/category caps and the online-payment block were lifted on
+    // 2026-10-03 (migration lift_legacy_plan_caps); tables still cap.
+    maxProducts: -1,
+    maxCategories: -1,
     maxTables: 10,
-    allowsOnlinePay: false,
+    allowsOnlinePay: true,
     allowsAnalytics: true,
     allowsCustomDomain: false,
     isPublic: false,
@@ -193,8 +196,8 @@ const PLANS = [
     description: "برای رستوران‌های فعال با سفارش آنلاین",
     monthlyPrice: 299_000,
     yearlyPrice: 2_990_000,
-    maxProducts: 200,
-    maxCategories: 25,
+    maxProducts: -1,
+    maxCategories: -1,
     maxTables: 40,
     allowsOnlinePay: true,
     allowsAnalytics: true,
@@ -222,10 +225,12 @@ const PLANS = [
 
 async function seedPlans() {
   for (const plan of PLANS) {
+    // Create-only. Plans are edited from /admin/plans now; re-running the seed
+    // used to overwrite prices and limits an admin had changed.
     await prisma.plan.upsert({
       where: { code: plan.code },
       create: plan,
-      update: plan,
+      update: {},
     });
   }
 

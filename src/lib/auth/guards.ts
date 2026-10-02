@@ -2,6 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { getSessionUser, type SessionUser } from "./session";
 import { canAccessTab, landingPathFor, type StaffTab } from "../staff-tabs";
+import { effectiveLimits } from "../plan-terms";
 
 export class HttpError extends Error {
   constructor(
@@ -93,14 +94,21 @@ export async function requireChainOwner(): Promise<TenantContext> {
   const { prisma } = await import("../prisma");
   const venue = await prisma.restaurant.findUnique({
     where: { id: ctx.restaurantId },
-    select: { parentRestaurantId: true, subscription: { select: { plan: true } } },
+    select: {
+      parentRestaurantId: true,
+      subscription: { select: { plan: true, limitsSnapshot: true } },
+    },
   });
 
   // A branch never heads a chain, whatever role its user carries.
   if (venue?.parentRestaurantId) {
     throw new HttpError(403, "Branch access cannot manage a chain", "FORBIDDEN");
   }
-  if (!venue?.subscription?.plan.allowsBranches) {
+  const subscription = venue?.subscription;
+  if (
+    !subscription ||
+    !effectiveLimits(subscription.limitsSnapshot, subscription.plan).allowsBranches
+  ) {
     throw new HttpError(403, "Plan does not include branches", "PLAN_NO_BRANCHES");
   }
   return ctx;
@@ -197,10 +205,18 @@ export async function requirePageChainOwner(returnTo: string): Promise<TenantCon
   const { prisma } = await import("../prisma");
   const venue = await prisma.restaurant.findUnique({
     where: { id: ctx.restaurantId },
-    select: { parentRestaurantId: true, subscription: { select: { plan: true } } },
+    select: {
+      parentRestaurantId: true,
+      subscription: { select: { plan: true, limitsSnapshot: true } },
+    },
   });
 
-  if (venue?.parentRestaurantId || !venue?.subscription?.plan.allowsBranches) {
+  const subscription = venue?.subscription;
+  if (
+    venue?.parentRestaurantId ||
+    !subscription ||
+    !effectiveLimits(subscription.limitsSnapshot, subscription.plan).allowsBranches
+  ) {
     redirect("/dashboard");
   }
   return ctx;

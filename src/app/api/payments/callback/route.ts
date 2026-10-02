@@ -8,6 +8,8 @@ import { publishOrderEvent } from "@/lib/events";
 import { RATE_LIMITS } from "@/lib/constants";
 import { markBroadcastPaid } from "@/lib/sms-broadcast-server";
 import { cancelUnpaidOnlineOrder } from "@/lib/orders";
+import { snapshotLimits } from "@/lib/plan-terms";
+import type { Prisma } from "@/generated/prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -136,6 +138,12 @@ export async function GET(request: Request) {
           canceledAt: null,
           planId: payment.planId ?? subscription.planId,
           interval,
+          // A renewal takes the plan's terms as they stood when it was paid
+          // for: the limits captured at checkout, or — for a payment from
+          // before that was recorded — the plan as it reads now.
+          limitsSnapshot: hasLimits(payment.planSnapshot)
+            ? (payment.planSnapshot as Prisma.InputJsonValue)
+            : snapshotLimits(subscription.plan),
         },
       });
     }
@@ -171,6 +179,15 @@ export async function GET(request: Request) {
 
   return NextResponse.redirect(
     resultUrl(purpose, slug, token, "success", result.refId ?? null),
+  );
+}
+
+/** Whether a stored plan snapshot carries the limit fields. */
+function hasLimits(snapshot: unknown): boolean {
+  return (
+    typeof snapshot === "object" &&
+    snapshot !== null &&
+    typeof (snapshot as Record<string, unknown>).maxTables === "number"
   );
 }
 
