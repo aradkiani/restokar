@@ -25,6 +25,9 @@ import { FeaturedStrip } from "../shared/featured";
 import { MenuFooter } from "../shared/footer";
 import { cn } from "@/lib/utils";
 
+import { formatNumber } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
+
 /**
  * Reel — one horizontal rail per category.
  *
@@ -281,7 +284,7 @@ function ReelCard({
   className?: string;
   showPrices: boolean;
   canOrder: boolean;
-  locale: string;
+  locale: Locale;
   minutesLabel: string;
   unavailableLabel: string;
   addLabel: string;
@@ -289,8 +292,7 @@ function ReelCard({
   onOpen: () => void;
   onAdd: () => void;
 }) {
-  const num = (n: number) =>
-    new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(n);
+  const num = (n: number) => formatNumber(n, locale);
 
   return (
     <li

@@ -18,7 +18,7 @@ import type { ExtensionType } from "@/generated/prisma/enums";
  */
 export async function extendSubscription(input: {
   restaurantId: string;
-  admin: { id: string; email: string; role: "SUPER_ADMIN" };
+  admin: { id: string; phone: string | null; role: "SUPER_ADMIN" };
   days: number;
   extensionType: ExtensionType;
   reason: string;
@@ -52,7 +52,7 @@ export async function extendSubscription(input: {
       data: {
         subscriptionId: subscription.id,
         adminId: input.admin.id,
-        adminEmail: input.admin.email,
+        adminLabel: input.admin.phone ?? input.admin.id,
         extensionType: input.extensionType,
         previousExpiration,
         newExpiration,

@@ -65,18 +65,15 @@ Open <http://localhost:3000>.
 
 ### Demo accounts
 
-On the **existing** development database these accounts use `password123`. A
-**fresh** seed generates a single random password instead and prints it once as
-it runs — set `DEMO_SEED_PASSWORD` to choose your own. The seed is idempotent,
-so re-running it against a database that already has these rows leaves their
-current passwords alone.
+Sign-in is **phone number + one-time code**; there are no passwords. In
+development no SMS is sent: the code is printed in the dev server console as
+`[otp:dev] LOGIN code for 09…: 12345`. Every seeded account has a stable test
+number (`prisma/dev-phones.ts`); the seed prints them when it finishes.
 
-| Role           | Email                   | Lands on            |
-| -------------- | ----------------------- | ------------------- |
-| Owner          | `owner@cafe-nabsh.ir`   | `/dashboard`        |
-| Owner          | `owner@burger-lab.ir`   | `/dashboard`        |
-| Kitchen staff  | `kitchen@cafe-nabsh.ir` | `/dashboard/orders` |
-| Platform admin | `admin@restokar.ir`     | `/admin`            |
+| Role           | Number                       | Lands on     |
+| -------------- | ---------------------------- | ------------ |
+| Platform admin | `09000000000`                | `/admin`     |
+| Other accounts | printed by `npm run db:seed` | `/dashboard` |
 
 The seed generates six weeks of orders with lunch/dinner peaks and busier
 Thursday–Friday weekends, so analytics and finance have something meaningful to

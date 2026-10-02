@@ -5,6 +5,7 @@ import { recordAudit } from "@/lib/audit";
 import { clientIp } from "@/lib/rate-limit";
 import { REFUND_CLEAR_AFTER_MS, REFUND_CLEAR_AFTER_MINUTES } from "@/lib/constants";
 import { publishOrderEvent } from "@/lib/events";
+import { formatMoney } from "@/lib/format";
 
 export const runtime = "nodejs";
 
@@ -82,7 +83,7 @@ export const PATCH = route(async (request: Request, context: unknown) => {
     actor: user,
     restaurantId,
     action: "ORDER_REFUNDED",
-    summary: `بازگشت وجه سفارش شماره ${order.orderNumber} به مبلغ ${order.total} تومان ثبت شد`,
+    summary: `بازگشت وجه سفارش شماره ${order.orderNumber} به مبلغ ${formatMoney(order.total)} تومان ثبت شد`,
     entityType: "Order",
     entityId: order.id,
     metadata: {

@@ -15,7 +15,7 @@ time: how the pieces fit, and where to go to change something.
 | Framework  | Next.js 16, App Router, Turbopack                                                            |
 | UI         | React 19, TypeScript strict, Tailwind CSS 4 (CSS-first, configured in `src/app/globals.css`) |
 | Database   | PostgreSQL 16 via Prisma 7 with the `pg` driver adapter                                      |
-| Auth       | bcrypt + a JWT in an httpOnly cookie, backed by revocable rows in `Session`                  |
+| Auth       | Phone + one-time SMS code; a JWT in an httpOnly cookie, backed by revocable `Session` rows   |
 | Validation | Zod 4, shared between API routes and forms                                                   |
 | Tests      | Vitest                                                                                       |
 
@@ -201,6 +201,25 @@ break it.
 ---
 
 ## Authentication
+
+**Sign-in is phone + one-time SMS code. There are no passwords.** The phone is
+the account: `User.phone` is unique, stored as `09XXXXXXXXX` (`normalisePhone`)
+and CHECK-constrained. Codes are issued and checked in `auth/otp-server.ts` on
+top of the pure rules in `sms/otp.ts`:
+
+- Stored as an HMAC keyed with AUTH_SECRET and bound to number and purpose
+  (`SIGNUP`, `LOGIN`, `CHANGE_PHONE`); single use; 2-minute expiry; locked
+  after 5 wrong guesses; a new request deletes the previous unanswered codes.
+- 60 s resend cooldown, plus limits per number and per address (`OTP_LIMITS`).
+- **No answer reveals whether a number is registered.** Sign-in texts only an
+  active account's number and sign-up only an unregistered one, but both store
+  a challenge and answer identically, and the SMS is sent without being awaited
+  so response time says nothing either.
+- In development the code is printed to the console, never sent.
+
+Accounts created by someone else (staff, branch managers, admin-created owners)
+start with `phoneVerifiedAt` null; their first sign-in proves the number.
+Changing a number sends the code to the _new_ number (`/api/account/phone`).
 
 `src/proxy.ts` (Next 16's renamed middleware) verifies the cookie's _signature_
 at the edge and redirects when it is missing — it cannot check revocation,

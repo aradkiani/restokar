@@ -23,7 +23,8 @@ import {
 } from "../shared/pieces";
 import { FeaturedStrip } from "../shared/featured";
 import { MenuFooter } from "../shared/footer";
-import { localizeDigits } from "@/lib/format";
+import { formatNumber, localizeDigits } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
 
 /**
  * Bloom — a menu built out of curves instead of boxes.
@@ -210,7 +211,7 @@ function BloomMedallion({
   product: MenuProduct;
   showPrices: boolean;
   canOrder: boolean;
-  locale: string;
+  locale: Locale;
   minutesLabel: string;
   unavailableLabel: string;
   addLabel: string;
@@ -218,8 +219,7 @@ function BloomMedallion({
   onOpen: () => void;
   onAdd: () => void;
 }) {
-  const num = (n: number) =>
-    new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(n);
+  const num = (n: number) => formatNumber(n, locale);
 
   const showButton = canOrder && product.isAvailable;
 
@@ -320,7 +320,7 @@ function BloomCapsule({
   product: MenuProduct;
   showPrices: boolean;
   canOrder: boolean;
-  locale: string;
+  locale: Locale;
   unavailableLabel: string;
   addLabel: string;
   inCart: number;

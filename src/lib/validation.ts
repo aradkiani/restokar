@@ -18,10 +18,13 @@ import { VALUE_TIERS } from "./retention";
 import { EXPORT_DATASETS, EXPORT_FORMATS } from "./export/dataset-names";
 import { CAMPAIGN_STATUSES, MAX_CAMPAIGN_PAGE_SIZE, scheduleIssue } from "./campaigns";
 import { MINUTES_PER_DAY, instantFromZonedWallClock } from "./time";
+import { normalisePhone } from "./phone";
+import { toEnglishDigits } from "./format";
 
 /** Shared request schemas. Keeping them in one module keeps the API and the
  *  forms that feed it from drifting apart. */
 
+/** An email address. Only the backup destination uses one; sign-in does not. */
 export const emailSchema = z
   .string()
   .trim()
@@ -29,10 +32,33 @@ export const emailSchema = z
   .email("ایمیل معتبر نیست")
   .max(160);
 
-export const passwordSchema = z
-  .string()
-  .min(8, "رمز عبور باید حداقل ۸ کاراکتر باشد")
-  .max(128);
+/**
+ * An Iranian mobile number, the sign-in identifier.
+ *
+ * Accepts it however a person types it — 0912…, 912…, +98912…, 0098912…, with
+ * spaces or dashes, in Persian, Arabic or Latin digits — and yields the one
+ * stored form, 09XXXXXXXXX, through the same `normalisePhone` every other
+ * phone in the platform goes through. Landlines are refused: a code cannot be
+ * texted to one.
+ */
+export const mobileSchema = z
+  .string({ error: "شماره موبایل را وارد کنید" })
+  .trim()
+  .max(24, "شماره موبایل معتبر نیست")
+  .transform((value) => normalisePhone(value) ?? "")
+  .refine((value) => /^09\d{9}$/.test(value), "شماره موبایل معتبر نیست");
+
+/** A one-time code as typed: Persian or Latin digits, spaces ignored. */
+export const otpCodeSchema = z
+  .string({ error: "کد تأیید را وارد کنید" })
+  .transform((value) => toEnglishDigits(value).replace(/\s+/g, ""))
+  .refine((value) => /^\d{5,6}$/.test(value), "کد تأیید معتبر نیست");
+
+/** Which public flow a code is asked for. A phone change has its own route. */
+export const OtpRequestSchema = z.object({
+  phone: mobileSchema,
+  purpose: z.enum(["LOGIN", "SIGNUP"]),
+});
 
 /**
  * A Toman amount with messages a restaurant owner can act on. `label` names
@@ -84,14 +110,16 @@ export const slugSchema = z
   .regex(/^[a-z0-9؀-ۿ]+(?:-[a-z0-9؀-ۿ]+)*$/, "فقط حروف، عدد و خط تیره مجاز است")
   .refine((value) => !RESERVED_SLUGS.has(value), "این آدرس رزرو شده است");
 
-export const RegisterSchema = z.object({
+/** Everything sign-up asks for before the code is sent. */
+export const RegisterDetailsSchema = z.object({
   name: z.string().trim().min(2, "نام را وارد کنید").max(80),
-  email: emailSchema,
-  password: passwordSchema,
-  phone: z.string().trim().max(20).optional(),
+  phone: mobileSchema,
   restaurantName: z.string().trim().min(2, "نام رستوران را وارد کنید").max(80),
   slug: slugSchema,
 });
+
+/** Sign-up completes with the code that proves the number. */
+export const RegisterSchema = RegisterDetailsSchema.extend({ code: otpCodeSchema });
 
 /**
  * A new branch, plus the account that will run it.
@@ -104,22 +132,23 @@ export const BranchSchema = z.object({
   name: z.string().trim().min(2, "نام شعبه را وارد کنید").max(80),
   slug: slugSchema,
   managerName: z.string().trim().min(2, "نام مدیر شعبه را وارد کنید").max(80),
-  managerEmail: emailSchema,
-  managerPassword: passwordSchema,
+  /** The manager signs in with this number; their first code proves it. */
+  managerPhone: mobileSchema,
   address: z.string().trim().max(200).optional().or(z.literal("")),
   phone: z.string().trim().max(20).optional().or(z.literal("")),
   tableCount: z.number().int().min(0).max(200).optional(),
 });
 
 export const LoginSchema = z.object({
-  email: emailSchema,
-  password: z.string().min(1, "رمز عبور را وارد کنید").max(128),
+  phone: mobileSchema,
+  code: otpCodeSchema,
 });
 
-export const ChangePasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(128),
-  newPassword: passwordSchema,
-});
+/** Asking for a code to the number an account is moving to. */
+export const PhoneChangeRequestSchema = z.object({ phone: mobileSchema });
+
+/** Saving the new number, with the code sent to it. */
+export const PhoneChangeSchema = z.object({ phone: mobileSchema, code: otpCodeSchema });
 
 // ------------------------------- menu --------------------------------------
 
@@ -744,7 +773,7 @@ export const DesignSchema = z.object({
  * An account created by platform staff, standing in for self-service signup.
  *
  * Reuses `emailSchema` and `slugSchema` rather than restating their rules: an
- * admin-created venue takes the same public URL and the same unique-email
+ * admin-created venue takes the same public URL and the same unique-phone
  * constraint as a self-registered one, so a second, looser copy of those rules
  * here would let staff create accounts the registration form would have
  * rejected.
@@ -760,8 +789,8 @@ export const PlatformSettingsSchema = z.object({
 });
 
 export const AdminAccountSchema = z.object({
-  email: emailSchema,
-  password: z.string().min(8, "رمز عبور باید حداقل ۸ کاراکتر باشد"),
+  /** The owner signs in with this number; their first code proves it. */
+  ownerPhone: mobileSchema,
   ownerName: z
     .string()
     .trim()
@@ -1113,8 +1142,8 @@ export const ProductRecipeSchema = z.object({
  */
 export const StaffSchema = z.object({
   name: z.string().trim().min(2, "نام را وارد کنید").max(80),
-  email: emailSchema,
-  password: passwordSchema,
+  /** The staff member signs in with this number; their first code proves it. */
+  phone: mobileSchema,
   tabs: z.array(z.string().max(40)).max(20).default([]),
 });
 

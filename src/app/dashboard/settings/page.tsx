@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "تنظیمات" };
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const { restaurantId } = await requirePageOwner("/dashboard/settings");
+  const { restaurantId, user } = await requirePageOwner("/dashboard/settings");
 
   const [restaurant, limits] = await Promise.all([
     prisma.restaurant.findUnique({
@@ -45,6 +45,7 @@ export default async function SettingsPage() {
   return (
     <SettingsForm
       baseUrl={env.NEXT_PUBLIC_APP_URL}
+      accountPhone={user.phone}
       allowsOnlinePay={limits.allowsOnlinePay}
       paymentsEnabled={PAYMENTS_ENABLED}
       initial={{

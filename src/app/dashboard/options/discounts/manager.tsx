@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Select, Toggle } from "@/components/ui/field";
+import { MoneyInput } from "@/components/ui/money-input";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
@@ -200,14 +201,26 @@ export function DiscountsManager({
             </Field>
 
             <Field label={t.options.codeValue} htmlFor="discount-value">
-              <input
-                id="discount-value"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                inputMode="numeric"
-                className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-bold"
-                placeholder={type === "PERCENT" ? "۱۰" : "۵۰٬۰۰۰"}
-              />
+              {/* A fixed code is money and groups as it is typed; a percentage
+                  is a small plain number. */}
+              {type === "FIXED" ? (
+                <MoneyInput
+                  id="discount-value"
+                  value={parseAmount(value) || null}
+                  onValueChange={(amount) => setValue(amount ? String(amount) : "")}
+                  className="font-bold"
+                  placeholder="۵۰٬۰۰۰"
+                />
+              ) : (
+                <input
+                  id="discount-value"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  inputMode="numeric"
+                  className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-bold"
+                  placeholder="۱۰"
+                />
+              )}
             </Field>
 
             {/*
@@ -223,12 +236,11 @@ export function DiscountsManager({
                 htmlFor="discount-max"
                 className="sm:col-span-3"
               >
-                <input
+                <MoneyInput
                   id="discount-max"
-                  value={maxDiscount}
-                  onChange={(e) => setMaxDiscount(e.target.value)}
-                  inputMode="numeric"
-                  className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-bold"
+                  value={parseAmount(maxDiscount) || null}
+                  onValueChange={(amount) => setMaxDiscount(amount ? String(amount) : "")}
+                  className="font-bold"
                   placeholder="۱۵۰٬۰۰۰"
                 />
               </Field>

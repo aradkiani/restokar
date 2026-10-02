@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/client-api";
 import { useCart } from "./cart";
 import { useMenu } from "./runtime";
-import { localizeDigits, toEnglishDigits } from "@/lib/format";
+import { formatMoney, formatNumber, localizeDigits, toEnglishDigits } from "@/lib/format";
 import type { MenuCategory } from "../types";
 
 /**
@@ -423,7 +423,7 @@ export function CartButton({
           className="absolute -end-0.5 -top-0.5 grid min-w-5 animate-[scale-in_0.2s_ease-out] place-items-center rounded-full px-1 text-[10px] font-extrabold tabular-nums"
           style={{ background: "var(--m-primary)", color: "var(--m-primary-contrast)" }}
         >
-          {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(cart.count)}
+          {formatNumber(cart.count, locale)}
         </span>
       )}
     </button>
@@ -447,8 +447,7 @@ export function CartBar() {
   const showCart = cart.count > 0 && !preview;
 
   if (!showStaffCall && !showCart) return null;
-  const fmt = (n: number) =>
-    new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(n);
+  const fmt = (n: number) => formatMoney(n, locale);
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col items-center gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -461,7 +460,7 @@ export function CartBar() {
           style={{ background: "var(--m-primary)", color: "var(--m-primary-contrast)" }}
         >
           <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/20 text-sm font-extrabold tabular-nums">
-            {fmt(cart.count)}
+            {formatNumber(cart.count, locale)}
           </span>
           <span className="flex-1 text-start text-sm font-extrabold">
             {t.publicMenu.cart}

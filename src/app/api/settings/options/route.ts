@@ -5,6 +5,7 @@ import { recordAudit } from "@/lib/audit";
 import { requireOwner } from "@/lib/auth/guards";
 import { PricingOptionsSchema } from "@/lib/validation";
 import { applyMenuPriceStep } from "@/lib/costing-server";
+import { formatMoney } from "@/lib/format";
 
 export const runtime = "nodejs";
 
@@ -74,7 +75,7 @@ export const PATCH = route(async (request: Request) => {
       actor: user,
       restaurantId,
       action: "SETTINGS_CHANGED",
-      summary: `گام رُند قیمت منو از ${before.menuPriceStep} به ${restaurant.menuPriceStep} تغییر کرد`,
+      summary: `گام رُند قیمت منو از ${formatMoney(before.menuPriceStep)} به ${formatMoney(restaurant.menuPriceStep)} تومان تغییر کرد`,
       metadata: {
         menuPriceStep: { before: before.menuPriceStep, after: restaurant.menuPriceStep },
         productsReRounded: reRounded,

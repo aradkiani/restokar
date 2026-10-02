@@ -15,6 +15,8 @@ import {
   ScheduleWindowSchema,
   TableSchema,
   emailSchema,
+  mobileSchema,
+  otpCodeSchema,
   slugSchema,
 } from "./validation";
 import { MAX_SCHEDULE_WINDOWS } from "./availability";
@@ -59,34 +61,98 @@ describe("slugSchema", () => {
   });
 });
 
-describe("RegisterSchema", () => {
-  const valid = {
-    name: "نیما رستگار",
-    email: "nima@example.ir",
-    password: "password123",
-    restaurantName: "کافه نبش",
-    slug: "cafe-nabsh-2",
-  };
-
-  it("accepts a complete registration", () => {
-    expect(RegisterSchema.safeParse(valid).success).toBe(true);
+/**
+ * The sign-in identifier. Every way an Iranian mobile is typed must land on the
+ * one stored form, or the same person becomes two accounts.
+ */
+describe("mobileSchema", () => {
+  it("stores every form of the same mobile as 09XXXXXXXXX", () => {
+    for (const typed of [
+      "09121234567",
+      "9121234567",
+      "+989121234567",
+      "00989121234567",
+      "989121234567",
+      "0912 123 4567",
+      "0912-123-4567",
+      "۰۹۱۲۱۲۳۴۵۶۷",
+      "٠٩١٢١٢٣٤٥٦٧",
+      "  +98 (912) 123-4567  ",
+    ]) {
+      expect(mobileSchema.parse(typed), typed).toBe("09121234567");
+    }
   });
 
-  it("requires at least eight characters of password", () => {
-    const result = RegisterSchema.safeParse({ ...valid, password: "short" });
+  it("refuses landlines and anything else a code cannot be texted to", () => {
+    for (const bad of [
+      "",
+      "02188776655",
+      "0912123456",
+      "091212345678",
+      "abc",
+      "+1 415 555 0100",
+    ]) {
+      expect(mobileSchema.safeParse(bad).success, bad).toBe(false);
+    }
+  });
+
+  it("says so in Persian", () => {
+    const result = mobileSchema.safeParse("123");
     expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0].message).toBe("رمز عبور باید حداقل ۸ کاراکتر باشد");
+    if (!result.success)
+      expect(result.error.issues[0]!.message).toBe("شماره موبایل معتبر نیست");
+  });
+});
+
+describe("otpCodeSchema", () => {
+  it("accepts five or six digits in either script, spaces ignored", () => {
+    expect(otpCodeSchema.parse("12345")).toBe("12345");
+    expect(otpCodeSchema.parse("۱۲۳۴۵۶")).toBe("123456");
+    expect(otpCodeSchema.parse(" 12 345 ")).toBe("12345");
+  });
+
+  it("refuses anything that cannot be a code", () => {
+    for (const bad of ["", "1234", "1234567", "12a45"]) {
+      expect(otpCodeSchema.safeParse(bad).success, bad).toBe(false);
     }
   });
 });
 
+describe("RegisterSchema", () => {
+  const valid = {
+    name: "نیما رستگار",
+    phone: "0912 123 4567",
+    code: "۱۲۳۴۵",
+    restaurantName: "کافه نبش",
+    slug: "cafe-nabsh-2",
+  };
+
+  it("accepts a complete registration, normalising the number and code", () => {
+    const parsed = RegisterSchema.parse(valid);
+    expect(parsed.phone).toBe("09121234567");
+    expect(parsed.code).toBe("12345");
+  });
+
+  /** Email and password are gone from sign-up; sending them changes nothing. */
+  it("needs no email or password", () => {
+    const parsed = RegisterSchema.parse({ ...valid, email: "a@b.ir", password: "x" });
+    expect(parsed).not.toHaveProperty("email");
+    expect(parsed).not.toHaveProperty("password");
+  });
+
+  it("requires the code", () => {
+    const { code: _code, ...withoutCode } = valid;
+    expect(RegisterSchema.safeParse(withoutCode).success).toBe(false);
+  });
+});
+
 describe("LoginSchema", () => {
-  it("requires a password but does not impose length rules on sign-in", () => {
-    // Length is a registration rule; enforcing it at login would leak that an
-    // existing password is too short.
-    expect(LoginSchema.safeParse({ email: "a@b.ir", password: "x" }).success).toBe(true);
-    expect(LoginSchema.safeParse({ email: "a@b.ir", password: "" }).success).toBe(false);
+  it("signs in with a phone and a code, nothing else", () => {
+    expect(LoginSchema.safeParse({ phone: "09121234567", code: "12345" }).success).toBe(
+      true,
+    );
+    expect(LoginSchema.safeParse({ phone: "09121234567" }).success).toBe(false);
+    expect(LoginSchema.safeParse({ email: "a@b.ir", password: "x" }).success).toBe(false);
   });
 });
 

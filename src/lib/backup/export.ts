@@ -91,11 +91,18 @@ const TABLE_ORDER = [
  * `Session` is live authentication state: it expires on its own, restoring it
  * would resurrect sign-ins that should have died with the incident, and there
  * is no reason to put session identifiers in a file that travels by email.
+ * `OtpChallenge` holds sign-in codes that expire in two minutes; restoring one
+ * could only ever revive a code that should be dead.
  * `RateLimit` is a set of counters that are meaningless minutes later.
  * `_prisma_migrations` describes the schema, which is part of the core project
  * and comes back with the code.
  */
-const EXCLUDED_TABLES = new Set(["Session", "RateLimit", "_prisma_migrations"]);
+const EXCLUDED_TABLES = new Set([
+  "Session",
+  "OtpChallenge",
+  "RateLimit",
+  "_prisma_migrations",
+]);
 
 /** Rows per archive entry — bounds peak memory on the large order tables. */
 const ROWS_PER_CHUNK = 5_000;

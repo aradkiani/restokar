@@ -51,7 +51,8 @@ export const POST = route(async (request: Request) => {
     amount: quote.amount,
     description: `پیامک تبلیغاتی — ${quote.recipientCount} گیرنده`,
     callbackUrl: `${env.NEXT_PUBLIC_APP_URL}/api/payments/callback?purpose=sms`,
-    email: user.email,
+    // The payer's sign-in number; Zarinpal shows it on its payment page.
+    mobile: user.phone ?? undefined,
   });
 
   await prisma.payment.create({

@@ -1,4 +1,3 @@
-import bcrypt from "bcryptjs";
 import { ok, parseBody, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { HttpError, requireChainOwner } from "@/lib/auth/guards";
@@ -33,7 +32,7 @@ export const GET = route(async () => {
       isActive: true,
       members: {
         where: { role: "BRANCH_MANAGER" },
-        select: { name: true, email: true },
+        select: { name: true, phone: true },
       },
     },
   });
@@ -45,17 +44,18 @@ export const POST = route(async (request: Request) => {
   const { restaurantId, user } = await requireChainOwner();
   const input = await parseBody(request, BranchSchema);
 
-  const [slugTaken, emailTaken] = await Promise.all([
+  const [slugTaken, phoneTaken] = await Promise.all([
     prisma.restaurant.findUnique({ where: { slug: input.slug }, select: { id: true } }),
     prisma.user.findUnique({
-      where: { email: input.managerEmail },
+      where: { phone: input.managerPhone },
       select: { id: true },
     }),
   ]);
 
   // Fallback text only — the client renders the localized string from `code`.
   if (slugTaken) throw new HttpError(409, "Slug already taken", "SLUG_TAKEN");
-  if (emailTaken) throw new HttpError(409, "Email already registered", "EMAIL_TAKEN");
+  // Told to a signed-in chain owner only; see the same rule in /api/staff.
+  if (phoneTaken) throw new HttpError(409, "Phone number unavailable", "PHONE_TAKEN");
 
   const parent = await prisma.restaurant.findUniqueOrThrow({
     where: { id: restaurantId },
@@ -72,8 +72,6 @@ export const POST = route(async (request: Request) => {
       onlinePaymentEnabled: true,
     },
   });
-
-  const passwordHash = await bcrypt.hash(input.managerPassword, 12);
 
   /*
     One transaction: a branch row without its manager account is a menu address
@@ -112,8 +110,8 @@ export const POST = route(async (request: Request) => {
 
     await tx.user.create({
       data: {
-        email: input.managerEmail,
-        passwordHash,
+        // Not yet proved: the manager's first sign-in code, sent here, is.
+        phone: input.managerPhone,
         name: input.managerName,
         role: "BRANCH_MANAGER",
         restaurantId: created.id,

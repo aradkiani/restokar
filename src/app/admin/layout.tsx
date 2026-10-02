@@ -34,7 +34,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <span className="block text-sm font-black text-ink-900">
                 {t.admin.title}
               </span>
-              <span className="block text-xs text-ink-500">{admin.email}</span>
+              <span className="block text-xs text-ink-500" dir="ltr">
+                {admin.phone}
+              </span>
             </span>
           </Link>
 

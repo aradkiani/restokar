@@ -38,7 +38,7 @@ export const DEFAULT_OTP_POLICY: OtpPolicy = {
  * `codeHash` and never the code: a database readable by a support script, a
  * backup archive or a leaked snapshot must not contain something that can be
  * typed straight into the verification box. The hash is produced in
- * `otp-server.ts`, which is also the only place the plaintext ever exists.
+ * `auth/otp-server.ts`, which is also the only place the plaintext ever exists.
  */
 export interface OtpChallengeState {
   codeHash: string;

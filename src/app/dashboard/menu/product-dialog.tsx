@@ -4,13 +4,14 @@ import * as React from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/field";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { ImageUploader } from "@/components/image-uploader";
 import { CATEGORY_ICON_NAMES, CategoryIcon } from "@/components/icon";
 import { api } from "@/lib/client-api";
-import { formatMoney, parseAmount } from "@/lib/format";
+import { parseAmount } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 import { PriceHealthNote, type MenuPricing } from "./price-health";
 import type { CategoryRow, ProductRow } from "./builder";
@@ -402,13 +403,11 @@ export function ProductDialog({
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label={t.menuBuilder.price} htmlFor="p-price">
-              <Input
+              <MoneyInput
                 id="p-price"
-                inputMode="numeric"
                 required
-                value={form.price ? formatMoney(form.price, locale) : ""}
-                onChange={(e) => setField("price", parseAmount(e.target.value))}
-                placeholder="۰"
+                value={form.price}
+                onValueChange={(amount) => setField("price", amount ?? 0)}
               />
             </Field>
 
@@ -417,16 +416,12 @@ export function ProductDialog({
               hint={t.common.optional}
               htmlFor="p-compare"
             >
-              <Input
+              <MoneyInput
                 id="p-compare"
-                inputMode="numeric"
-                value={
-                  form.compareAtPrice ? formatMoney(form.compareAtPrice, locale) : ""
+                value={form.compareAtPrice}
+                onValueChange={(amount) =>
+                  setField("compareAtPrice", amount && amount > 0 ? amount : null)
                 }
-                onChange={(e) => {
-                  const amount = parseAmount(e.target.value);
-                  setField("compareAtPrice", amount > 0 ? amount : null);
-                }}
               />
             </Field>
 
@@ -442,13 +437,13 @@ export function ProductDialog({
               {/* Read-only when the recipe decides it: the figure is
                   recomputed whenever an ingredient's price or the recipe
                   changes, so a typed one would only be overwritten. */}
-              <Input
+              <MoneyInput
                 id="p-cost"
-                inputMode="numeric"
                 readOnly={form.costFromRecipe}
                 aria-describedby={form.costFromRecipe ? "p-cost-source" : undefined}
-                value={form.costPrice ? formatMoney(form.costPrice, locale) : ""}
-                onChange={(e) => setField("costPrice", parseAmount(e.target.value))}
+                value={form.costPrice}
+                onValueChange={(amount) => setField("costPrice", amount ?? 0)}
+                placeholder=""
                 className={form.costFromRecipe ? "bg-ink-50 text-ink-600" : undefined}
               />
               {form.costFromRecipe && (
@@ -823,15 +818,14 @@ export function ProductDialog({
                             }
                             className="!h-9 w-28 shrink-0 text-sm"
                           />
-                          <Input
-                            type="number"
+                          <MoneyInput
+                            allowNegative
                             aria-label={t.menuBuilder.optionPriceDelta}
-                            placeholder="0"
                             title={t.menuBuilder.optionPriceDelta}
                             value={choice.priceDelta}
-                            onChange={(e) =>
+                            onValueChange={(amount) =>
                               updateChoice(groupIndex, choiceIndex, {
-                                priceDelta: Number(e.target.value) || 0,
+                                priceDelta: amount ?? 0,
                               })
                             }
                             className="!h-9 w-28 shrink-0 text-sm"

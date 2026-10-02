@@ -6,7 +6,7 @@ import { getOrderByToken } from "@/lib/orders";
 import { getPublicMenu } from "@/lib/menu";
 import { getI18n } from "@/lib/i18n";
 import { themeToCssVars } from "@/lib/theme";
-import { formatMoney, formatTime } from "@/lib/format";
+import { formatMoney, formatNumber, formatTime, localizeDigits } from "@/lib/format";
 import { MenuBackdrop } from "@/components/menu-background";
 import { OrderStatusTracker } from "./tracker";
 
@@ -72,10 +72,7 @@ export default async function OrderStatusPage({
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg font-black">{order.restaurant.name}</h1>
             <p className="text-xs opacity-60">
-              {t.orderStatus.orderNumber} #
-              {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US", {
-                useGrouping: false,
-              }).format(order.orderNumber)}
+              {t.orderStatus.orderNumber} #{localizeDigits(order.orderNumber, locale)}
             </p>
           </div>
           {order.restaurant.logoUrl ? (
@@ -109,9 +106,7 @@ export default async function OrderStatusPage({
                     color: "var(--m-primary)",
                   }}
                 >
-                  {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(
-                    item.quantity,
-                  )}
+                  {formatNumber(item.quantity, locale)}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-bold">{item.nameSnapshot}</span>

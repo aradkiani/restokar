@@ -126,3 +126,68 @@ export function parseAmount(input: string): number {
   const n = Number(normalized);
   return Number.isFinite(n) ? Math.round(n) : 0;
 }
+
+// ------------------------------ money inputs -------------------------------
+
+/** Longer than any Toman amount, short enough to stay exact as a double. */
+const MAX_MONEY_DIGITS = 15;
+
+const ANY_DIGIT = /[0-9۰-۹٠-٩]/;
+
+/**
+ * What a money field shows while someone types into it, and the number it holds.
+ *
+ * The text is grouped with the same `formatMoney` every price on screen uses —
+ * «۱٬۲۵۰٬۰۰۰» as it is typed — and the value is the bare number the form
+ * sends. Persian, Arabic and Latin digits are all accepted, and separators the
+ * person types themselves are ignored rather than doubled.
+ *
+ * A lone minus sign is kept as text with no value yet, so a negative amount can
+ * be typed from its first key; `allowNegative` is off for anything a guest pays.
+ */
+export function formatMoneyInput(
+  raw: string,
+  locale: Locale = "fa",
+  allowNegative = false,
+): { text: string; value: number | null } {
+  const ascii = toEnglishDigits(raw);
+  const negative = allowNegative && /^\s*[-\u2212]/.test(ascii);
+  const digits = ascii
+    .replace(/\D/g, "")
+    .replace(/^0+(?=\d)/, "")
+    .slice(0, MAX_MONEY_DIGITS);
+
+  if (!digits) return { text: negative ? "-" : "", value: null };
+
+  const amount = Number(digits);
+  return {
+    text: `${negative ? "-" : ""}${formatMoney(amount, locale)}`,
+    value: negative ? -amount : amount,
+  };
+}
+
+/** How many digits, in any script, a piece of text holds. */
+export function countDigits(text: string): number {
+  let count = 0;
+  for (const char of text) if (ANY_DIGIT.test(char)) count += 1;
+  return count;
+}
+
+/**
+ * Where the caret goes after a money field regroups its digits.
+ *
+ * Just after the same number of digits it followed before, so inserting or
+ * deleting in the middle of «۱٬۲۵۰٬۰۰۰» does not throw the cursor to the end.
+ */
+export function caretAfterDigits(text: string, digitsBefore: number): number {
+  if (digitsBefore <= 0) return text.startsWith("-") ? 1 : 0;
+
+  let seen = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (ANY_DIGIT.test(text[i]!)) {
+      seen += 1;
+      if (seen === digitsBefore) return i + 1;
+    }
+  }
+  return text.length;
+}

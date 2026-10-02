@@ -10,14 +10,14 @@ import type { SessionUser } from "./auth/session";
  *   * Recording NEVER throws. An audit write failing must not roll back the
  *     owner's actual work — a lost log line is bad, a lost price change is
  *     worse. Failures go to the server log instead.
- *   * The actor's email and role are snapshotted onto the row, so the trail
+ *   * The actor's sign-in number and role are snapshotted onto the row, so the trail
  *     survives the user being deleted.
  *   * `restaurantId` comes from the caller's already-verified tenant scope,
  *     never from request input — the same rule as every other tenant query.
  */
 
 export interface AuditEntry {
-  actor: Pick<SessionUser, "id" | "email" | "role">;
+  actor: Pick<SessionUser, "id" | "phone" | "role">;
   restaurantId: string | null;
   action: AuditAction;
   summary: string;
@@ -33,7 +33,8 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
       data: {
         restaurantId: entry.restaurantId,
         actorUserId: entry.actor.id,
-        actorEmail: entry.actor.email,
+        // The number they signed in with; the id if an old account has none.
+        actorLabel: entry.actor.phone ?? entry.actor.id,
         actorRole: entry.actor.role,
         action: entry.action,
         entityType: entry.entityType ?? null,
@@ -62,7 +63,7 @@ export async function listAuditLog(restaurantId: string, take = 50) {
       id: true,
       action: true,
       summary: true,
-      actorEmail: true,
+      actorLabel: true,
       actorRole: true,
       entityType: true,
       createdAt: true,

@@ -2,53 +2,79 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Eye, EyeOff } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { useI18n } from "@/components/i18n-provider";
+import { CodeStep, type ResendResult } from "@/components/auth/code-step";
+import { requestCode } from "@/components/auth/request-code";
 import { api } from "@/lib/client-api";
 import { localizeApiError, localizeFieldErrors } from "@/lib/api-error";
+import { mobileSchema } from "@/lib/validation";
 
+type Step =
+  | { kind: "phone" }
+  | { kind: "code"; phone: string; codeLength: number; cooldownSeconds: number };
+
+/**
+ * Sign-in: a mobile number, then the code texted to it. No password.
+ *
+ * The number is checked here with the same schema the server uses, so a typo
+ * is caught before anything is sent. What the server says next never depends
+ * on whether the number has an account.
+ */
 export function LoginForm({ nextPath }: { nextPath?: string }) {
   const { t } = useI18n();
   const router = useRouter();
 
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [showPassword, setShowPassword] = React.useState(false);
+  const [phoneInput, setPhoneInput] = React.useState("");
+  const [step, setStep] = React.useState<Step>({ kind: "phone" });
   const [error, setError] = React.useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
+  const [phoneError, setPhoneError] = React.useState<string | undefined>();
   const [loading, setLoading] = React.useState(false);
 
-  async function handleSubmit(event: React.FormEvent) {
+  async function sendCode(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
-    setFieldErrors({});
+    setPhoneError(undefined);
 
-    // Caught here rather than at the server so an empty submit gives an
-    // instant, per-field answer instead of a round trip that used to come
-    // back as the untranslated banner "Validation failed".
-    const local: Record<string, string> = {};
-    if (!email.trim()) local.email = t.errors.required;
-    if (!password) local.password = t.errors.required;
-    if (Object.keys(local).length > 0) {
-      setFieldErrors(local);
-      setError(t.errors.fixErrors);
+    const parsed = mobileSchema.safeParse(phoneInput);
+    if (!parsed.success) {
+      setPhoneError(parsed.error.issues[0]?.message ?? t.errors.required);
       return;
     }
 
     setLoading(true);
+    const result = await requestCode(
+      "/api/auth/otp",
+      { phone: parsed.data, purpose: "LOGIN" },
+      t,
+    );
+    setLoading(false);
 
+    if (result.ok) {
+      setStep({ kind: "code", phone: parsed.data, ...result });
+    } else if (result.code === "OTP_COOLDOWN" && result.retryAfterSeconds) {
+      // A code went out moments ago and still works.
+      setStep({
+        kind: "code",
+        phone: parsed.data,
+        codeLength: result.codeLength ?? 5,
+        cooldownSeconds: result.retryAfterSeconds,
+      });
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function verify(phone: string, code: string): Promise<string | null> {
     const result = await api.post<{ redirectTo: string }>("/api/auth/login", {
-      email,
-      password,
+      phone,
+      code,
     });
-
     if (!result.ok) {
-      setError(localizeApiError(result.error, t));
-      setFieldErrors(localizeFieldErrors(result.error.details, t));
-      setLoading(false);
-      return;
+      const fields = localizeFieldErrors(result.error.details, t);
+      return fields.code ?? localizeApiError(result.error, t);
     }
 
     // Only same-origin relative paths are honoured, so ?next= cannot be used
@@ -60,10 +86,33 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
 
     router.replace(target);
     router.refresh();
+    return null;
+  }
+
+  async function resend(phone: string): Promise<ResendResult> {
+    const result = await requestCode("/api/auth/otp", { phone, purpose: "LOGIN" }, t);
+    return result.ok
+      ? { cooldownSeconds: result.cooldownSeconds }
+      : { error: result.error, retryAfterSeconds: result.retryAfterSeconds };
+  }
+
+  if (step.kind === "code") {
+    return (
+      <CodeStep
+        phone={step.phone}
+        codeLength={step.codeLength}
+        cooldownSeconds={step.cooldownSeconds}
+        hint={t.auth.loginCodeHint}
+        submitLabel={t.auth.submitLogin}
+        onSubmit={(code) => verify(step.phone, code)}
+        onResend={() => resend(step.phone)}
+        onEditPhone={() => setStep({ kind: "phone" })}
+      />
+    );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 space-y-4" noValidate>
+    <form onSubmit={sendCode} className="mt-8 space-y-4" noValidate>
       {error && (
         <p
           role="alert"
@@ -74,52 +123,25 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
         </p>
       )}
 
-      <Field label={t.auth.email} htmlFor="email" error={fieldErrors.email}>
+      <Field label={t.auth.phone} htmlFor="phone" error={phoneError}>
         <Input
-          id="email"
-          name="email"
-          type="email"
+          id="phone"
+          name="phone"
+          type="tel"
           dir="ltr"
-          autoComplete="email"
+          inputMode="tel"
+          autoComplete="tel"
+          autoFocus
           required
-          aria-invalid={Boolean(fieldErrors.email)}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@restaurant.com"
+          aria-invalid={Boolean(phoneError)}
+          value={phoneInput}
+          onChange={(e) => setPhoneInput(e.target.value)}
+          placeholder={t.auth.phonePlaceholder}
         />
       </Field>
 
-      <Field label={t.auth.password} htmlFor="password" error={fieldErrors.password}>
-        {/* The wrapper matches the input's own `dir="ltr"`. Left as RTL, the
-            button's `end-1` resolved to the left edge while the input reserved
-            its `pe-11` padding on the right, so the eye sat on top of the first
-            characters typed. Only the field is LTR; the label stays RTL. */}
-        <div className="relative" dir="ltr">
-          <Input
-            id="password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            dir="ltr"
-            autoComplete="current-password"
-            required
-            aria-invalid={Boolean(fieldErrors.password)}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="pe-11"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword((v) => !v)}
-            aria-label={showPassword ? t.auth.hidePassword : t.auth.showPassword}
-            className="tap-safe absolute end-1 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-md text-ink-500 hover:text-ink-800"
-          >
-            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-          </button>
-        </div>
-      </Field>
-
       <Button type="submit" size="lg" loading={loading} className="w-full">
-        {t.auth.submitLogin}
+        {t.auth.sendCode}
       </Button>
     </form>
   );

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, Select, Toggle } from "@/components/ui/field";
+import { MoneyInput } from "@/components/ui/money-input";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
@@ -234,13 +235,10 @@ export function OptionsForm({
         <CardBody className="space-y-3">
           <p className="text-xs leading-6 text-ink-500">{t.options.minimumHint}</p>
           <Field label={t.options.minimumAmount} htmlFor="minimum-amount">
-            <Input
+            <MoneyInput
               id="minimum-amount"
-              inputMode="numeric"
-              value={localizeDigits(form.minimumOrderAmount, locale)}
-              onChange={(e) =>
-                setField("minimumOrderAmount", parseAmount(e.target.value))
-              }
+              value={form.minimumOrderAmount}
+              onValueChange={(amount) => setField("minimumOrderAmount", amount ?? 0)}
             />
           </Field>
         </CardBody>

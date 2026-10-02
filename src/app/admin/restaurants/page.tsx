@@ -117,7 +117,7 @@ export default async function AdminRestaurantsPage({
                     <td className="p-3">
                       <span className="block font-semibold">{row.owner.name}</span>
                       <span className="block text-[11px] text-ink-500" dir="ltr">
-                        {row.owner.email}
+                        {row.owner.phone}
                       </span>
                     </td>
                     <td className="p-3 tabular-nums">

@@ -16,7 +16,7 @@ import { useMenu } from "./runtime";
 import { useCart } from "./cart";
 import { PriceTag, ProductImage, QuantityStepper } from "./pieces";
 import { RecommendationStrip } from "./recommendations";
-import { localizeDigits, toEnglishDigits } from "@/lib/format";
+import { formatMoney, localizeDigits, toEnglishDigits } from "@/lib/format";
 import { calculatePrice } from "@/lib/pricing";
 
 type Step = "cart" | "details";
@@ -102,7 +102,7 @@ export function CartDrawer() {
     if (presetTable) setTableNumber(presetTable);
   }, [presetTable]);
 
-  const fmt = (n: number) => new Intl.NumberFormat(isRtl ? "fa-IR" : "en-US").format(n);
+  const fmt = (n: number) => formatMoney(n, locale);
 
   /**
    * The same calculation the server runs at checkout, fed the same settings —

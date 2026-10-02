@@ -9,7 +9,7 @@ import { Field, Input } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
-import { localizeApiError } from "@/lib/api-error";
+import { localizeApiError, localizeFieldErrors } from "@/lib/api-error";
 
 /**
  * Creates a branch and the account that runs it, in one step.
@@ -26,8 +26,7 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
   const [name, setName] = React.useState("");
   const [slug, setSlug] = React.useState("");
   const [managerName, setManagerName] = React.useState("");
-  const [managerEmail, setManagerEmail] = React.useState("");
-  const [managerPassword, setManagerPassword] = React.useState("");
+  const [managerPhone, setManagerPhone] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   async function submit(event: React.FormEvent) {
@@ -38,15 +37,19 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
       name,
       slug,
       managerName,
-      managerEmail,
-      managerPassword,
+      managerPhone,
       tableCount: 8,
     });
 
     setBusy(false);
 
     if (!result.ok) {
-      toast.error(localizeApiError(result.error, t));
+      const fields = localizeFieldErrors(result.error.details, t);
+      toast.error(
+        fields.managerPhone ??
+          Object.values(fields)[0] ??
+          localizeApiError(result.error, t),
+      );
       return;
     }
 
@@ -54,8 +57,7 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
     setName("");
     setSlug("");
     setManagerName("");
-    setManagerEmail("");
-    setManagerPassword("");
+    setManagerPhone("");
     router.refresh();
   }
 
@@ -110,24 +112,20 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
               />
             </Field>
 
-            <Field label={t.branches.managerEmail} htmlFor="managerEmail">
+            <Field
+              label={t.branches.managerPhone}
+              hint={t.branches.managerPhoneHint}
+              htmlFor="managerPhone"
+            >
               <Input
-                id="managerEmail"
-                type="email"
+                id="managerPhone"
+                type="tel"
                 dir="ltr"
-                value={managerEmail}
-                onChange={(e) => setManagerEmail(e.target.value)}
-                required
-              />
-            </Field>
-
-            <Field label={t.branches.managerPassword} htmlFor="managerPassword">
-              <Input
-                id="managerPassword"
-                type="password"
-                dir="ltr"
-                value={managerPassword}
-                onChange={(e) => setManagerPassword(e.target.value)}
+                inputMode="tel"
+                autoComplete="off"
+                value={managerPhone}
+                onChange={(e) => setManagerPhone(e.target.value)}
+                placeholder={t.auth.phonePlaceholder}
                 required
               />
             </Field>

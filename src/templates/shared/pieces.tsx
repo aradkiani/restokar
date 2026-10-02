@@ -4,7 +4,7 @@ import * as React from "react";
 import { ImageIcon, Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hashCode } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
+import { formatMoney, formatNumber } from "@/lib/format";
 import type { Locale } from "@/lib/i18n";
 
 /**
@@ -139,8 +139,7 @@ export function PriceTag({
   className?: string;
 }) {
   if (!show) return null;
-  const fmt = (n: number) =>
-    new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(n);
+  const fmt = (n: number) => formatMoney(n, locale === "en" ? "en" : "fa");
 
   const hasDiscount = Boolean(compareAt && compareAt > price);
 
@@ -214,7 +213,7 @@ export function AddToCartButton({
     >
       {inCart ? (
         <span className="text-xs font-extrabold tabular-nums">
-          {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(inCart)}
+          {formatNumber(inCart, locale === "en" ? "en" : "fa")}
         </span>
       ) : (
         <Plus className="size-4.5" />

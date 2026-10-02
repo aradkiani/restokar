@@ -13,9 +13,9 @@
  */
 // MUST be first: refuses to run against anything but a local development
 // database, before the client below is constructed.
-import { demoSeedPassword } from "./demo-seed-guard";
+import "./demo-seed-guard";
+import { devPhone } from "./dev-phones";
 import { PrismaPg } from "@prisma/adapter-pg";
-import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import {
   CAFE_MENU,
@@ -37,8 +37,6 @@ const prisma = new PrismaClient({ adapter });
 
 /** Three months of history, which is what makes month-over-month comparisons real. */
 const DAYS_OF_HISTORY = 92;
-
-const SHARED_PASSWORD = demoSeedPassword();
 
 interface TenantSpec {
   slug: string;
@@ -139,14 +137,13 @@ function randomOf<T>(items: readonly T[]): T {
 }
 
 async function createOwnerAndRestaurant(spec: TenantSpec) {
-  const passwordHash = await bcrypt.hash(SHARED_PASSWORD, 12);
   const plan = await prisma.plan.findUniqueOrThrow({ where: { code: spec.planCode } });
 
   // Clear orphans from an interrupted run: a user with no restaurant at all
   // cannot be a real account, so this is safe.
   await prisma.user.deleteMany({
     where: {
-      email: { in: [spec.ownerEmail, `kitchen@${spec.slug}.ir`] },
+      phone: { in: [devPhone(spec.ownerEmail), devPhone(`kitchen@${spec.slug}.ir`)] },
       restaurantId: null,
       ownedRestaurants: { none: {} },
     },
@@ -154,8 +151,9 @@ async function createOwnerAndRestaurant(spec: TenantSpec) {
 
   const owner = await prisma.user.create({
     data: {
-      email: spec.ownerEmail,
-      passwordHash,
+      // Sign-in is phone + code; in development the code is printed to the
+      // server console, so these test numbers never receive an SMS.
+      phone: devPhone(spec.ownerEmail),
       name: spec.ownerName,
       role: "OWNER",
       // Registered before the trading history starts, so the account looks aged.
@@ -189,8 +187,7 @@ async function createOwnerAndRestaurant(spec: TenantSpec) {
 
   await prisma.user.create({
     data: {
-      email: `kitchen@${spec.slug}.ir`,
-      passwordHash,
+      phone: devPhone(`kitchen@${spec.slug}.ir`),
       name: "آشپزخانه",
       role: "STAFF",
       restaurantId: restaurant.id,
@@ -451,10 +448,12 @@ async function main() {
     await seedTenant(spec);
   }
 
-  console.log(`\nSign in with (password: ${SHARED_PASSWORD}):\n`);
+  console.log(
+    "\nSign in with these numbers; the code is printed in the dev server console:\n",
+  );
   for (const spec of TENANTS) {
     console.log(
-      `  ${spec.templateId.padEnd(7)} ${spec.ownerEmail.padEnd(34)} ${spec.name}`,
+      `  ${spec.templateId.padEnd(7)} ${devPhone(spec.ownerEmail)}  ${spec.name}`,
     );
   }
   console.log("");

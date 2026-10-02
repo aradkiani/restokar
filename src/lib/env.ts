@@ -136,7 +136,8 @@ const EnvSchema = z.object({
   SMS_OPT_OUT_SUFFIX: z.string().default("لغو11"),
 
   // --------------------------------- OTP -----------------------------------
-  OTP_CODE_LENGTH: z.coerce.number().int().min(4).max(8).default(5),
+  /** 5 or 6: shorter is guessable within the attempt limit, longer is mistyped. */
+  OTP_CODE_LENGTH: z.coerce.number().int().min(5).max(6).default(5),
   OTP_TTL_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
   OTP_MAX_ATTEMPTS: z.coerce.number().int().min(3).max(10).default(5),

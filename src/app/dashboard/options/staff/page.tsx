@@ -16,7 +16,7 @@ export default async function StaffPage() {
   const staff = await prisma.user.findMany({
     where: { restaurantId, role: "STAFF" },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, email: true, staffTabs: true },
+    select: { id: true, name: true, phone: true, staffTabs: true },
   });
 
   return <StaffManager initialStaff={staff} />;

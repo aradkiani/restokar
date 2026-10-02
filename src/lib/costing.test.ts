@@ -27,9 +27,16 @@ describe("unitCost", () => {
   });
 
   /** Kept unrounded — rounding here would skew every dish using saffron. */
-  it("prices saffron bought per mesghal exactly, per gram", () => {
-    const saffron = { unit: "g", purchasePrice: 1_500_000, priceUnit: "mesghal" };
-    expect(unitCost(saffron)).toBeCloseTo(1_500_000 / 4.608, 6);
+  it("prices an ingredient bought per kilogram exactly, per gram", () => {
+    const saffron = { unit: "g", purchasePrice: 333_333_333, priceUnit: "kg" };
+    expect(unitCost(saffron)).toBeCloseTo(333_333.333, 6);
+  });
+
+  /** مثقال was removed from the catalogue; a price quoted in it prices nothing. */
+  it("refuses a price quoted in the removed mesghal unit", () => {
+    expect(
+      unitCost({ unit: "g", purchasePrice: 1_500_000, priceUnit: "mesghal" }),
+    ).toBeNull();
   });
 
   it("is null for an unpriced or inconsistent item", () => {

@@ -1,4 +1,3 @@
-import bcrypt from "bcryptjs";
 import { fail, ok, parseBody, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/auth/guards";
@@ -22,7 +21,7 @@ export const GET = route(async () => {
   const staff = await prisma.user.findMany({
     where: { restaurantId, role: "STAFF" },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, email: true, staffTabs: true, isActive: true },
+    select: { id: true, name: true, phone: true, staffTabs: true, isActive: true },
   });
 
   return ok(staff);
@@ -35,16 +34,20 @@ export const POST = route(async (request: Request) => {
   const tabs = sanitiseTabs(input.tabs);
 
   /*
-    Email uniqueness is global, not per tenant: one address is one account
+    Phone uniqueness is global, not per tenant: one number is one account
     across the platform, which is what stops a person from being silently
-    attached to two venues and seeing whichever the login happened to resolve.
+    attached to two venues and seeing whichever the sign-in happened to resolve.
+
+    The one place a registered number shows through, and only to a signed-in
+    owner: an account cannot be created on a number another account holds, and
+    saying nothing would leave the owner with a form that silently fails.
   */
   const taken = await prisma.user.findUnique({
-    where: { email: input.email },
+    where: { phone: input.phone },
     select: { id: true },
   });
   if (taken) {
-    return fail(409, "این ایمیل قبلاً ثبت شده است", "EMAIL_TAKEN");
+    return fail(409, "این شماره قابل استفاده نیست", "PHONE_TAKEN");
   }
 
   /*
@@ -77,25 +80,23 @@ export const POST = route(async (request: Request) => {
     );
   }
 
-  const passwordHash = await bcrypt.hash(input.password, 12);
-
   const created = await prisma.user.create({
     data: {
       name: input.name,
-      email: input.email,
-      passwordHash,
+      // Not yet proved: their first sign-in code, sent to this number, is.
+      phone: input.phone,
       role: "STAFF",
       restaurantId,
       staffTabs: tabs,
     },
-    select: { id: true, name: true, email: true, staffTabs: true, isActive: true },
+    select: { id: true, name: true, phone: true, staffTabs: true, isActive: true },
   });
 
   await recordAudit({
     actor: user,
     restaurantId,
     action: "STAFF_CREATED",
-    summary: `حساب کارمند ساخته شد: ${created.name} (${created.email})`,
+    summary: `حساب کارمند ساخته شد: ${created.name} (${created.phone})`,
     entityType: "User",
     entityId: created.id,
     metadata: { tabs },

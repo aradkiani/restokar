@@ -187,7 +187,7 @@ export interface AdminRestaurantRow {
   isActive: boolean;
   isDemo: boolean;
   createdAt: Date;
-  owner: { name: string; email: string };
+  owner: { name: string; phone: string | null };
   plan: string | null;
   subscriptionStatus: string | null;
   currentPeriodEnd: Date | null;
@@ -225,7 +225,7 @@ export async function listRestaurantsForAdmin(
               { name: { contains: search, mode: "insensitive" } },
               { slug: { contains: search, mode: "insensitive" } },
               { owner: { name: { contains: search, mode: "insensitive" } } },
-              { owner: { email: { contains: search, mode: "insensitive" } } },
+              { owner: { phone: { contains: search } } },
             ],
           }
         : {}),
@@ -240,7 +240,7 @@ export async function listRestaurantsForAdmin(
       isActive: true,
       isDemo: true,
       createdAt: true,
-      owner: { select: { name: true, email: true } },
+      owner: { select: { name: true, phone: true } },
       subscription: {
         select: {
           status: true,
@@ -317,7 +317,7 @@ export async function getRestaurantForAdmin(restaurantId: string) {
         isPublished: true,
         isDemo: true,
         createdAt: true,
-        owner: { select: { id: true, name: true, email: true, createdAt: true } },
+        owner: { select: { id: true, name: true, phone: true, createdAt: true } },
         _count: { select: { products: true, categories: true, orders: true } },
         subscription: {
           select: {
@@ -337,7 +337,7 @@ export async function getRestaurantForAdmin(restaurantId: string) {
                 newExpiration: true,
                 durationDays: true,
                 reason: true,
-                adminEmail: true,
+                adminLabel: true,
                 createdAt: true,
               },
             },

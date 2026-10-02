@@ -33,6 +33,8 @@ import { themeAttribute, type ThemePreference } from "@/lib/appearance";
 import { canAccessTab, type StaffTab } from "@/lib/staff-tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+import { formatNumber } from "@/lib/format";
+
 interface NavItem {
   href: string;
   label: string;
@@ -71,7 +73,7 @@ export function DashboardShell({
   labels,
   children,
 }: {
-  user: { name: string; email: string; role: string };
+  user: { name: string; phone: string | null; role: string };
   /** Sections granted to a STAFF account; empty for every other role. */
   staffTabs?: string[];
   restaurant: { name: string; slug: string; logoUrl: string | null };
@@ -314,7 +316,7 @@ export function DashboardShell({
               {user.name}
             </span>
             <span className="block truncate text-[11px] text-sidebar-muted" dir="ltr">
-              {user.email}
+              {user.phone}
             </span>
           </span>
         </div>
@@ -375,9 +377,7 @@ export function DashboardShell({
             <span className="min-w-0 flex-1">
               {subscription.isExpired
                 ? labels.expiredWarning
-                : `${labels.expiringWarning} (${new Intl.NumberFormat(
-                    locale === "fa" ? "fa-IR" : "en-US",
-                  ).format(subscription.daysLeft)} ${labels.daysLeft})`}
+                : `${labels.expiringWarning} (${formatNumber(subscription.daysLeft, locale)} ${labels.daysLeft})`}
             </span>
             <Link
               href="/dashboard/subscription"

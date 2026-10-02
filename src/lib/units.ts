@@ -29,8 +29,6 @@ interface UnitSpec {
 /**
  * The catalogue. Order is the order the UI offers them in.
  *
- *   - **مثقال** is 4.608 g, the traditional weight saffron is still bought in.
- *     A venue that pays per mesghal can enter the price exactly as invoiced.
  *   - **Spoons** are the standard culinary measures (5 ml, 15 ml). They are
  *     approximations of what a cook's spoon holds, but they are the unit a
  *     recipe is written in, and costing "one spoon of oil" at 15 ml is far
@@ -41,7 +39,6 @@ interface UnitSpec {
 const UNITS = {
   g: { dimension: "weight", toBase: 1 },
   kg: { dimension: "weight", toBase: 1_000 },
-  mesghal: { dimension: "weight", toBase: 4.608 },
   ml: { dimension: "volume", toBase: 1 },
   l: { dimension: "volume", toBase: 1_000 },
   tsp: { dimension: "volume", toBase: 5 },
@@ -129,6 +126,10 @@ export function fromItemMilli(
  * still receives an old label — an import, an old client — lands on the same
  * answer. Unrecognised text becomes a count: the one reading that never invents
  * a weight or a volume the owner did not state.
+ *
+ * مثقال (4.608 g) is no longer a unit. An old label or code reads as grams, so
+ * it is never mistaken for a count; a caller holding a *quantity* in mesghal
+ * must multiply it by 4.608, which the restore trigger does in SQL.
  */
 export function legacyUnitCode(text: string | null | undefined): UnitCode {
   const value = (text ?? "").trim();
@@ -138,7 +139,8 @@ export function legacyUnitCode(text: string | null | undefined): UnitCode {
     گرم: "g",
     کیلوگرم: "kg",
     کیلو: "kg",
-    مثقال: "mesghal",
+    مثقال: "g",
+    mesghal: "g",
     میلی‌لیتر: "ml",
     "میلی لیتر": "ml",
     سی‌سی: "ml",

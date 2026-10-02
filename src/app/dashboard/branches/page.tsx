@@ -68,9 +68,9 @@ export default async function BranchesPage() {
                         {t.branches.branchBadge}
                       </span>
                     )}
-                    {site.managerEmail && (
+                    {site.managerPhone && (
                       <span className="block text-xs text-ink-500" dir="ltr">
-                        {site.managerEmail}
+                        {site.managerPhone}
                       </span>
                     )}
                   </td>

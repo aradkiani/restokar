@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { ImageUploader } from "@/components/image-uploader";
 import { SocialIcon } from "@/components/social-icon";
+import { PhoneChangeCard } from "@/components/auth/phone-change-card";
 import { api } from "@/lib/client-api";
 import {
   MAX_SOCIAL_LINKS,
@@ -44,8 +45,11 @@ export function SettingsForm({
   initial,
   allowsOnlinePay,
   paymentsEnabled,
+  accountPhone,
 }: {
   baseUrl: string;
+  /** The signed-in owner's own sign-in number, for the phone-change card. */
+  accountPhone: string | null;
   initial: SettingsValues;
   allowsOnlinePay: boolean;
   /** Platform-wide switch. False while no payment gateway is connected. */
@@ -57,9 +61,6 @@ export function SettingsForm({
 
   const [form, setForm] = React.useState(initial);
   const [saving, setSaving] = React.useState(false);
-
-  const [passwords, setPasswords] = React.useState({ current: "", next: "" });
-  const [changingPassword, setChangingPassword] = React.useState(false);
 
   function setField<K extends keyof SettingsValues>(key: K, value: SettingsValues[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -82,25 +83,6 @@ export function SettingsForm({
 
     toast.success(t.common.saved);
     router.refresh();
-  }
-
-  async function handlePasswordChange(event: React.FormEvent) {
-    event.preventDefault();
-    setChangingPassword(true);
-
-    const result = await api.patch("/api/account/password", {
-      currentPassword: passwords.current,
-      newPassword: passwords.next,
-    });
-
-    setChangingPassword(false);
-    if (!result.ok) {
-      toast.error(result.error.message);
-      return;
-    }
-
-    toast.success(t.settings.passwordChanged);
-    setPasswords({ current: "", next: "" });
   }
 
   return (
@@ -305,47 +287,7 @@ export function SettingsForm({
         </div>
       </form>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t.settings.changePassword}</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <form onSubmit={handlePasswordChange} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.settings.currentPassword} htmlFor="p-current">
-                <Input
-                  id="p-current"
-                  type="password"
-                  dir="ltr"
-                  required
-                  autoComplete="current-password"
-                  value={passwords.current}
-                  onChange={(e) =>
-                    setPasswords({ ...passwords, current: e.target.value })
-                  }
-                />
-              </Field>
-              <Field label={t.settings.newPassword} htmlFor="p-next">
-                <Input
-                  id="p-next"
-                  type="password"
-                  dir="ltr"
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                  value={passwords.next}
-                  onChange={(e) => setPasswords({ ...passwords, next: e.target.value })}
-                />
-              </Field>
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit" variant="outline" loading={changingPassword}>
-                {t.settings.changePassword}
-              </Button>
-            </div>
-          </form>
-        </CardBody>
-      </Card>
+      <PhoneChangeCard currentPhone={accountPhone} />
     </div>
   );
 }

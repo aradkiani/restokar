@@ -57,7 +57,8 @@ export const POST = route(async (request: Request) => {
     amount,
     description: `اشتراک ${plan.name} — ${input.interval === "yearly" ? "سالانه" : "ماهانه"}`,
     callbackUrl,
-    email: user.email,
+    // The payer's sign-in number; Zarinpal shows it on its payment page.
+    mobile: user.phone ?? undefined,
   });
 
   await prisma.payment.create({

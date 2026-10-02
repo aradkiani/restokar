@@ -8,7 +8,7 @@ import { Field, Input, Select } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
-import { localizeApiError } from "@/lib/api-error";
+import { localizeApiError, localizeFieldErrors } from "@/lib/api-error";
 import { MAX_ONBOARDING_DAYS, MIN_ONBOARDING_DAYS } from "@/lib/constants";
 
 interface PlanOption {
@@ -32,15 +32,14 @@ export function NewAccountForm({
 
   const [form, setForm] = React.useState({
     ownerName: "",
-    email: "",
-    password: "",
+    ownerPhone: "",
     restaurantName: "",
     slug: "",
     planCode: plans[0]?.code ?? "",
     durationDays: 365,
   });
   const [saving, setSaving] = React.useState(false);
-  const [created, setCreated] = React.useState<{ slug: string; email: string } | null>(
+  const [created, setCreated] = React.useState<{ slug: string; phone: string } | null>(
     null,
   );
 
@@ -55,14 +54,14 @@ export function NewAccountForm({
     setSaving(false);
 
     if (!result.ok) {
-      toast.error(localizeApiError(result.error, t));
+      const fields = localizeFieldErrors(result.error.details, t);
+      toast.error(Object.values(fields)[0] ?? localizeApiError(result.error, t));
       return;
     }
 
-    // The credentials stay on screen after success: staff have to read them
-    // back to the customer, and a redirect would take the one copy of the
-    // password with it.
-    setCreated({ slug: form.slug, email: form.email });
+    // Kept on screen after success so staff can read the number and menu
+    // address back to the customer, who signs in with that number and a code.
+    setCreated({ slug: form.slug, phone: form.ownerPhone });
     toast.success(t.admin.accountCreated);
     router.refresh();
   }
@@ -81,7 +80,7 @@ export function NewAccountForm({
           </CardHeader>
           <CardBody className="space-y-1.5 text-sm">
             <p className="text-ink-700">
-              {t.auth.email}: <span dir="ltr">{created.email}</span>
+              {t.auth.phone}: <span dir="ltr">{created.phone}</span>
             </p>
             <p className="text-ink-700" dir="ltr">
               {baseUrl}/menu/{created.slug}
@@ -105,35 +104,20 @@ export function NewAccountForm({
                   onChange={(e) => setField("ownerName", e.target.value)}
                 />
               </Field>
-              <Field label={t.auth.email} htmlFor="a-email">
+              <Field label={t.auth.phone} hint={t.admin.ownerPhoneHint} htmlFor="a-phone">
                 <Input
-                  id="a-email"
-                  type="email"
+                  id="a-phone"
+                  type="tel"
                   dir="ltr"
+                  inputMode="tel"
+                  autoComplete="off"
                   required
-                  value={form.email}
-                  onChange={(e) => setField("email", e.target.value)}
+                  value={form.ownerPhone}
+                  onChange={(e) => setField("ownerPhone", e.target.value)}
+                  placeholder={t.auth.phonePlaceholder}
                 />
               </Field>
             </div>
-
-            <Field
-              label={t.auth.password}
-              hint={t.admin.passwordHint}
-              htmlFor="a-password"
-            >
-              <Input
-                id="a-password"
-                dir="ltr"
-                required
-                minLength={8}
-                // Deliberately not type="password": staff are choosing this
-                // value and then reading it aloud to the customer, so hiding it
-                // behind dots only invites a typo neither party can see.
-                value={form.password}
-                onChange={(e) => setField("password", e.target.value)}
-              />
-            </Field>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t.auth.restaurantName} htmlFor="a-restaurant">

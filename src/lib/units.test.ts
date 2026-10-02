@@ -20,12 +20,12 @@ describe("the catalogue", () => {
   /** Must match the CHECK constraint in the migration, or writes will fail. */
   it("holds exactly the codes the database accepts", () => {
     expect([...UNIT_CODES].sort()).toEqual(
-      ["dozen", "g", "kg", "l", "mesghal", "ml", "piece", "tbsp", "tsp"].sort(),
+      ["dozen", "g", "kg", "l", "ml", "piece", "tbsp", "tsp"].sort(),
     );
   });
 
   it("offers only same-kind units as alternatives", () => {
-    expect(compatibleUnits("kg").sort()).toEqual(["g", "kg", "mesghal"]);
+    expect(compatibleUnits("kg").sort()).toEqual(["g", "kg"]);
     expect(compatibleUnits("ml").sort()).toEqual(["l", "ml", "tbsp", "tsp"]);
     expect(compatibleUnits("piece").sort()).toEqual(["dozen", "piece"]);
   });
@@ -47,8 +47,9 @@ describe("convert", () => {
     expect(convert(1, "tbsp", "tsp")).toBe(3);
   });
 
-  it("knows a mesghal is 4.608 grams", () => {
-    expect(convert(1, "mesghal", "g")).toBeCloseTo(4.608, 10);
+  /** مثقال was removed; it is not a unit anything can be converted to or from. */
+  it("no longer knows the mesghal", () => {
+    expect(isUnitCode("mesghal")).toBe(false);
   });
 
   /** "230 grams of a litre" is a mistake to refuse, not a number to invent. */
@@ -103,7 +104,13 @@ describe("legacyUnitCode", () => {
   });
 
   it("passes a code through untouched", () => {
-    expect(legacyUnitCode("mesghal")).toBe("mesghal");
+    expect(legacyUnitCode("kg")).toBe("kg");
+  });
+
+  /** A removed weight must stay a weight, never become a count. */
+  it("reads the removed مثقال as grams", () => {
+    expect(legacyUnitCode("مثقال")).toBe("g");
+    expect(legacyUnitCode("mesghal")).toBe("g");
   });
 
   /** A count never invents a weight or volume the owner did not state. */

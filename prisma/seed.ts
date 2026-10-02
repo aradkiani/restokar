@@ -8,10 +8,10 @@
  */
 // MUST be first: refuses to run against anything but a local development
 // database, before the client below is constructed.
-import { demoSeedPassword } from "./demo-seed-guard";
+import "./demo-seed-guard";
+import { DEV_ADMIN_PHONE, devPhone } from "./dev-phones";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import bcrypt from "bcryptjs";
 import {
   BISTRO_MENU,
   CAFE_MENU,
@@ -474,23 +474,25 @@ async function seedRestaurant(options: {
 
   // The restaurant is absent but its users may not be: this function creates
   // the owner first, so a run that failed partway leaves an orphaned user and
-  // every later run then dies on the email unique index. Clear only users that
+  // every later run then dies on the phone unique index. Clear only users that
   // belong to no restaurant — a real account is never in that state.
   await prisma.user.deleteMany({
     where: {
-      email: { in: [options.ownerEmail, `kitchen@${options.slug}.ir`] },
+      phone: {
+        in: [devPhone(options.ownerEmail), devPhone(`kitchen@${options.slug}.ir`)],
+      },
       restaurantId: null,
       ownedRestaurants: { none: {} },
     },
   });
 
-  const passwordHash = await bcrypt.hash(demoSeedPassword(), 12);
   const plan = await prisma.plan.findUniqueOrThrow({ where: { code: options.planCode } });
 
   const owner = await prisma.user.create({
     data: {
-      email: options.ownerEmail,
-      passwordHash,
+      // Sign-in is phone + code; in development the code is printed to the
+      // server console, so these test numbers never receive an SMS.
+      phone: devPhone(options.ownerEmail),
       name: options.ownerName,
       role: "OWNER",
     },
@@ -533,8 +535,7 @@ async function seedRestaurant(options: {
   // A kitchen account per venue, so the STAFF role can be exercised too.
   await prisma.user.create({
     data: {
-      email: `kitchen@${options.slug}.ir`,
-      passwordHash,
+      phone: devPhone(`kitchen@${options.slug}.ir`),
       name: "آشپزخانه",
       role: "STAFF",
       restaurantId: restaurant.id,
@@ -707,8 +708,6 @@ async function seedChain() {
     },
   ];
 
-  const passwordHash = await bcrypt.hash(demoSeedPassword(), 12);
-
   for (const spec of BRANCHES) {
     const branch = await prisma.restaurant.create({
       data: {
@@ -728,8 +727,7 @@ async function seedChain() {
 
     await prisma.user.create({
       data: {
-        email: spec.email,
-        passwordHash,
+        phone: devPhone(spec.email),
         name: spec.manager,
         role: "BRANCH_MANAGER",
         restaurantId: branch.id,
@@ -910,8 +908,7 @@ async function seedExpenses(restaurantId: string) {
 }
 
 async function seedAdmin() {
-  const email = "admin@restokar.ir";
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findUnique({ where: { phone: DEV_ADMIN_PHONE } });
   if (existing) {
     console.log("• platform admin already exists — skipped");
     return;
@@ -919,8 +916,7 @@ async function seedAdmin() {
 
   await prisma.user.create({
     data: {
-      email,
-      passwordHash: await bcrypt.hash(demoSeedPassword(), 12),
+      phone: DEV_ADMIN_PHONE,
       name: "مدیر پلتفرم",
       role: "SUPER_ADMIN",
     },
@@ -974,14 +970,15 @@ async function main() {
   await seedChain();
 
   console.log("\nDone.\n");
-  console.log("Sign in with:");
-  const password = demoSeedPassword();
-  console.log(`  chain owner    → owner@karimi.ir / ${password}`);
-  console.log(`  branch manager → vanak@karimi.ir / ${password}`);
-  console.log(`  owner   → owner@cafe-nabsh.ir / ${password}`);
-  console.log(`  owner   → owner@burger-lab.ir / ${password}`);
-  console.log(`  kitchen → kitchen@cafe-nabsh.ir / ${password}`);
-  console.log(`  admin   → admin@restokar.ir / ${password}`);
+  console.log(
+    "Sign in with these numbers; the code is printed in the dev server console:",
+  );
+  console.log(`  chain owner    → ${devPhone("owner@karimi.ir")}`);
+  console.log(`  branch manager → ${devPhone("vanak@karimi.ir")}`);
+  console.log(`  owner   → ${devPhone("owner@cafe-nabsh.ir")}`);
+  console.log(`  owner   → ${devPhone("owner@burger-lab.ir")}`);
+  console.log(`  kitchen → ${devPhone("kitchen@cafe-nabsh.ir")}`);
+  console.log(`  admin   → ${DEV_ADMIN_PHONE}`);
   console.log("\nTenant menus: /menu/cafe-nabsh · /menu/burger-lab");
   console.log(
     "Homepage demos: /menu/demo-aurora · /menu/demo-ember · /menu/demo-linen · " +

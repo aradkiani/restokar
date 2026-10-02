@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExportButton } from "@/components/export-button";
 import { Field, Select } from "@/components/ui/field";
+import { MoneyInput } from "@/components/ui/money-input";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
@@ -254,13 +255,11 @@ export function InventoryManager({
               hint={c.purchasePriceHint}
               htmlFor="item-price"
             >
-              <input
+              <MoneyInput
                 id="item-price"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                inputMode="numeric"
-                placeholder="۰"
-                className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-bold tabular-nums"
+                value={parseAmount(price) || null}
+                onValueChange={(amount) => setPrice(amount ? String(amount) : "")}
+                className="font-bold tabular-nums"
               />
             </Field>
 
@@ -423,6 +422,8 @@ function ItemRow({
   const unit = asUnit(item.unit);
   const priceUnit = asUnit(item.priceUnit ?? item.unit);
   const perUnit = unitCost(item);
+  // The price being typed; saved when the field is left, as before.
+  const [priceDraft, setPriceDraft] = React.useState<number | null>(item.purchasePrice);
 
   return (
     <li className="space-y-2 p-3">
@@ -492,11 +493,11 @@ function ItemRow({
         <div className="text-[11px] font-semibold text-ink-500">
           {c.purchasePrice}
           <div className="mt-1 flex gap-1">
-            <input
-              defaultValue={item.purchasePrice ? String(item.purchasePrice) : ""}
-              onBlur={(e) => {
-                const amount = parseAmount(e.target.value);
-                const next = amount > 0 ? amount : null;
+            <MoneyInput
+              value={priceDraft}
+              onValueChange={setPriceDraft}
+              onBlur={() => {
+                const next = priceDraft && priceDraft > 0 ? priceDraft : null;
                 if (next !== item.purchasePrice) {
                   onSave(
                     next === null
@@ -505,10 +506,8 @@ function ItemRow({
                   );
                 }
               }}
-              inputMode="numeric"
-              placeholder="۰"
               aria-label={`${c.purchasePrice} — ${item.name}`}
-              className="h-11 min-w-0 flex-1 rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-2 text-center text-sm font-bold text-ink-900 tabular-nums"
+              className="min-w-0 flex-1 px-2 text-center font-bold text-ink-900 tabular-nums"
             />
             <UnitSelect
               value={priceUnit}

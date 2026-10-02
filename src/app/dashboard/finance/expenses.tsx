@@ -6,12 +6,13 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState } from "@/components/ui/card";
 import { Field, Input, Select, Textarea, Toggle } from "@/components/ui/field";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { RankedBars } from "@/components/charts";
 import { api } from "@/lib/client-api";
-import { formatDate, formatMoney, parseAmount } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { EXPENSE_CATEGORIES } from "@/lib/validation";
 import type { Locale } from "@/lib/i18n";
 
@@ -261,14 +262,11 @@ export function ExpensesPanel({
             </Field>
 
             <Field label={t.finance.expenseAmount} htmlFor="e-amount">
-              <Input
+              <MoneyInput
                 id="e-amount"
-                inputMode="numeric"
                 required
-                value={form.amount ? formatMoney(form.amount, locale) : ""}
-                onChange={(e) =>
-                  setForm({ ...form, amount: parseAmount(e.target.value) })
-                }
+                value={form.amount}
+                onValueChange={(amount) => setForm({ ...form, amount: amount ?? 0 })}
               />
             </Field>
           </div>

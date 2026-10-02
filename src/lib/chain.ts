@@ -26,7 +26,7 @@ export interface SiteSummary {
   /** The head office, as opposed to one of its branches. */
   isHeadOffice: boolean;
   managerName: string | null;
-  managerEmail: string | null;
+  managerPhone: string | null;
   orders: number;
   revenue: number;
   expenses: number;
@@ -63,7 +63,7 @@ export async function getChainSummary(
       parentRestaurantId: true,
       members: {
         where: { role: "BRANCH_MANAGER" },
-        select: { name: true, email: true },
+        select: { name: true, phone: true },
         take: 1,
       },
     },
@@ -110,7 +110,7 @@ export async function getChainSummary(
       slug: venue.slug,
       isHeadOffice: venue.parentRestaurantId === null,
       managerName: venue.members[0]?.name ?? null,
-      managerEmail: venue.members[0]?.email ?? null,
+      managerPhone: venue.members[0]?.phone ?? null,
       orders: counted.orders,
       revenue: counted.revenue,
       expenses: spent,

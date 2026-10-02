@@ -38,7 +38,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell
-      user={{ name: user.name, email: user.email, role: user.role }}
+      user={{ name: user.name, phone: user.phone, role: user.role }}
       staffTabs={user.staffTabs}
       restaurant={{
         name: restaurant.name,

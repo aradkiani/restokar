@@ -6,7 +6,7 @@ import { convert, isUnitCode } from "./units";
  * Four rules, each a function below:
  *
  *   1. **An ingredient's unit cost** comes from what the venue pays for it, in
- *      whatever unit the invoice uses — 45,000 a kilogram, 1,500,000 a mesghal.
+ *      whatever unit the invoice uses — 45,000 a kilogram, 330,000 a gram.
  *   2. **A dish's cost** is its recipe priced at those unit costs. Ingredients
  *      only: no labour, no rent, no profit. That is the figure the owner asked
  *      for, and the one a price must at the very least cover.
@@ -55,8 +55,9 @@ export interface PricedIngredient {
  * What one of the item's *own* unit costs, exactly. Null when unpriced.
  *
  * 45,000 per kilogram, stocked in grams, is 45 per gram. Kept unrounded:
- * saffron at 1,500,000 a mesghal is 325,520.83… per gram, and rounding that
- * here would put an error into every dish that uses saffron.
+ * saffron at 330,000,000 a kilogram, stocked in milligram-scale recipe amounts,
+ * is 330,000 per gram, and a rounded figure here would put an error into every
+ * dish that uses it.
  */
 export function unitCost(item: PricedIngredient): number | null {
   const { purchasePrice, priceUnit, unit } = item;

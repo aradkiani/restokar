@@ -81,8 +81,7 @@ describe("addMonths", () => {
 
 describe("AdminAccountSchema", () => {
   const valid = {
-    email: "owner@cafe.ir",
-    password: "a-real-password",
+    ownerPhone: "09121234567",
     ownerName: "سارا",
     restaurantName: "کافه نمونه",
     slug: "cafe-nemune",
@@ -94,16 +93,19 @@ describe("AdminAccountSchema", () => {
     expect(AdminAccountSchema.safeParse(valid).success).toBe(true);
   });
 
-  it("normalises the email so one person cannot hold two accounts", () => {
-    const parsed = AdminAccountSchema.parse({ ...valid, email: "  Owner@Cafe.IR " });
-    expect(parsed.email).toBe("owner@cafe.ir");
+  /** One number is one account, however it was typed. */
+  it("normalises the owner's number so one person cannot hold two accounts", () => {
+    const parsed = AdminAccountSchema.parse({
+      ...valid,
+      ownerPhone: " +98 912 123 4567 ",
+    });
+    expect(parsed.ownerPhone).toBe("09121234567");
   });
 
-  it("rejects a password short enough to guess", () => {
-    // Staff pick these by hand and will reach for something short unless stopped.
-    expect(AdminAccountSchema.safeParse({ ...valid, password: "short" }).success).toBe(
-      false,
-    );
+  it("rejects a number that cannot receive a sign-in code", () => {
+    expect(
+      AdminAccountSchema.safeParse({ ...valid, ownerPhone: "02188776655" }).success,
+    ).toBe(false);
   });
 
   it("rejects a reserved slug that would shadow a real route", () => {

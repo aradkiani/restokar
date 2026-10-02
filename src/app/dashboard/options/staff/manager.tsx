@@ -8,13 +8,14 @@ import { Field } from "@/components/ui/field";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
+import { localizeApiError, localizeFieldErrors } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { EXCLUSIVE_TABS, STAFF_TABS, type StaffTab } from "@/lib/staff-tabs";
 
 interface StaffRow {
   id: string;
   name: string;
-  email: string;
+  phone: string | null;
   staffTabs: string[];
 }
 
@@ -33,8 +34,7 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
 
   const [staff, setStaff] = React.useState<StaffRow[]>(initialStaff);
   const [name, setName] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
+  const [phone, setPhone] = React.useState("");
   const [tabs, setTabs] = React.useState<StaffTab[]>([]);
   const [busy, setBusy] = React.useState(false);
 
@@ -61,18 +61,18 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
   async function create(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
-    const result = await api.post("/api/staff", { name, email, password, tabs });
+    const result = await api.post("/api/staff", { name, phone, tabs });
     setBusy(false);
 
     if (!result.ok) {
-      toast.error(result.error.message);
+      const fields = localizeFieldErrors(result.error.details, t);
+      toast.error(fields.phone ?? fields.name ?? localizeApiError(result.error, t));
       return;
     }
 
     setStaff((current) => [...current, result.data as StaffRow]);
     setName("");
-    setEmail("");
-    setPassword("");
+    setPhone("");
     setTabs([]);
   }
 
@@ -129,26 +129,22 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
                 />
               </Field>
 
-              <Field label={t.options.staffEmail} htmlFor="staff-email">
+              <Field
+                label={t.options.staffPhone}
+                hint={t.options.staffPhoneHint}
+                htmlFor="staff-phone"
+                className="sm:col-span-2"
+              >
                 <input
-                  id="staff-email"
-                  type="email"
+                  id="staff-phone"
+                  type="tel"
                   dir="ltr"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  inputMode="tel"
+                  autoComplete="off"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
                   required
-                  className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-semibold"
-                />
-              </Field>
-
-              <Field label={t.options.staffPassword} htmlFor="staff-password">
-                <input
-                  id="staff-password"
-                  type="password"
-                  dir="ltr"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
+                  placeholder={t.auth.phonePlaceholder}
                   className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-semibold"
                 />
               </Field>
@@ -209,7 +205,7 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-extrabold">{row.name}</p>
                       <p dir="ltr" className="truncate text-xs text-ink-500">
-                        {row.email}
+                        {row.phone}
                       </p>
                     </div>
 

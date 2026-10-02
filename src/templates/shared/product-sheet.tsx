@@ -16,6 +16,8 @@ import {
   toggleChoice as toggleChoiceIn,
 } from "@/lib/order-options";
 
+import { formatMoney, formatNumber } from "@/lib/format";
+
 /**
  * Full product detail: hero image, long description, and the three
  * owner-defined information sections. Presented as a bottom sheet on mobile —
@@ -231,10 +233,7 @@ export function ProductSheet({
                 }}
               >
                 <Clock className="size-3.5" />
-                {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(
-                  product.prepMinutes,
-                )}{" "}
-                {t.publicMenu.minutes}
+                {formatNumber(product.prepMinutes, locale)} {t.publicMenu.minutes}
               </p>
             ) : null}
 
@@ -285,11 +284,7 @@ export function ProductSheet({
                       {multiple && (
                         <p className="mt-0.5 text-xs opacity-55">
                           {t.publicMenu.optionChooseUpTo}{" "}
-                          <bdi>
-                            {new Intl.NumberFormat(
-                              locale === "fa" ? "fa-IR" : "en-US",
-                            ).format(group.maxSelect)}
-                          </bdi>
+                          <bdi>{formatNumber(group.maxSelect, locale)}</bdi>
                         </p>
                       )}
 
@@ -338,9 +333,7 @@ export function ProductSheet({
                                 <span className="shrink-0 text-xs font-bold tabular-nums">
                                   <bdi>
                                     {choice.priceDelta > 0 ? "+" : "−"}
-                                    {new Intl.NumberFormat(
-                                      locale === "fa" ? "fa-IR" : "en-US",
-                                    ).format(Math.abs(choice.priceDelta))}
+                                    {formatMoney(Math.abs(choice.priceDelta), locale)}
                                   </bdi>
                                 </span>
                               )}
@@ -424,10 +417,7 @@ export function ProductSheet({
                   // guest is agreeing to, so it has to move when they pick the
                   // more expensive cut.
                   <span className="opacity-90">
-                    ·{" "}
-                    {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(
-                      unitPrice * quantity,
-                    )}
+                    · {formatMoney(unitPrice * quantity, locale)}
                   </span>
                 )}
               </button>

@@ -20,7 +20,7 @@ import { getI18n } from "@/lib/i18n";
 import { CONTACT } from "@/lib/constants";
 import { getSessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
-import { formatMoney, formatNumber } from "@/lib/format";
+import { formatMoney, formatNumber, formatYear } from "@/lib/format";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { FaqList } from "@/components/marketing/faq-list";
 import { TEMPLATES } from "@/templates/registry";
@@ -520,11 +520,8 @@ export default async function HomePage() {
           </nav>
 
           <p className="text-xs text-ink-500">
-            ©{" "}
-            {new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US", {
-              useGrouping: false,
-            }).format(new Date().getFullYear())}{" "}
-            {t.common.appName} — {t.landing.footerRights}
+            © {formatYear(new Date().getFullYear(), locale)} {t.common.appName} —{" "}
+            {t.landing.footerRights}
           </p>
         </div>
       </footer>

@@ -31,7 +31,7 @@ export const POST = route(
 
     const result = await extendSubscription({
       restaurantId: id,
-      admin: { id: admin.id, email: admin.email, role: "SUPER_ADMIN" },
+      admin: { id: admin.id, phone: admin.phone, role: "SUPER_ADMIN" },
       days: input.days,
       extensionType: input.extensionType,
       reason: input.reason,

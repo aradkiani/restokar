@@ -21,13 +21,6 @@ export const MINUTE_MS = 60_000;
 /** How long a session cookie stays valid. */
 export const SESSION_DAYS = 30;
 
-/**
- * bcrypt cost factor. 12 is roughly 250ms on commodity hardware: slow enough
- * that offline cracking is expensive, fast enough for an interactive login.
- * Raising this is safe — existing hashes record their own cost and still verify.
- */
-export const BCRYPT_ROUNDS = 12;
-
 // ------------------------------ subscriptions ------------------------------
 
 /** Free trial length granted at registration. */
@@ -71,25 +64,17 @@ export const MAX_ONBOARDING_DAYS = 730;
  * Per-action request ceilings, previously inline at each call site where they
  * could not be compared against one another.
  *
- * `limit` is requests allowed per `windowSeconds`. Login is counted per IP and
- * per account: the account bucket resists password guessing against one user,
- * the IP bucket resists spraying across many.
+ * `limit` is requests allowed per `windowSeconds`. Sign-in codes have their own
+ * ceilings, per number and per address, in `OTP_LIMITS` (auth/otp-server.ts),
+ * next to the rules they protect.
  */
 export const RATE_LIMITS = {
-  loginPerIp: { limit: 10, windowSeconds: 300 },
-  loginPerAccount: { limit: 8, windowSeconds: 900 },
   register: { limit: 5, windowSeconds: 900 },
   /** Generous: a real table of guests legitimately orders several times. */
   placeOrder: { limit: 12, windowSeconds: 60 },
   upload: { limit: 60, windowSeconds: 300 },
   /** Tight: a table needs the waiter occasionally, not repeatedly. */
   staffCall: { limit: 4, windowSeconds: 300 },
-  /**
-   * Counted per user, not per address: this endpoint verifies the *current*
-   * password, so it is a guessing oracle for whoever holds the session.
-   * A genuine change is one or two attempts; a reset clears the count.
-   */
-  passwordChange: { limit: 6, windowSeconds: 900 },
   /**
    * Gateway return URL. Public by necessity — the payer's browser loads it —
    * and it looks a transaction up by Authority, so it is worth a ceiling even

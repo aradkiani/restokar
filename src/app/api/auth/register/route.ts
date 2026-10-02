@@ -1,8 +1,12 @@
 import { fail, ok, parseBody, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { RegisterSchema } from "@/lib/validation";
-import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import {
+  otpVerifyFailure,
+  verifyOtp,
+  type OtpVerifyOutcome,
+} from "@/lib/auth/otp-server";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DAY_MS, RATE_LIMITS, TRIAL_DAYS } from "@/lib/constants";
 import { PUBLIC_REGISTRATION_ENABLED } from "@/lib/features";
@@ -10,10 +14,22 @@ import { DEFAULT_TEMPLATE_ID } from "@/templates/registry";
 
 export const runtime = "nodejs";
 
+/** Thrown inside the transaction so a refused code rolls everything back. */
+class CodeRejected extends Error {
+  constructor(readonly outcome: Exclude<OtpVerifyOutcome, "VALID">) {
+    super(outcome);
+  }
+}
+
 /**
  * Creates the owner, their restaurant and a trial subscription in one
- * transaction: a half-registered account with a user but no tenant would leave
- * someone stuck on a dashboard they cannot use.
+ * transaction — with the code that proves the phone number consumed inside it.
+ *
+ * Consuming the code in the same transaction is what makes a late failure
+ * recoverable: if the menu address was taken a moment ago, everything rolls
+ * back, the code included, and the owner picks another address and submits the
+ * same code again. A half-registered account with a user but no tenant would
+ * leave someone stuck on a dashboard they cannot use.
  */
 export const POST = route(async (request: Request) => {
   // Enforced here rather than only by hiding the form: the endpoint is the
@@ -23,23 +39,20 @@ export const POST = route(async (request: Request) => {
     return fail(403, "Registration is currently by invitation", "REGISTRATION_CLOSED");
   }
 
-  const limit = await rateLimit(`register:${clientIp(request)}`, RATE_LIMITS.register);
+  const ip = clientIp(request);
+  const limit = await rateLimit(`register:${ip}`, RATE_LIMITS.register);
   if (!limit.allowed) {
     return fail(429, "Too many attempts", "RATE_LIMITED");
   }
 
   const input = await parseBody(request, RegisterSchema);
 
-  const [existingUser, existingRestaurant] = await Promise.all([
-    prisma.user.findUnique({ where: { email: input.email }, select: { id: true } }),
-    prisma.restaurant.findUnique({ where: { slug: input.slug }, select: { id: true } }),
-  ]);
-
-  // Fallback text only — the client renders the localized string from `code`.
-  if (existingUser) return fail(409, "Email already registered", "EMAIL_TAKEN");
+  // Checked before the code is touched, so a taken address costs no attempt.
+  const existingRestaurant = await prisma.restaurant.findUnique({
+    where: { slug: input.slug },
+    select: { id: true },
+  });
   if (existingRestaurant) return fail(409, "Menu address already taken", "SLUG_TAKEN");
-
-  const passwordHash = await hashPassword(input.password);
 
   // Everyone starts on the cheapest public plan; upgrades happen later from
   // the subscription page.
@@ -52,12 +65,20 @@ export const POST = route(async (request: Request) => {
 
   try {
     user = await prisma.$transaction(async (tx) => {
+      const outcome = await verifyOtp({
+        phone: input.phone,
+        purpose: "SIGNUP",
+        code: input.code,
+        ip,
+        db: tx,
+      });
+      if (outcome !== "VALID") throw new CodeRejected(outcome);
+
       const owner = await tx.user.create({
         data: {
-          email: input.email,
-          passwordHash,
+          phone: input.phone,
+          phoneVerifiedAt: new Date(),
           name: input.name,
-          phone: input.phone || null,
           role: "OWNER",
         },
       });
@@ -94,26 +115,26 @@ export const POST = route(async (request: Request) => {
       return { id: owner.id, role: "OWNER" as const, restaurantId: restaurant.id };
     });
   } catch (error) {
-    // The findUnique checks above are advisory only: two people submitting the
-    // same email or slug at the same moment both pass them, and the loser hits
-    // the unique index. Translating P2002 here turns a 500 into the same clear
-    // 409 the pre-check would have produced.
+    if (error instanceof CodeRejected) return otpVerifyFailure(error.outcome);
+
+    // Two people submitting at the same moment both pass the checks above and
+    // the loser hits a unique index. A taken number is answered as a wrong
+    // code — a sign-up code is never texted to a registered number, so saying
+    // "already registered" here would be the one place that revealed it.
     const code = (error as { code?: string })?.code;
     const target = String((error as { meta?: { target?: unknown } })?.meta?.target ?? "");
 
     if (code === "P2002") {
-      if (target.includes("email"))
-        return fail(409, "Email already registered", "EMAIL_TAKEN");
       if (target.includes("slug"))
         return fail(409, "Menu address already taken", "SLUG_TAKEN");
-      return fail(409, "That account already exists", "EMAIL_TAKEN");
+      return otpVerifyFailure("INVALID");
     }
     throw error;
   }
 
   await createSession(user, {
     userAgent: request.headers.get("user-agent"),
-    ip: clientIp(request),
+    ip,
   });
 
   return ok({ redirectTo: "/dashboard" }, { status: 201 });

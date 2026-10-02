@@ -24,6 +24,9 @@ import {
 import { FeaturedStrip } from "../shared/featured";
 import { MenuFooter } from "../shared/footer";
 
+import { formatNumber } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
+
 /**
  * Kashi (کاشی) — Persian tilework.
  *
@@ -284,7 +287,7 @@ function KashiTile({
   isFirst: boolean;
   showPrices: boolean;
   canOrder: boolean;
-  locale: string;
+  locale: Locale;
   minutesLabel: string;
   unavailableLabel: string;
   addLabel: string;
@@ -292,8 +295,7 @@ function KashiTile({
   onOpen: () => void;
   onAdd: () => void;
 }) {
-  const num = (n: number) =>
-    new Intl.NumberFormat(locale === "fa" ? "fa-IR" : "en-US").format(n);
+  const num = (n: number) => formatNumber(n, locale);
 
   return (
     <li

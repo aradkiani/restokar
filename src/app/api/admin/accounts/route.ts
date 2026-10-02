@@ -1,7 +1,6 @@
 import { fail, ok, parseBody, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/guards";
-import { hashPassword } from "@/lib/auth/password";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { AdminAccountSchema } from "@/lib/validation";
 import { subscriptionEndFromDays } from "@/lib/onboarding";
@@ -38,16 +37,15 @@ export const POST = route(async (request: Request) => {
   const input = await parseBody(request, AdminAccountSchema);
 
   const [existingUser, existingRestaurant, plan] = await Promise.all([
-    prisma.user.findUnique({ where: { email: input.email }, select: { id: true } }),
+    prisma.user.findUnique({ where: { phone: input.ownerPhone }, select: { id: true } }),
     prisma.restaurant.findUnique({ where: { slug: input.slug }, select: { id: true } }),
     prisma.plan.findUnique({ where: { code: input.planCode }, select: { id: true } }),
   ]);
 
-  if (existingUser) return fail(409, "Email already registered", "EMAIL_TAKEN");
+  if (existingUser) return fail(409, "Phone number unavailable", "PHONE_TAKEN");
   if (existingRestaurant) return fail(409, "Address already taken", "SLUG_TAKEN");
   if (!plan) return fail(404, "Plan not found", "PLAN_NOT_FOUND");
 
-  const passwordHash = await hashPassword(input.password);
   const currentPeriodEnd = subscriptionEndFromDays(input.durationDays, new Date());
 
   let created;
@@ -55,8 +53,8 @@ export const POST = route(async (request: Request) => {
     created = await prisma.$transaction(async (tx) => {
       const owner = await tx.user.create({
         data: {
-          email: input.email,
-          passwordHash,
+          // Not yet proved: the owner's first sign-in code, sent here, is.
+          phone: input.ownerPhone,
           name: input.ownerName,
           role: "OWNER",
         },
@@ -89,7 +87,7 @@ export const POST = route(async (request: Request) => {
         },
       });
 
-      return { restaurantId: restaurant.id, slug: restaurant.slug, email: owner.email };
+      return { restaurantId: restaurant.id, slug: restaurant.slug, phone: owner.phone };
     });
   } catch (error) {
     // The findUnique checks above are advisory only: two staff members
@@ -101,13 +99,13 @@ export const POST = route(async (request: Request) => {
     const target = String((error as { meta?: { target?: unknown } })?.meta?.target ?? "");
 
     if (code === "P2002") {
-      if (target.includes("email")) {
-        return fail(409, "Email already registered", "EMAIL_TAKEN");
+      if (target.includes("phone")) {
+        return fail(409, "Phone number unavailable", "PHONE_TAKEN");
       }
       if (target.includes("slug")) {
         return fail(409, "Address already taken", "SLUG_TAKEN");
       }
-      return fail(409, "That account already exists", "EMAIL_TAKEN");
+      return fail(409, "That account already exists", "PHONE_TAKEN");
     }
     throw error;
   }
@@ -119,7 +117,7 @@ export const POST = route(async (request: Request) => {
     actor: admin,
     restaurantId: created.restaurantId,
     action: "ACCOUNT_CREATED",
-    summary: `حساب «${input.restaurantName}» برای ${created.email} ساخته شد (${input.durationDays} روز)`,
+    summary: `حساب «${input.restaurantName}» برای ${created.phone} ساخته شد (${input.durationDays} روز)`,
     entityType: "Restaurant",
     entityId: created.restaurantId,
     metadata: {

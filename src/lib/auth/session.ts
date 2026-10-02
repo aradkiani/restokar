@@ -20,7 +20,8 @@ export interface SessionClaims extends JWTPayload {
 
 export interface SessionUser {
   id: string;
-  email: string;
+  /** The sign-in number, 09XXXXXXXXX. Null only on an account never given one. */
+  phone: string | null;
   name: string;
   role: Role;
   restaurantId: string | null;
@@ -127,7 +128,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
 
   return {
     id: session.user.id,
-    email: session.user.email,
+    phone: session.user.phone,
     name: session.user.name,
     role: session.user.role,
     restaurantId: session.user.restaurantId,

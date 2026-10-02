@@ -31,7 +31,11 @@ const prisma = new PrismaClient({ adapter });
 const DAYS_OF_HISTORY = 7;
 
 interface SandboxSpec {
-  email: string;
+  /**
+   * The venue's menu address. Accounts are found through their venue rather
+   * than by the owner's sign-in number, so no personal number sits in the repo.
+   */
+  slug: string;
   /** Used only when the account has no menu of its own yet. */
   fallbackMenu: SeedCategory[];
   ordersPerDay: number;
@@ -40,13 +44,13 @@ interface SandboxSpec {
 
 const SANDBOX: SandboxSpec[] = [
   {
-    email: "arad.kia688@gmail.com",
+    slug: "سنتی-حشمت",
     fallbackMenu: PERSIAN_MENU,
     ordersPerDay: 6,
     tableCount: 8,
   },
   {
-    email: "aradkwork@gmail.com",
+    slug: "pizzaking",
     fallbackMenu: CAFE_MENU,
     ordersPerDay: 5,
     tableCount: 6,
@@ -276,17 +280,17 @@ async function createOrders(
 
 async function main() {
   for (const spec of SANDBOX) {
-    const user = await prisma.user.findUnique({
-      where: { email: spec.email },
-      select: { restaurantId: true, restaurant: { select: { name: true, slug: true } } },
+    const venue = await prisma.restaurant.findUnique({
+      where: { slug: spec.slug },
+      select: { id: true, name: true, slug: true },
     });
 
-    if (!user?.restaurantId || !user.restaurant) {
-      console.log(`• ${spec.email} — no restaurant on this account, skipped`);
+    if (!venue) {
+      console.log(`• ${spec.slug} — no such venue, skipped`);
       continue;
     }
 
-    const restaurantId = user.restaurantId;
+    const restaurantId = venue.id;
 
     const removed = await clearPreviousRun(restaurantId);
     const products = await ensureMenu(restaurantId, spec.fallbackMenu);
@@ -294,7 +298,7 @@ async function main() {
     const orders = await createOrders(restaurantId, products, spec);
 
     console.log(
-      `• ${user.restaurant.name} (${user.restaurant.slug}) — ` +
+      `• ${venue.name} (${venue.slug}) — ` +
         `${products.length} products, ${orders} orders over ${DAYS_OF_HISTORY} days` +
         (removed > 0 ? `, replaced ${removed} from a previous run` : ""),
     );

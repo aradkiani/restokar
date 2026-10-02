@@ -465,13 +465,14 @@ Temporarily allow registration:
 cd /srv/restokar && echo 'ENABLE_PUBLIC_REGISTRATION="true"' >> .env && sudo systemctl restart restokar
 ```
 
-Visit `https://yourdomain.com/register` and sign up with your own email and a
-strong password.
+Visit `https://yourdomain.com/register` and sign up with your own mobile
+number. Sign-in is by texted code, so SMS must already be working (section on
+SMS: `SMS_PROVIDER=melipayamak`, `SMS_DRY_RUN=false`, `SMS_PATTERN_OTP`).
 
 Promote that account to platform admin:
 
 ```bash
-sudo -u postgres psql -d restokar -c "UPDATE \"User\" SET role='SUPER_ADMIN', \"restaurantId\"=NULL WHERE email='you@yourdomain.com';"
+sudo -u postgres psql -d restokar -c "UPDATE \"User\" SET role='SUPER_ADMIN', \"restaurantId\"=NULL WHERE phone='09XXXXXXXXX';"
 ```
 
 Then close registration again — customers are onboarded from the admin console:

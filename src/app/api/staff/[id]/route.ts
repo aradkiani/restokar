@@ -21,7 +21,7 @@ type Context = { params: Promise<{ id: string }> };
 async function findStaff(restaurantId: string, id: string) {
   const staff = await prisma.user.findFirst({
     where: { id, restaurantId, role: "STAFF" },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, phone: true },
   });
   if (!staff) throw new HttpError(404, "Staff account not found", "NOT_FOUND");
   return staff;
@@ -59,7 +59,7 @@ export const PATCH = route(async (request: Request, context: unknown) => {
   const updated = await prisma.user.update({
     where: { id },
     data: { staffTabs: tabs },
-    select: { id: true, name: true, email: true, staffTabs: true, isActive: true },
+    select: { id: true, name: true, phone: true, staffTabs: true, isActive: true },
   });
 
   await recordAudit({
@@ -99,7 +99,7 @@ export const DELETE = route(async (request: Request, context: unknown) => {
     actor: user,
     restaurantId,
     action: "STAFF_REMOVED",
-    summary: `حساب کارمند حذف شد: ${staff.name} (${staff.email})`,
+    summary: `حساب کارمند حذف شد: ${staff.name} (${staff.phone})`,
     entityType: "User",
     entityId: id,
     ip: clientIp(request),

@@ -130,6 +130,9 @@ enum AuditAction {
   /// Platform staff marked a broadcast sent, or cancelled it. One action with
   /// the old and new status in `metadata`, like CAMPAIGN_STATUS_CHANGED.
   SMS_BROADCAST_STATUS_CHANGED
+  /// An account moved to a new sign-in number, proved by a code sent to it.
+  /// The old and new numbers are in `metadata`.
+  PHONE_CHANGED
 }
 
 /// Where a campaign is in its life.
@@ -170,13 +173,22 @@ enum SmsBroadcastStatus {
 // ------------------------------- identity ----------------------------------
 
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
-  passwordHash String
-  name         String
-  phone        String?
-  role         Role    @default(OWNER)
-  isActive     Boolean @default(true)
+  id              String    @id @default(cuid())
+  /// Unused since sign-in moved to phone + one-time code. Kept, not dropped, so
+  /// no account loses data; new accounts leave it null.
+  email           String?   @unique
+  /// Unused since sign-in moved to one-time codes; older rows keep their hash.
+  passwordHash    String?
+  name            String
+  /// The sign-in identifier: an Iranian mobile in its one canonical form,
+  /// 09XXXXXXXXX (normalisePhone). Unique and CHECK-constrained in the migration.
+  phone           String?   @unique
+  /// When the owner of this account last proved the number by entering a code.
+  /// Null for an account created by someone else (staff, branch manager, an
+  /// admin-created owner) until its first sign-in, which is that proof.
+  phoneVerifiedAt DateTime?
+  role            Role      @default(OWNER)
+  isActive        Boolean   @default(true)
 
   // Null for SUPER_ADMIN. For OWNER/STAFF this is the tenant boundary.
   restaurantId String?
@@ -195,12 +207,13 @@ model User {
   /// their token happens to expire.
   staffTabs String[] @default([])
 
-  ownedRestaurants Restaurant[] @relation("RestaurantOwner")
-  sessions         Session[]
-  auditLogs        AuditLog[]
-  grantedExtensions SubscriptionExtension[] @relation("ExtensionAdmin")
-  createdCampaigns  Campaign[]             @relation("CampaignCreator")
-  createdSmsBroadcasts SmsBroadcast[]     @relation("SmsBroadcastCreator")
+  ownedRestaurants     Restaurant[]            @relation("RestaurantOwner")
+  sessions             Session[]
+  otpChallenges        OtpChallenge[]
+  auditLogs            AuditLog[]
+  grantedExtensions    SubscriptionExtension[] @relation("ExtensionAdmin")
+  createdCampaigns     Campaign[]              @relation("CampaignCreator")
+  createdSmsBroadcasts SmsBroadcast[]          @relation("SmsBroadcastCreator")
 
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
@@ -211,6 +224,40 @@ model User {
 
 /// Server-side session records. The cookie holds a signed JWT whose `sid`
 /// points here, so sessions can be revoked without waiting for token expiry.
+/// What a one-time code is for. A code issued for one purpose never answers
+/// another: a sign-up code cannot sign in, and neither can change a number.
+enum OtpPurpose {
+  SIGNUP
+  LOGIN
+  CHANGE_PHONE
+}
+
+/// One outstanding SMS code. Rules in src/lib/sms/otp.ts, storage and sending
+/// in src/lib/auth/otp-server.ts.
+///
+/// The code itself is never stored: `codeHash` is an HMAC keyed with
+/// AUTH_SECRET, so a leaked row or backup cannot be typed into the code box.
+/// Requesting a new code deletes the previous unanswered ones for the same
+/// number and purpose, which is what makes an old code stop working.
+model OtpChallenge {
+  id         String     @id
+  phone      String
+  purpose    OtpPurpose
+  codeHash   String
+  /// Wrong answers so far; at the policy's limit the code is locked.
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  /// Set when the code is used. A code works once.
+  consumedAt DateTime?
+  /// The account whose number is changing, for CHANGE_PHONE only.
+  userId     String?
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+
+  @@index([phone, purpose, createdAt])
+  @@index([expiresAt])
+}
+
 model Session {
   id        String   @id @default(cuid())
   userId    String
@@ -227,9 +274,9 @@ model Session {
 // ------------------------------- tenant ------------------------------------
 
 model Restaurant {
-  id     String @id @default(cuid())
+  id     String  @id @default(cuid())
   /// Public URL segment: /menu/<slug>
-  slug   String @unique
+  slug   String  @unique
   name   String
   nameEn String?
 
@@ -252,22 +299,22 @@ model Restaurant {
   parentRestaurant   Restaurant?  @relation("RestaurantBranches", fields: [parentRestaurantId], references: [id], onDelete: Restrict)
   branches           Restaurant[] @relation("RestaurantBranches")
 
-  tagline     String?
-  description String?
+  tagline        String?
+  description    String?
   /// English counterparts, shown when the menu renders in English. Null falls
   /// back to the Persian value — a half-translated menu stays readable rather
   /// than going blank.
-  taglineEn     String?
-  descriptionEn String?
-  logoUrl     String?
-  coverUrl    String?
-  phone       String?
+  taglineEn      String?
+  descriptionEn  String?
+  logoUrl        String?
+  coverUrl       String?
+  phone          String?
   /// A second number for the menu footer. Venues routinely publish two — a
   /// landline for reservations and a mobile for orders — and cramming both into
   /// `phone` produced one unusable `tel:` link containing two numbers.
   phoneSecondary String?
-  address     String?
-  instagram   String?
+  address        String?
+  instagram      String?
 
   /// Up to three social links shown as icon buttons in the menu footer.
   ///
@@ -278,7 +325,7 @@ model Restaurant {
   /// `[{ platform, url }]`, validated by SocialLinksSchema in
   /// src/lib/validation.ts — the same guard the theme's image URL gets, because
   /// this string ends up in an `href`.
-  socialLinks Json @default("[]")
+  socialLinks Json   @default("[]")
   latitude    Float?
   longitude   Float?
 
@@ -390,7 +437,7 @@ model Restaurant {
   /// Shows a "call the waiter" button at the foot of every template.
   staffCallEnabled Boolean @default(false)
   /// What that button is called — venues say گارسون, پیشخدمت, or a name.
-  staffCallLabel String @default("صدا زدن گارسون")
+  staffCallLabel   String  @default("صدا زدن گارسون")
   /// English label for the same button. Null falls back to the platform's own
   /// English string rather than to the Persian one, which a tourist could not
   /// read anyway.
@@ -426,19 +473,19 @@ model Restaurant {
   ownerId String
   owner   User   @relation("RestaurantOwner", fields: [ownerId], references: [id])
 
-  members       User[]        @relation("RestaurantMembers")
-  categories    Category[]
-  products      Product[]
-  orders        Order[]
-  tables        RestaurantTable[]
-  expenses      Expense[]
-  subscription  Subscription?
-  payments      Payment[]
-  auditLogs     AuditLog[]
-  discountCodes DiscountCode[]
-  inventoryItems InventoryItem[]
-  supportTickets SupportTicket[]
-  availabilityWindows AvailabilityWindow[]
+  members              User[]                  @relation("RestaurantMembers")
+  categories           Category[]
+  products             Product[]
+  orders               Order[]
+  tables               RestaurantTable[]
+  expenses             Expense[]
+  subscription         Subscription?
+  payments             Payment[]
+  auditLogs            AuditLog[]
+  discountCodes        DiscountCode[]
+  inventoryItems       InventoryItem[]
+  supportTickets       SupportTicket[]
+  availabilityWindows  AvailabilityWindow[]
   recommendations      ProductRecommendation[]
   recommendationEvents RecommendationEvent[]
   featuredEvents       FeaturedProductEvent[]
@@ -471,16 +518,16 @@ model Restaurant {
 // ---------------------------- subscriptions --------------------------------
 
 model Plan {
-  id             String  @id @default(cuid())
-  code           String  @unique // "starter" | "pro" | "enterprise"
-  name           String
-  nameEn         String
-  description    String?
-  monthlyPrice   Int // Toman
-  yearlyPrice    Int
-  maxProducts    Int // -1 = unlimited
-  maxCategories  Int
-  maxTables      Int
+  id            String  @id @default(cuid())
+  code          String  @unique // "starter" | "pro" | "enterprise"
+  name          String
+  nameEn        String
+  description   String?
+  monthlyPrice  Int // Toman
+  yearlyPrice   Int
+  maxProducts   Int // -1 = unlimited
+  maxCategories Int
+  maxTables     Int
 
   /// Menu views a venue may serve in a day, -1 for unlimited.
   ///
@@ -494,7 +541,7 @@ model Plan {
   /// fair-use ceiling rather than a hard limit. Enforcing it needs a per-day
   /// counter on the menu route and a decision about what happens at the cap,
   /// neither of which should be invented silently.
-  maxDailyViews  Int     @default(-1)
+  maxDailyViews Int @default(-1)
 
   /// Permits creating branch venues that serve this venue's menu.
   allowsBranches Boolean @default(false)
@@ -504,11 +551,11 @@ model Plan {
   /// by contract rather than by self-service checkout.
   isContractPriced Boolean @default(false)
 
-  allowsOnlinePay Boolean @default(false)
-  allowsAnalytics Boolean @default(true)
+  allowsOnlinePay    Boolean @default(false)
+  allowsAnalytics    Boolean @default(true)
   allowsCustomDomain Boolean @default(false)
-  isPublic       Boolean @default(true)
-  sortOrder      Int     @default(0)
+  isPublic           Boolean @default(true)
+  sortOrder          Int     @default(0)
 
   subscriptions Subscription[]
 
@@ -517,17 +564,17 @@ model Plan {
 }
 
 model Subscription {
-  id           String             @id @default(cuid())
-  restaurantId String             @unique
-  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  planId       String
-  plan         Plan               @relation(fields: [planId], references: [id])
-  status       SubscriptionStatus @default(TRIALING)
+  id               String             @id @default(cuid())
+  restaurantId     String             @unique
+  restaurant       Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  planId           String
+  plan             Plan               @relation(fields: [planId], references: [id])
+  status           SubscriptionStatus @default(TRIALING)
   /// "monthly" | "yearly"
-  interval     String             @default("monthly")
-  startedAt    DateTime           @default(now())
+  interval         String             @default("monthly")
+  startedAt        DateTime           @default(now())
   currentPeriodEnd DateTime
-  canceledAt   DateTime?
+  canceledAt       DateTime?
 
   payments   Payment[]
   extensions SubscriptionExtension[]
@@ -558,8 +605,10 @@ model SubscriptionExtension {
 
   /// The SUPER_ADMIN who performed it. Kept even if they later leave.
   adminId    String
-  admin      User          @relation("ExtensionAdmin", fields: [adminId], references: [id])
-  adminEmail String
+  admin      User   @relation("ExtensionAdmin", fields: [adminId], references: [id])
+  /// Who it was, as they signed in when it happened: an email on rows written
+  /// before phone sign-in, the phone number since. The column keeps its name.
+  adminLabel String @map("adminEmail")
 
   extensionType      ExtensionType
   previousExpiration DateTime
@@ -580,8 +629,8 @@ model Category {
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
-  name      String
-  nameEn    String?
+  name   String
+  nameEn String?
 
   /// Whether this category's opening hours apply.
   ///
@@ -589,7 +638,7 @@ model Category {
   /// an empty schedule never constrains anything. Switching it off suspends the
   /// hours without deleting them, so a venue can drop its schedule for Nowruz
   /// and put it back afterwards rather than retyping a week of setup.
-  scheduleEnabled Boolean @default(true)
+  scheduleEnabled     Boolean              @default(true)
   availabilityWindows AvailabilityWindow[]
 
   /// lucide-react icon name, rendered by src/components/icon.tsx
@@ -601,7 +650,7 @@ model Category {
   sortOrder Int     @default(0)
   isActive  Boolean @default(true)
 
-  products Product[]
+  products  Product[]
   /// Campaigns using this category as their optional context.
   campaigns Campaign[]
 
@@ -618,29 +667,29 @@ model Product {
   categoryId   String
   category     Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  name             String
-  nameEn           String?
-  shortDescription String?
-  fullDescription  String?
+  name               String
+  nameEn             String?
+  shortDescription   String?
+  fullDescription    String?
   /// English descriptions. `nameEn` already existed; these complete the pair so
   /// an English menu is not a Persian menu with English headings.
   shortDescriptionEn String?
   fullDescriptionEn  String?
-  imageUrl         String?
+  imageUrl           String?
 
   /// What a guest is shown and charged, in whole Toman: `priceExact` rounded
   /// to the venue's `menuPriceStep`. Every existing reader — the menu, the
   /// order path, analytics — keeps reading this column and nothing else.
-  price         Int // Toman
+  price               Int // Toman
   /// The unrounded price, the one every calculation starts from.
   ///
   /// `price` is derived from it and never the other way round. A double rather
   /// than a Decimal: product rows cross to client components whole, where a
   /// Decimal object cannot go, and fifteen significant digits hold any menu
   /// price to far below a Toman. What is charged is always the integer above.
-  priceExact    Float
+  priceExact          Float
   /// Optional strike-through "was" price for promotions, rounded for display.
-  compareAtPrice Int?
+  compareAtPrice      Int?
   /// Its unrounded twin, moved alongside `priceExact`.
   compareAtPriceExact Float?
   /// Ingredient + production cost, drives profit reporting. Owner-only.
@@ -648,9 +697,9 @@ model Product {
   /// Typed by the owner — unless `costFromRecipe` is set, in which case it is
   /// the dish's recipe priced at current ingredient costs, recomputed whenever
   /// either changes, and the typed value is not accepted.
-  costPrice     Int  @default(0)
+  costPrice           Int     @default(0)
   /// True while the dish has a recipe whose every ingredient has a price.
-  costFromRecipe Boolean @default(false)
+  costFromRecipe      Boolean @default(false)
 
   isAvailable Boolean @default(true)
 
@@ -661,7 +710,7 @@ model Product {
   /// hours all allow it. `hideWhenUnavailable` then decides what a guest sees,
   /// exactly as it already did — a dish outside its hours is the same kind of
   /// unavailable as one the owner switched off by hand.
-  scheduleEnabled Boolean @default(true)
+  scheduleEnabled     Boolean              @default(true)
   availabilityWindows AvailabilityWindow[]
 
   /// What an unavailable product does on the public menu. False (the default,
@@ -676,7 +725,7 @@ model Product {
   /// promotion window is open **and** it is actually orderable, so a template
   /// cannot promote something a guest cannot buy. See `isFeaturedNow` in
   /// src/lib/featured.ts.
-  isFeatured  Boolean @default(false)
+  isFeatured          Boolean @default(false)
 
   /// Where this dish sits among the featured ones, lowest first.
   ///
@@ -709,7 +758,7 @@ model Product {
   featuredFrom  DateTime?
   featuredUntil DateTime?
 
-  sortOrder   Int     @default(0)
+  sortOrder Int @default(0)
 
   /// The owner's own words introducing this dish's pairings.
   ///
@@ -737,25 +786,25 @@ model Product {
   ingredients  ProductIngredient[]
 
   /// Suggestions made *when this dish is ordered*…
-  recommendations     ProductRecommendation[] @relation("RecommendationSource")
+  recommendations ProductRecommendation[] @relation("RecommendationSource")
   /// …and the dishes that suggest *this* one.
-  recommendedBy       ProductRecommendation[] @relation("RecommendationTarget")
+  recommendedBy   ProductRecommendation[] @relation("RecommendationTarget")
 
   /// What this dish contains, when it is a meal deal.
   ///
   /// Empty for every ordinary dish, which is what makes a bundle a *product*
   /// rather than a second kind of thing: see src/lib/bundles.ts for why that
   /// representation was chosen over a Bundle entity with its own order path.
-  bundleItems   ProductBundleItem[] @relation("BundleParent")
+  bundleItems ProductBundleItem[] @relation("BundleParent")
   /// …and the meal deals that contain this dish.
-  inBundles     ProductBundleItem[] @relation("BundleComponent")
+  inBundles   ProductBundleItem[] @relation("BundleComponent")
 
   /// Aggregate co-occurrence rows where this dish is the source…
-  pairStatsFrom ProductPairStat[]   @relation("PairStatSource")
+  pairStatsFrom         ProductPairStat[] @relation("PairStatSource")
   /// …and where it is the partner.
-  pairStatsTo   ProductPairStat[]   @relation("PairStatTarget")
+  pairStatsTo           ProductPairStat[] @relation("PairStatTarget")
   /// Order lines this dish was suggested onto, for revenue attribution.
-  recommendedOrderItems OrderItem[]           @relation("OrderItemRecommendedFrom")
+  recommendedOrderItems OrderItem[]       @relation("OrderItemRecommendedFrom")
   /// Campaigns using this dish as their optional context.
   campaigns             Campaign[]
 
@@ -830,7 +879,7 @@ model ProductOptionChoice {
   priceDelta Int @default(0)
   /// The matching change in cost of goods, so profit reporting stays honest
   /// when the expensive option is the one that sells.
-  costDelta Int @default(0)
+  costDelta  Int @default(0)
 
   isAvailable Boolean @default(true)
   sortOrder   Int     @default(0)
@@ -1024,8 +1073,8 @@ model Customer {
   /// Off unless it was explicitly given. A paid promotional SMS broadcast
   /// reaches only guests with this set — see SmsBroadcast. Order confirmations
   /// are not marketing and never depended on it.
-  marketingConsent  Boolean   @default(false)
-  consentUpdatedAt  DateTime?
+  marketingConsent Boolean   @default(false)
+  consentUpdatedAt DateTime?
 
   orders Order[]
 
@@ -1173,9 +1222,9 @@ model SmsBroadcast {
   /// Whole Toman: recipientCount × smsParts × pricePerPart.
   amount         Int
 
-  status SmsBroadcastStatus @default(PENDING_PAYMENT)
-  paidAt DateTime?
-  sentAt DateTime?
+  status     SmsBroadcastStatus @default(PENDING_PAYMENT)
+  paidAt     DateTime?
+  sentAt     DateTime?
   canceledAt DateTime?
 
   createdByUserId String?
@@ -1331,14 +1380,14 @@ model ProductPairStat {
   targetProduct   Product @relation("PairStatTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
 
   /// Non-cancelled orders containing both dishes.
-  pairCount Int @default(0)
+  pairCount     Int @default(0)
   /// Non-cancelled orders containing the source dish — confidence's denominator.
   sourceSupport Int @default(0)
   /// Non-cancelled orders containing the target dish — lift's denominator.
   targetSupport Int @default(0)
   /// Non-cancelled orders for the venue over the same window, so a stored row
   /// carries its own context and the read needs no second query.
-  totalOrders Int @default(0)
+  totalOrders   Int @default(0)
 
   /// When the counting pass that produced this row ran. Drives the staleness
   /// check that decides whether a refresh is due.
@@ -1490,7 +1539,7 @@ model AvailabilityWindow {
   /// Minutes from local midnight, 1–1440 — 1440 being midnight at the end of
   /// the day, so "18:00 until midnight" stays a same-day window. A window whose
   /// end is not after its start runs past midnight into the following day.
-  endMinute Int
+  endMinute   Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1523,9 +1572,9 @@ model InventoryItem {
   /// What the venue pays, in whole Toman, for one `priceUnit` of this item —
   /// "45,000 per kilogram". Kept as typed so no conversion ever rounds the
   /// figure the owner entered. Null until the owner prices it.
-  purchasePrice Int?
+  purchasePrice  Int?
   /// The unit `purchasePrice` is quoted in. Same dimension as `unit`.
-  priceUnit     String?
+  priceUnit      String?
   priceUpdatedAt DateTime?
 
   /// Thousandths of `unit` currently on the shelf.
@@ -1563,7 +1612,7 @@ model ProductIngredient {
   /// The unit the owner typed the amount in — "230 گرم" of a kilogram item —
   /// kept so the recipe reads back the way it was written. Arithmetic uses
   /// `perUnitMilli` only. Null means the item's own unit.
-  unit String?
+  unit         String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1581,9 +1630,9 @@ model ProductIngredient {
 /// never consumed. Recording the delta at the moment it happens makes the
 /// reversal exact, and gives the owner an answer to "why did this change?".
 model StockMovement {
-  id           String        @id @default(cuid())
-  itemId       String
-  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  id     String        @id @default(cuid())
+  itemId String
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   /// Negative when consumed, positive when restocked or restored.
   deltaMilli Int
@@ -1627,7 +1676,7 @@ model SupportTicket {
   subject String
   message String
 
-  status  SupportTicketStatus @default(OPEN)
+  status    SupportTicketStatus @default(OPEN)
   /// Written by platform staff from the admin console.
   reply     String?
   repliedAt DateTime?
@@ -1708,8 +1757,8 @@ model Order {
   /// exposed, so status pages cannot be enumerated.
   publicToken String @unique
 
-  tableNumber  String?
-  customerName String
+  tableNumber   String?
+  customerName  String
   /// As given, already normalised by `normalisePhone`. Kept on the order as
   /// well as on the customer record: an order is a receipt, and it must still
   /// say who placed it even if the customer record is later removed.
@@ -1722,7 +1771,7 @@ model Order {
   /// its own `customerName` and `customerPhone` snapshot regardless.
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  note         String?
+  note       String?
 
   status        OrderStatus   @default(RECEIVED)
   paymentMethod PaymentMethod @default(CASH_ON_SITE)
@@ -1750,13 +1799,13 @@ model Order {
   // Snapshotted the same way line prices are: the owner can change the tax
   // rate or switch rounding off tomorrow, and this order must still add up to
   // what the guest actually paid.
-  serviceCharge Int @default(0)
-  tax           Int @default(0)
-  tip           Int @default(0)
+  serviceCharge      Int @default(0)
+  tax                Int @default(0)
+  tip                Int @default(0)
   /// Signed correction applied by rounding; kept so total is reproducible.
   roundingAdjustment Int @default(0)
 
-  total    Int
+  total     Int
   /// Sum of item costSnapshot — frozen COGS for profit reporting.
   costTotal Int @default(0)
 
@@ -1818,11 +1867,9 @@ model Order {
   @@unique([restaurantId, orderNumber])
   @@index([restaurantId, status])
   @@index([restaurantId, placedAt])
-
   /// Backs the customer aggregation: every per-customer figure groups on this
   /// column, filtered by status, so the pair is what the report actually reads.
   @@index([customerId, status])
-
   /// Every question asked about a *customer* rather than about an order.
   ///
   /// There is no Customer table: a guest scans a QR code, types a name and a
@@ -1839,7 +1886,6 @@ model Order {
   /// `normalisePhone` in src/lib/phone.ts, which is what makes equality on this
   /// column mean "the same person".
   @@index([restaurantId, customerPhone])
-
   /// Backs the kitchen board's "is this order still live?" filter, which runs
   /// on every poll and would otherwise scan the tenant's whole history.
   @@index([restaurantId, paymentStatus, paidAt])
@@ -1869,18 +1915,15 @@ model OrderItem {
 
   /**
    * The dish whose suggestion put this line in the basket.
-   *
    * The whole of purchase attribution, and the reason there is no PURCHASE
    * event: a sale is something the server already knows about, so counting it
    * from a browser's report would be counting the least trustworthy copy of a
    * fact we hold first-hand.
-   *
    * Written only after `createOrder` has confirmed an active recommendation
    * edge actually exists from that source to this product, so a client cannot
    * credit a suggestion that was never made. Null for every line a guest found
    * on their own — which is what stops someone browsing to the chips
    * themselves from being counted as an upsell.
-   *
    * `SetNull` rather than cascade, exactly like `productId` above: deleting a
    * product must never rewrite what an order was.
    */
@@ -1889,13 +1932,11 @@ model OrderItem {
 
   /**
    * The guest reached this dish through a featured surface.
-   *
    * A boolean rather than a product id, because unlike a suggestion a featured
    * dish has no source dish — the surface itself is the origin. Verified the
    * same way: `createOrder` confirms the dish really was featured and inside
    * its promotion window before setting it, so a client cannot manufacture
    * merchandising credit.
-   *
    * Independent of `recommendedFromProductId`: a dish can legitimately be both
    * featured and suggested, and the two attributions answer different
    * questions.
@@ -1928,8 +1969,8 @@ model OrderItemOption {
   choiceNameSnapshot String
   /// Per-unit deltas, already folded into the parent line's priceSnapshot.
   /// Recorded separately so a receipt can show why a burger cost 30,000 more.
-  priceDeltaSnapshot Int @default(0)
-  costDeltaSnapshot  Int @default(0)
+  priceDeltaSnapshot Int    @default(0)
+  costDeltaSnapshot  Int    @default(0)
 
   sortOrder Int @default(0)
 
@@ -1955,14 +1996,14 @@ model Expense {
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
-  title      String
+  title       String
   /// "rent" | "salary" | "utilities" | "supplies" | "marketing" | "other"
-  category   String
-  amount     Int
-  note       String?
-  occurredAt DateTime
+  category    String
+  amount      Int
+  note        String?
+  occurredAt  DateTime
   /// True for rent/salary style recurring costs, used to project run-rate.
-  isRecurring Boolean @default(false)
+  isRecurring Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1977,23 +2018,23 @@ model Payment {
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
-  purpose PaymentPurpose
-  orderId String?
-  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  purpose        PaymentPurpose
+  orderId        String?
+  order          Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
   subscriptionId String?
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  subscription   Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   smsBroadcastId String?
-  smsBroadcast   SmsBroadcast? @relation(fields: [smsBroadcastId], references: [id], onDelete: SetNull)
+  smsBroadcast   SmsBroadcast?  @relation(fields: [smsBroadcastId], references: [id], onDelete: SetNull)
 
   provider String // "zarinpal" | "mock"
   amount   Int
   status   PaymentStatus @default(PENDING)
 
   /// Gateway handle for the started transaction (Zarinpal "Authority").
-  authority String? @unique
+  authority     String? @unique
   /// Gateway reference for the settled transaction (Zarinpal "RefID").
-  refId     String?
-  cardPan   String?
+  refId         String?
+  cardPan       String?
   failureReason String?
 
   verifiedAt DateTime?
@@ -2012,7 +2053,7 @@ model Payment {
 /// Append-only record of security- and money-relevant actions.
 ///
 /// Two deliberate choices make this useful months later:
-///   * `actorEmail` is a snapshot, so deleting a user does not erase who did
+///   * `actorLabel` is a snapshot, so deleting a user does not erase who did
 ///     what — the whole point of an audit trail.
 ///   * `restaurantId` is nullable, because platform-admin actions belong to no
 ///     tenant. Tenant-scoped reads still filter on it like every other table.
@@ -2024,10 +2065,12 @@ model AuditLog {
   restaurantId String?
   restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
-  /// Null once the acting user is deleted; actorEmail still identifies them.
+  /// Null once the acting user is deleted; actorLabel still identifies them.
   actorUserId String?
   actor       User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-  actorEmail  String
+  /// The actor as they signed in: email on rows written before phone sign-in,
+  /// the phone number since. The column keeps its original name.
+  actorLabel  String  @map("actorEmail")
   actorRole   Role
 
   action     AuditAction
@@ -2071,15 +2114,15 @@ model RateLimit {
 /// change from the admin console while the site is running, and an env var
 /// cannot be edited without a redeploy. Secrets stay in the environment.
 model PlatformSetting {
-  id        String   @id @default("singleton")
+  id               String    @id @default("singleton")
   /// Where the twice-daily customer-data backup is delivered.
-  backupEmail String?
+  backupEmail      String?
   /// Set when a backup run fails, cleared on the next success, so the failure
   /// is visible in the admin console rather than only in a log file.
-  lastBackupAt      DateTime?
-  lastBackupStatus  String?
-  lastBackupError   String?
-  lastBackupBytes   Int?
+  lastBackupAt     DateTime?
+  lastBackupStatus String?
+  lastBackupError  String?
+  lastBackupBytes  Int?
 
   updatedAt DateTime @updatedAt
 }

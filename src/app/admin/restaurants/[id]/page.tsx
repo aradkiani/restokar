@@ -66,7 +66,7 @@ export default async function AdminRestaurantDetailPage({
             <Rows
               rows={[
                 [t.admin.owner, restaurant.owner.name],
-                [t.auth.email, restaurant.owner.email],
+                [t.auth.phone, restaurant.owner.phone ?? "—"],
                 [t.admin.joinedAt, formatDate(restaurant.createdAt, locale)],
                 [t.settings.phone, restaurant.phone ?? "—"],
                 [t.design.template, restaurant.templateId],
@@ -161,7 +161,7 @@ export default async function AdminRestaurantDetailPage({
                   <p className="mt-1 text-xs text-ink-500 tabular-nums">
                     {formatDate(extension.previousExpiration, locale)} →{" "}
                     {formatDate(extension.newExpiration, locale)} · {t.admin.performedBy}{" "}
-                    <span dir="ltr">{extension.adminEmail}</span>
+                    <span dir="ltr">{extension.adminLabel}</span>
                   </p>
                 </div>
               ))}
