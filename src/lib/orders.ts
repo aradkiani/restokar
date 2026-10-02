@@ -1202,54 +1202,6 @@ export async function expireAbandonedOnlineOrders(restaurantId: string): Promise
   return cancelled;
 }
 
-/**
- * Records a tip the guest handed over after the fact.
- *
- * Most tips in an Iranian venue are cash left on the table, so they never pass
- * through the checkout the guest used and the order has no way to know about
- * them. Staff record them here instead.
- *
- * `total` moves with the tip because it represents the money that actually
- * changed hands, but revenue does not: `netRevenue` subtracts tax and tips, so
- * a recorded tip shows up as money received and belonging to staff, and never
- * inflates the venue's sales or its profit. The tip component is replaced
- * rather than added to, which is what makes correcting a mistyped amount work.
- */
-export async function setOrderTip(
-  restaurantId: string,
-  orderId: string,
-  tip: number,
-): Promise<{ tip: number; total: number }> {
-  const existing = await prisma.order.findFirst({
-    where: { id: orderId, restaurantId },
-    select: { id: true, tip: true, total: true, publicToken: true },
-  });
-
-  if (!existing) throw new HttpError(404, "Order not found", "ORDER_NOT_FOUND");
-
-  const next = Math.max(0, Math.round(tip));
-  // The bill without any tip, so re-recording never compounds.
-  const payable = existing.total - existing.tip;
-
-  if (next === existing.tip) return { tip: next, total: existing.total };
-
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { tip: next, total: payable + next },
-    select: { tip: true, total: true },
-  });
-
-  publishOrderEvent({
-    type: "order.updated",
-    restaurantId,
-    orderId,
-    publicToken: existing.publicToken,
-    at: new Date().toISOString(),
-  });
-
-  return updated;
-}
-
 /** The guest's view, addressed by unguessable token rather than by id. */
 export async function getOrderByToken(slug: string, token: string) {
   return prisma.order.findFirst({

@@ -14,8 +14,6 @@
 /** One day in milliseconds. Repeated inline in four modules before this. */
 export const DAY_MS = 86_400_000;
 
-export const MINUTE_MS = 60_000;
-
 // ------------------------------ auth / session -----------------------------
 
 /** How long a session cookie stays valid. */
@@ -235,18 +233,6 @@ export const ORDER_POLL_MS = 30_000;
  */
 export const DELIVERED_VISIBLE_MINUTES = 90;
 export const DELIVERED_VISIBLE_MS = DELIVERED_VISIBLE_MINUTES * 60_000;
-
-/**
- * The cutoff a delivered order must fall after to still appear on the board.
- *
- * A function rather than an inline `Date.now()` in the page: reading the clock
- * during a component's render is exactly what `react-hooks/purity` forbids, and
- * every other time window in this codebase (`resolveRange`, `startOfDay`) is
- * derived the same way.
- */
-export function deliveredVisibleSince(): Date {
-  return new Date(Date.now() - DELIVERED_VISIBLE_MS);
-}
 
 // -------------------------------- refunds ----------------------------------
 

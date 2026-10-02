@@ -3,6 +3,7 @@ import { ThemeSchema } from "./theme";
 import {
   MAX_EXTENSION_DAYS,
   MAX_ONBOARDING_DAYS,
+  MAX_PRODUCT_INFO_SECTIONS,
   MIN_EXTENSION_DAYS,
   MIN_ONBOARDING_DAYS,
 } from "./constants";
@@ -499,7 +500,7 @@ const ProductFields = z.object({
   sortOrder: z.number().int().min(0).max(9999).optional(),
   // The product brief calls for three owner-defined sections; three is the cap,
   // not a requirement, so a simple menu is not forced to invent content.
-  infoSections: z.array(InfoSectionSchema).max(3).default([]),
+  infoSections: z.array(InfoSectionSchema).max(MAX_PRODUCT_INFO_SECTIONS).default([]),
   /**
    * Uncapped in count but bounded in size: a pizza legitimately has base,
    * crust, toppings and extras, while twenty groups would make the sheet
@@ -572,7 +573,7 @@ export const ProductPatchSchema = ProductFields.omit({
     hideWhenUnavailable: z.boolean().optional(),
     isFeatured: z.boolean().optional(),
     scheduleEnabled: z.boolean().optional(),
-    infoSections: z.array(InfoSectionSchema).max(3).optional(),
+    infoSections: z.array(InfoSectionSchema).max(MAX_PRODUCT_INFO_SECTIONS).optional(),
     optionGroups: z.array(OptionGroupSchema).max(6).optional(),
   })
   .partial()
@@ -1316,19 +1317,4 @@ export const OrderStatusSchema = z.object({
  */
 export const OrderPaymentSchema = z.object({
   paid: z.boolean(),
-});
-
-/**
- * A tip recorded by staff after the guest paid.
- *
- * Bounded generously but not infinitely: a tip is real money entered by hand on
- * a busy floor, and an extra keystroke should not be able to write a figure
- * that distorts every report the venue runs.
- */
-export const OrderTipSchema = z.object({
-  tip: z.coerce
-    .number()
-    .int()
-    .min(0, "انعام نمی‌تواند منفی باشد")
-    .max(50_000_000, "مبلغ انعام بیش از حد زیاد است"),
 });

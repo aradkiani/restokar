@@ -81,32 +81,6 @@ function allow(limit: number): RateLimitResult {
 }
 
 /**
- * Clears a counter after the action it guards succeeded.
- *
- * Without this, the login limiter counts *every* attempt, so someone who signs
- * in correctly 8 times in 15 minutes — a shared kitchen tablet, or anyone
- * switching accounts — gets locked out despite never failing. Only failed
- * attempts should accumulate.
- */
-export async function resetRateLimit(key: string): Promise<void> {
-  await prisma.rateLimit.deleteMany({ where: { key } }).catch(() => undefined);
-}
-
-/**
- * Drops windows that have already elapsed.
- *
- * Called from the scheduled maintenance job rather than from a request: the
- * table is keyed by an opaque string and would otherwise accumulate one dead
- * row per address that ever hit a limited endpoint.
- */
-export async function pruneRateLimits(): Promise<number> {
-  const { count } = await prisma.rateLimit.deleteMany({
-    where: { resetAt: { lt: new Date() } },
-  });
-  return count;
-}
-
-/**
  * Best-effort client address, read from the right-hand end of the forwarding
  * chain.
  *

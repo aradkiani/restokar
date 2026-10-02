@@ -1,4 +1,4 @@
-import { readdir, stat, unlink } from "node:fs/promises";
+import { readdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "../prisma";
 import { BACKUPS_ROOT } from "../storage/paths";
@@ -318,9 +318,3 @@ export { formatBytes };
 
 /** Re-exported so callers need only this module. */
 export type { BackupResult };
-
-/** Used by the CLI to size a `stat` check without importing node:fs there. */
-export async function archiveSize(filePath: string): Promise<number> {
-  const { size } = await stat(filePath);
-  return size;
-}
