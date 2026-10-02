@@ -165,20 +165,23 @@ export default async function SubscriptionPage({
         <PlanPicker
           locale={locale}
           currentPlanCode={state?.planCode ?? null}
-          plans={plans.map((plan) => ({
-            code: plan.code,
-            name: locale === "en" ? plan.nameEn : plan.name,
-            description: plan.description,
-            monthlyPrice: plan.monthlyPrice,
-            yearlyPrice: plan.yearlyPrice,
-            maxProducts: plan.maxProducts,
-            maxCategories: plan.maxCategories,
-            maxDailyViews: plan.maxDailyViews,
-            maxTables: plan.maxTables,
-            allowsOnlinePay: plan.allowsOnlinePay,
-            allowsAnalytics: plan.allowsAnalytics,
-            sortOrder: plan.sortOrder,
-          }))}
+          // Contract-priced plans are agreed with sales, never bought here.
+          plans={plans
+            .filter((plan) => !plan.isContractPriced)
+            .map((plan) => ({
+              code: plan.code,
+              name: locale === "en" ? plan.nameEn : plan.name,
+              description: plan.description,
+              monthlyPrice: plan.monthlyPrice,
+              yearlyPrice: plan.yearlyPrice,
+              maxProducts: plan.maxProducts,
+              maxCategories: plan.maxCategories,
+              maxDailyViews: plan.maxDailyViews,
+              maxTables: plan.maxTables,
+              allowsOnlinePay: plan.allowsOnlinePay,
+              allowsAnalytics: plan.allowsAnalytics,
+              sortOrder: plan.sortOrder,
+            }))}
         />
       )}
 

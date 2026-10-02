@@ -13,11 +13,19 @@ const CheckoutSchema = z.object({
   interval: z.enum(["monthly", "yearly"]),
 });
 
-/** Starts a subscription purchase or renewal at the gateway. */
+/**
+ * Starts paying for a plan. Changes nothing about the subscription.
+ *
+ * The plan, the interval and the price are written onto the *payment*, and the
+ * payment callback applies them only once the gateway confirms the money. This
+ * route used to switch the subscription to the chosen plan before redirecting,
+ * so an owner who opened the gateway for a bigger plan and closed the tab kept
+ * the bigger plan for free — and two overlapping checkouts could grant one
+ * plan for the price of another.
+ *
+ * The amount is always read from the database, never from the request.
+ */
 export const POST = route(async (request: Request) => {
-  // The gateway is not connected. Subscriptions are granted by platform staff
-  // from the admin console instead, so this refuses rather than starting a
-  // payment that has nowhere to settle.
   if (!SUBSCRIPTION_CHECKOUT_ENABLED) {
     throw new HttpError(
       403,
@@ -33,22 +41,37 @@ export const POST = route(async (request: Request) => {
   if (!plan || !plan.isPublic)
     throw new HttpError(404, "Plan not found", "PLAN_NOT_FOUND");
 
+  // A contract-priced plan shows a "from" price for orientation; what a chain
+  // actually pays is agreed with sales. It is never bought at that figure.
+  if (plan.isContractPriced) {
+    throw new HttpError(
+      403,
+      "این پلن با قرارداد فعال می‌شود؛ برای خرید با پشتیبانی تماس بگیرید",
+      "PLAN_CONTRACT_ONLY",
+    );
+  }
+
   const amount = input.interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
   if (amount <= 0) throw new HttpError(400, "This plan is not purchasable", "FREE_PLAN");
 
-  // Switching plan is recorded up front; the period only extends once payment
-  // is verified in the callback.
-  const subscription = await prisma.subscription.upsert({
-    where: { restaurantId },
-    create: {
-      restaurantId,
-      planId: plan.id,
-      interval: input.interval,
-      status: "PAST_DUE",
-      currentPeriodEnd: new Date(),
-    },
-    update: { planId: plan.id, interval: input.interval },
-  });
+  /*
+    The payment needs a subscription row to point at. An existing one is left
+    exactly as it is. A venue without one (created before billing existed) gets
+    a lapsed row on the chosen plan: it grants nothing until the payment lands,
+    because a missing row already meant "no limits" and a lapsed one shows the
+    renewal banner.
+  */
+  const subscription =
+    (await prisma.subscription.findUnique({ where: { restaurantId } })) ??
+    (await prisma.subscription.create({
+      data: {
+        restaurantId,
+        planId: plan.id,
+        interval: input.interval,
+        status: "PAST_DUE",
+        currentPeriodEnd: new Date(),
+      },
+    }));
 
   const provider = createPaymentProvider();
   const callbackUrl = `${env.NEXT_PUBLIC_APP_URL}/api/payments/callback?purpose=subscription`;
@@ -57,7 +80,6 @@ export const POST = route(async (request: Request) => {
     amount,
     description: `اشتراک ${plan.name} — ${input.interval === "yearly" ? "سالانه" : "ماهانه"}`,
     callbackUrl,
-    // The payer's sign-in number; Zarinpal shows it on its payment page.
     mobile: user.phone ?? undefined,
   });
 
@@ -70,6 +92,21 @@ export const POST = route(async (request: Request) => {
       amount,
       status: "PENDING",
       authority: result.authority,
+      planId: plan.id,
+      interval: input.interval,
+      planSnapshot: {
+        code: plan.code,
+        name: plan.name,
+        interval: input.interval,
+        amount,
+        maxProducts: plan.maxProducts,
+        maxCategories: plan.maxCategories,
+        maxTables: plan.maxTables,
+        maxDailyViews: plan.maxDailyViews,
+        allowsBranches: plan.allowsBranches,
+        allowsOnlinePay: plan.allowsOnlinePay,
+        allowsAnalytics: plan.allowsAnalytics,
+      },
     },
   });
 

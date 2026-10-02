@@ -65,8 +65,11 @@ export function PlanPicker({
     window.location.href = result.data.paymentUrl;
   }
 
+  // "نامحدود محصول", never a bare "نامحدود": on a plan where several limits
+  // are unlimited the bare word repeated meaninglessly, and as a React key it
+  // collided.
   const limitLabel = (value: number, unit: string) =>
-    value < 0 ? t.subscription.unlimited : `${formatNumber(value, locale)} ${unit}`;
+    `${value < 0 ? t.subscription.unlimited : formatNumber(value, locale)} ${unit}`;
 
   return (
     <section className="space-y-4">

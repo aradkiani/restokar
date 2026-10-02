@@ -558,6 +558,9 @@ model Plan {
   sortOrder          Int     @default(0)
 
   subscriptions Subscription[]
+  /// Subscription payments that bought this plan. Restrict: a plan that has
+  /// been paid for cannot be deleted, only hidden.
+  payments      Payment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2028,6 +2031,16 @@ model Payment {
   subscription   Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
   smsBroadcastId String?
   smsBroadcast   SmsBroadcast?  @relation(fields: [smsBroadcastId], references: [id], onDelete: SetNull)
+
+  /// What a subscription payment buys, fixed when checkout starts. The
+  /// subscription takes this plan and interval only once the payment is
+  /// verified — never when it is merely started, which used to hand out the
+  /// chosen plan to anyone who opened the gateway and closed it.
+  planId       String?
+  plan         Plan?   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  interval     String?
+  /// The price and limits as they stood at checkout, for receipts and audit.
+  planSnapshot Json?
 
   provider String // "zarinpal" | "mock"
   amount   Int
