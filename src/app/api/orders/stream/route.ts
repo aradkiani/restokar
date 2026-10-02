@@ -1,4 +1,5 @@
 import { getSessionUser } from "@/lib/auth/session";
+import { canAccessTab } from "@/lib/staff-tabs";
 import { sseFrame, subscribeToRestaurant } from "@/lib/events";
 
 export const runtime = "nodejs";
@@ -14,6 +15,8 @@ export async function GET(request: Request) {
   const user = await getSessionUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
   if (!user.restaurantId) return new Response("Forbidden", { status: 403 });
+  // The same section the board page and the order routes require.
+  if (!canAccessTab(user, "orders")) return new Response("Forbidden", { status: 403 });
 
   const restaurantId = user.restaurantId;
   const encoder = new TextEncoder();
