@@ -65,3 +65,36 @@ desktop.ini
 /test-results/
 /playwright-report/
 /blob-report/
+
+# ---------------------------------------------------------------------------
+# Never in the repository: keys, database files and dumps, archives
+#
+# Backups (database dumps, project archives) belong outside this folder; see
+# docs/BACKUPS.md. These rules are a net for the day one is saved here anyway.
+# `.sql` itself is not ignored — migrations are SQL files and must be
+# committed — so a plain-SQL dump must use one of the names below.
+# ---------------------------------------------------------------------------
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+*.dump
+*.pgdump
+*.backup
+*.sql.gz
+*-dump.sql
+dump.sql
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+/uploads/
+/coverage/
+npm-debug.log*
