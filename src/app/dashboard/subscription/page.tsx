@@ -256,6 +256,7 @@ export default async function SubscriptionPage({
                   <th className="p-3 text-start font-semibold">
                     {t.orderStatus.placedAt}
                   </th>
+                  <th className="p-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
@@ -274,7 +275,9 @@ export default async function SubscriptionPage({
                               : "neutral"
                         }
                       >
-                        {item.status}
+                        {t.exports.values.paymentStatus[
+                          item.status as keyof typeof t.exports.values.paymentStatus
+                        ] ?? item.status}
                       </Badge>
                     </td>
                     <td className="p-3 font-mono text-xs" dir="ltr">
@@ -282,6 +285,18 @@ export default async function SubscriptionPage({
                     </td>
                     <td className="p-3 text-ink-500">
                       {formatDate(item.createdAt, locale)}
+                    </td>
+                    <td className="p-3 text-end">
+                      {item.status === "PAID" && (
+                        <a
+                          href={`/print/receipt/${item.id}`}
+                          target="_blank"
+                          rel="noopener"
+                          className="text-xs font-bold text-brand-700 underline"
+                        >
+                          {t.receipt.open}
+                        </a>
+                      )}
                     </td>
                   </tr>
                 ))}

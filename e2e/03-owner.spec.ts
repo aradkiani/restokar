@@ -154,6 +154,42 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
     expect(after.code).toBe(before.code);
   });
 
+  test("a paid renewal gets a printable receipt with both parties on it", async ({
+    page,
+  }) => {
+    // Renew the plan the venue is already on, through the test gateway.
+    const current = await one<{ code: string }>(
+      `SELECT p.code FROM "Subscription" s JOIN "Plan" p ON p.id = s."planId"
+         JOIN "Restaurant" r ON r.id = s."restaurantId" WHERE r.slug = 'cafe-narenj'`,
+    );
+    const start = await page.request.post("/api/subscription/checkout", {
+      data: { planCode: current.code, interval: "monthly" },
+    });
+    expect(start.ok(), await start.text()).toBeTruthy();
+    const { data } = await start.json();
+    await page.goto(data.paymentUrl);
+    await page.locator('a[href*="Status=OK"]').click();
+    await page.waitForURL(/\/dashboard\/subscription/);
+
+    const paid = await one<{ id: string; amount: number }>(
+      `SELECT p.id, p.amount FROM "Payment" p JOIN "Restaurant" r ON r.id = p."restaurantId"
+        WHERE r.slug = 'cafe-narenj' AND p.purpose = 'SUBSCRIPTION' AND p.status = 'PAID'
+        ORDER BY p."createdAt" DESC LIMIT 1`,
+    );
+    // Opens in a new tab; follow its address in this one.
+    const link = page.getByRole("link", { name: "رسید" }).first();
+    await expect(link).toHaveAttribute("href", `/print/receipt/${paid.id}`);
+    await page.goto(`/print/receipt/${paid.id}`);
+    await expect(page.getByRole("heading", { name: "رسید پرداخت اشتراک" })).toBeVisible();
+    await expect(page.locator("main")).toContainText("کافه نارنج");
+    await expect(page.locator("main")).toContainText("درگاه آزمایشی");
+
+    // Someone else's receipt is not found, not shown.
+    await signInWithApi(page.request, PHONES.diziOwner);
+    const foreign = await page.goto(`/print/receipt/${paid.id}`);
+    expect(foreign?.status()).toBe(404);
+  });
+
   test("a contract-only plan cannot be bought online", async ({ page }) => {
     const response = await page.request.post("/api/subscription/checkout", {
       data: { planCode: "tier-chain", interval: "monthly" },

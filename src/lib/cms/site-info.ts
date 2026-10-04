@@ -30,6 +30,13 @@ export interface SiteInfo {
   /** Both parts are needed for the seal to verify; otherwise null. */
   enamad: { id: string; code: string } | null;
   announcement: { text: string; href: string | null } | null;
+  /** What a payment receipt prints about the seller. Empty fields are omitted. */
+  legal: {
+    name: string;
+    nationalId: string | null;
+    economicCode: string | null;
+    postalCode: string | null;
+  };
 }
 
 const SOCIAL_LABELS: Record<SocialLink["key"], { fa: string; en: string }> = {
@@ -93,6 +100,12 @@ export function siteInfo(
     announcement: announcementLive(site, now)
       ? { text: pick(site.announcementText, locale), href: announcementLink || null }
       : null,
+    legal: {
+      name: str(site.legalName) || pick(site.siteName, locale),
+      nationalId: str(site.nationalId) || null,
+      economicCode: str(site.economicCode) || null,
+      postalCode: str(site.postalCode) || null,
+    },
   };
 }
 
