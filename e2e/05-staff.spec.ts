@@ -220,6 +220,48 @@ test.describe("staff and branch roles", () => {
     }
   });
 
+  test("the cashier closes the till and the difference is recorded", async ({ page }) => {
+    const errors = watchForErrors(page);
+    await signInWithApi(page.request, PHONES.narenjBarista);
+    try {
+      await page.goto("/dashboard/orders/close");
+      await expect(page.getByRole("heading", { name: "بستن صندوق" })).toBeVisible();
+      const expected = await one<{ expected: string }>(
+        `SELECT COALESCE(SUM(o.total), 0) AS expected FROM "Order" o
+          JOIN "Restaurant" r ON r.id = o."restaurantId"
+          WHERE r.slug = 'cafe-narenj' AND o."paymentMethod" = 'CASH_ON_SITE'
+            AND o."paymentStatus" = 'PAID'
+            AND (o.status <> 'CANCELED' OR o."refundedAt" IS NULL)
+            AND o."placedAt" >= date_trunc('day', now() AT TIME ZONE 'Asia/Tehran') AT TIME ZONE 'Asia/Tehran'`,
+      );
+      // 1,000 Toman short.
+      const counted = Math.max(0, Number(expected.expected) - 1000);
+      await page.getByLabel(/مبلغ شمارش‌شده/).fill(String(counted));
+      if (Number(expected.expected) >= 1000) {
+        await expect(page.locator("main")).toContainText("کسری");
+      }
+      await page.getByRole("button", { name: "ثبت بستن صندوق" }).click();
+      await expect(page.getByRole("button", { name: "ثبت دوبارهٔ شمارش" })).toBeVisible();
+
+      const row = await one<{ countedCash: number; expectedCash: number }>(
+        `SELECT c."countedCash", c."expectedCash" FROM "DailyClose" c
+          JOIN "Restaurant" r ON r.id = c."restaurantId" WHERE r.slug = 'cafe-narenj'
+          ORDER BY c."closedAt" DESC LIMIT 1`,
+      );
+      expect(row.countedCash).toBe(counted);
+      expect(row.expectedCash).toBe(Number(expected.expected));
+
+      await page.goto("/print/close");
+      await expect(page.locator("main")).toContainText("پول نقدی که باید در صندوق باشد");
+      expect(errors).toEqual([]);
+    } finally {
+      await db.query(
+        `DELETE FROM "DailyClose" WHERE "restaurantId" =
+           (SELECT id FROM "Restaurant" WHERE slug = 'cafe-narenj')`,
+      );
+    }
+  });
+
   test("a branch manager cannot edit the chain's menu", async ({ page }) => {
     await signInWithApi(page.request, PHONES.vanakManager);
     const response = await page.request.post("/api/products", {

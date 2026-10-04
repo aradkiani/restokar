@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   BellRing,
@@ -388,6 +389,13 @@ export function KitchenBoard({
 
         <div className="flex flex-wrap items-center gap-2">
           <SoldOutButton initialCount={soldOutCount} />
+          <Link
+            href="/dashboard/orders/close"
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-300 bg-surface px-3 text-sm font-bold text-ink-800 hover:border-ink-400 sm:px-4"
+          >
+            <Wallet className="size-4" />
+            {t.cashClose.open}
+          </Link>
           <button
             type="button"
             onClick={() => {

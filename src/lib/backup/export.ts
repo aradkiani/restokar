@@ -90,6 +90,8 @@ const TABLE_ORDER = [
   "MenuDailyView",
   // After Order, which it references.
   "OrderReview",
+  // The cashier's end-of-day record; references Restaurant only.
+  "DailyClose",
 ] as const;
 
 /**

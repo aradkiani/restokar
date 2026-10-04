@@ -143,6 +143,8 @@ enum AuditAction {
   SOLD_OUT_CHANGED
   /// A cashier settled every open order on a table in cash at once.
   TABLE_SETTLED
+  /// The end-of-day cash close was recorded (or corrected) for a site.
+  DAY_CLOSED
 }
 
 /// Where a campaign is in its life.
@@ -502,6 +504,7 @@ model Restaurant {
   bundleItems          ProductBundleItem[]
   pairStats            ProductPairStat[]
   soldOut              SoldOutProduct[]
+  dailyCloses          DailyClose[]
   customers            Customer[]
   campaigns            Campaign[]
   smsBroadcasts        SmsBroadcast[]
@@ -2221,6 +2224,34 @@ model ContentVersion {
   restoredFrom Int?
 
   @@unique([documentKey, version])
+}
+
+/// The end-of-day cash close for one site and one trading day.
+///
+/// `summary` is the day's figures as they stood when it was closed (see
+/// DaySummary in src/lib/cash-close.ts), kept as recorded so a late refund or
+/// a corrected order does not silently rewrite what the cashier signed off.
+/// Closing the same day again replaces it, and the audit log keeps both.
+model DailyClose {
+  id            String     @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  /// 00:00 of the trading day in APP_TIME_ZONE.
+  day           DateTime
+  summary       Json
+  /// Whole Toman, like every money column.
+  expectedCash  Int
+  countedCash   Int
+  /// counted − expected: positive is a surplus, negative a shortfall.
+  difference    Int
+  note          String?
+  closedById    String?
+  /// Who closed it, as they signed in — survives the account being removed.
+  closedByLabel String
+  closedAt      DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([restaurantId, day])
 }
 
 /// A dish the kitchen has run out of, at one site, until a given moment.
