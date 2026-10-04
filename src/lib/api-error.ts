@@ -15,7 +15,9 @@ import type { ApiFailure } from "./client-api";
 export function localizeApiError(error: ApiFailure["error"], t: Dictionary): string {
   const codes = t.errors.codes as Record<string, string | undefined>;
   const byCode = error.code ? codes[error.code] : undefined;
-  if (byCode) return byCode;
+  // "{name}" in a message is filled from the error's details, so a guest reads
+  // «لاته» امروز تمام شده است rather than a sentence with a hole in it.
+  if (byCode) return byCode.replace("{name}", error.details?.name ?? "");
 
   // Unknown code: prefer the server's message over an empty banner, but never
   // show a bare internal string like "Validation failed".

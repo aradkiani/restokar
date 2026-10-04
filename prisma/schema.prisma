@@ -139,6 +139,8 @@ enum AuditAction {
   CONTENT_RESTORED
   /// The platform admin changed a plan; old and new values are in `metadata`.
   PLAN_UPDATED
+  /// Staff marked a dish sold out for the day, or back in stock.
+  SOLD_OUT_CHANGED
 }
 
 /// Where a campaign is in its life.
@@ -497,6 +499,7 @@ model Restaurant {
   featuredEvents       FeaturedProductEvent[]
   bundleItems          ProductBundleItem[]
   pairStats            ProductPairStat[]
+  soldOut              SoldOutProduct[]
   customers            Customer[]
   campaigns            Campaign[]
   smsBroadcasts        SmsBroadcast[]
@@ -836,6 +839,8 @@ model Product {
   recommendedOrderItems OrderItem[]       @relation("OrderItemRecommendedFrom")
   /// Campaigns using this dish as their optional context.
   campaigns             Campaign[]
+  /// Sold out for the rest of the day at one site — see SoldOutProduct.
+  soldOutAt             SoldOutProduct[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2203,6 +2208,28 @@ model ContentVersion {
   restoredFrom Int?
 
   @@unique([documentKey, version])
+}
+
+/// A dish the kitchen has run out of, at one site, until a given moment.
+///
+/// Per site rather than a column on Product: a chain's dishes belong to the
+/// chain owner, and the Tajrish branch running out of kebab says nothing about
+/// Vanak. `until` is the start of the next trading day in APP_TIME_ZONE, so it
+/// clears itself overnight — nobody has to remember to switch it back on.
+model SoldOutProduct {
+  id           String     @id @default(cuid())
+  /// The site that ran out (a branch, or a single venue).
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  until        DateTime
+  createdAt    DateTime   @default(now())
+  /// Who marked it, for the audit trail shown to the owner.
+  createdBy    String?
+
+  @@unique([restaurantId, productId])
+  @@index([restaurantId, until])
 }
 
 /// Singleton row of operator-editable platform settings.

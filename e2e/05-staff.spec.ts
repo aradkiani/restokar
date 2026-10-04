@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { PHONES, one } from "./support/env";
+import { PHONES, db, one } from "./support/env";
 import { signInWithApi, watchForErrors } from "./support/session";
 
 test.describe("staff and branch roles", () => {
@@ -53,6 +53,77 @@ test.describe("staff and branch roles", () => {
     await page.goto("/dashboard");
     await expect(page.getByRole("link", { name: "افزودن محصول" })).toHaveCount(0);
     await expect(page.locator("main")).not.toContainText("۰ محصولات");
+  });
+
+  test("a dish marked sold out at one branch stays on sale at the other", async ({
+    page,
+    request,
+  }) => {
+    const dish = await one<{ id: string; name: string }>(
+      `SELECT p.id, p.name FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
+        WHERE r.slug = 'pizza-noon' AND p."isAvailable"
+          AND NOT EXISTS (SELECT 1 FROM "ProductOptionGroup" g WHERE g."productId" = p.id)
+        ORDER BY p.price LIMIT 1`,
+    );
+    const order = (slug: string) =>
+      request.post("/api/public/orders", {
+        data: {
+          slug,
+          tableNumber: "4",
+          customerName: "آزمون تمام‌شد",
+          items: [{ productId: dish.id, quantity: 1 }],
+        },
+      });
+
+    await signInWithApi(page.request, PHONES.vanakManager);
+    try {
+      const marked = await page.request.post("/api/orders/sold-out", {
+        data: { productId: dish.id, soldOut: true },
+      });
+      expect(marked.ok(), await marked.text()).toBeTruthy();
+
+      // Refused at Vanak, worded for the guest with the dish's name…
+      const refused = await order("pizza-noon-vanak");
+      expect(refused.status()).toBe(409);
+      const body = await refused.json();
+      expect(body.error.code).toBe("ITEM_SOLD_OUT");
+      expect(body.error.details.name).toBe(dish.name);
+
+      // …and still sold at Tajrish.
+      expect((await order("pizza-noon-tajrish")).ok()).toBeTruthy();
+
+      // Back in stock: Vanak sells it again.
+      await page.request.post("/api/orders/sold-out", {
+        data: { productId: dish.id, soldOut: false },
+      });
+      expect((await order("pizza-noon-vanak")).ok()).toBeTruthy();
+    } finally {
+      await db.query(`DELETE FROM "SoldOutProduct" WHERE "productId" = $1`, [dish.id]);
+    }
+  });
+
+  test("the kitchen marks a dish sold out from the board", async ({ page }) => {
+    const errors = watchForErrors(page);
+    await signInWithApi(page.request, PHONES.narenjBarista);
+    await page.goto("/dashboard/orders");
+    try {
+      await page
+        .getByRole("button", { name: /^تمام شد/ })
+        .first()
+        .click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByText("غذاهای تمام‌شدهٔ امروز")).toBeVisible();
+      await dialog.getByRole("button", { name: "تمام شد" }).first().click();
+      await expect(dialog.getByRole("button", { name: "موجود شد" })).toHaveCount(1);
+      await dialog.getByRole("button", { name: "موجود شد" }).click();
+      await expect(dialog.getByRole("button", { name: "موجود شد" })).toHaveCount(0);
+      expect(errors).toEqual([]);
+    } finally {
+      await db.query(
+        `DELETE FROM "SoldOutProduct" WHERE "restaurantId" =
+           (SELECT id FROM "Restaurant" WHERE slug = 'cafe-narenj')`,
+      );
+    }
   });
 
   test("a branch manager cannot edit the chain's menu", async ({ page }) => {

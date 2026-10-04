@@ -79,7 +79,7 @@ export function route<Args extends unknown[]>(
       return await handler(...args);
     } catch (error) {
       if (error instanceof HttpError) {
-        return fail(error.status, error.message, error.code);
+        return fail(error.status, error.message, error.code, error.details);
       }
       if (error instanceof ZodError) {
         return fail(422, "Validation failed", "VALIDATION_ERROR", flattenZodError(error));

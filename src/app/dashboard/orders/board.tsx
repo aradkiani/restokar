@@ -38,6 +38,7 @@ import {
 } from "@/lib/constants";
 import { isRetired } from "@/lib/order-retirement";
 import { NEXT_STATUS } from "@/lib/order-flow";
+import { SoldOutButton } from "./sold-out-dialog";
 import { OrderDetailDialog } from "./order-detail";
 import type { Locale } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
@@ -88,10 +89,13 @@ export function KitchenBoard({
   initialOrders,
   initialCalls,
   locale,
+  soldOutCount = 0,
 }: {
   initialOrders: KitchenOrder[];
   initialCalls: StaffCall[];
   locale: Locale;
+  /** Dishes this site has marked sold out today, for the header badge. */
+  soldOutCount?: number;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -328,14 +332,17 @@ export function KitchenBoard({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setSoundOn((v) => !v)}
-          className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-300 bg-surface px-4 text-sm font-bold text-ink-800 hover:border-ink-400"
-        >
-          {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-          {soundOn ? t.kitchen.soundOn : t.kitchen.soundOff}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <SoldOutButton initialCount={soldOutCount} />
+          <button
+            type="button"
+            onClick={() => setSoundOn((v) => !v)}
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-300 bg-surface px-4 text-sm font-bold text-ink-800 hover:border-ink-400"
+          >
+            {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+            {soundOn ? t.kitchen.soundOn : t.kitchen.soundOff}
+          </button>
+        </div>
       </header>
 
       {/*

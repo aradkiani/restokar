@@ -142,7 +142,14 @@ function parseSocialLinks(value: unknown): SocialLink[] {
   return parsed.success ? (parsed.data as SocialLink[]) : [];
 }
 
-function toPublicMenu(restaurant: RestaurantWithMenu): PublicMenu {
+/**
+ * @param soldOut Dishes this site has run out of today (see SoldOutProduct).
+ *   Empty for the owner's design preview, which shows the whole menu.
+ */
+function toPublicMenu(
+  restaurant: RestaurantWithMenu,
+  soldOut: ReadonlySet<string> = new Set(),
+): PublicMenu {
   const templateMeta = getTemplateMeta(restaurant.templateId);
 
   /*
@@ -185,6 +192,7 @@ function toPublicMenu(restaurant: RestaurantWithMenu): PublicMenu {
           availability: resolveAvailability(
             {
               isAvailable: product.isAvailable,
+              soldOut: soldOut.has(product.id),
               product: {
                 scheduleEnabled: product.scheduleEnabled,
                 windows: product.availabilityWindows,
@@ -548,7 +556,17 @@ export async function getPublicMenu(slug: string): Promise<PublicMenu | null> {
     if (Date.now() > graceEndsAt) return null;
   }
 
-  return toPublicMenu(restaurant);
+  /*
+    Sold out is per site: `venue.id` is the branch (or the single venue) the
+    guest is standing in, even though the dishes are the chain's. Read here
+    rather than through sold-out-server, which itself depends on this module.
+  */
+  const soldOut = await prisma.soldOutProduct.findMany({
+    where: { restaurantId: venue.id, until: { gt: new Date() } },
+    select: { productId: true },
+  });
+
+  return toPublicMenu(restaurant, new Set(soldOut.map((row) => row.productId)));
 }
 
 /**

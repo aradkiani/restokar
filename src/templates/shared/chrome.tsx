@@ -9,6 +9,7 @@ import { useCart } from "./cart";
 import { useMenu } from "./runtime";
 import { formatMoney, formatNumber, localizeDigits, toEnglishDigits } from "@/lib/format";
 import type { MenuCategory } from "../types";
+import { localizeApiError } from "@/lib/api-error";
 
 /**
  * Chrome shared by every template: search, cart affordances and category
@@ -511,7 +512,7 @@ function StaffCallButton() {
 
       if (!response.ok || !payload.ok) {
         setState("error");
-        setMessage(payload?.error?.message ?? t.common.error);
+        setMessage(payload?.error ? localizeApiError(payload.error, t) : t.common.error);
         return;
       }
 

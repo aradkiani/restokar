@@ -101,6 +101,9 @@ const TABLE_ORDER = [
  * `OtpChallenge` holds sign-in codes that expire in two minutes; restoring one
  * could only ever revive a code that should be dead.
  * `RateLimit` is a set of counters that are meaningless minutes later.
+ * `SoldOutProduct` marks dishes run out of until the next morning; a restore
+ * is never the same service day, and the kitchen marks them again in a tap.
+ * (A restore's TRUNCATE … CASCADE clears it along with the products.)
  * `_prisma_migrations` describes the schema, which is part of the core project
  * and comes back with the code.
  */
@@ -108,6 +111,7 @@ const EXCLUDED_TABLES = new Set([
   "Session",
   "OtpChallenge",
   "RateLimit",
+  "SoldOutProduct",
   "_prisma_migrations",
 ]);
 

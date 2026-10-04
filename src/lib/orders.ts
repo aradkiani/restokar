@@ -119,6 +119,8 @@ export interface PricedProduct {
   price: number;
   costPrice: number;
   isAvailable: boolean;
+  /** Run out of at the ordering site today (see SoldOutProduct). */
+  soldOut?: boolean;
   /**
    * Opening hours for the dish and for the category it sits in.
    *
@@ -227,6 +229,7 @@ export function priceOrderLines(
     const availability = resolveAvailability(
       {
         isAvailable: product.isAvailable,
+        soldOut: product.soldOut,
         product: product.schedule ?? UNSCHEDULED,
         category: product.categorySchedule,
       },
@@ -242,13 +245,21 @@ export function priceOrderLines(
           409,
           `«${product.name}» is currently unavailable`,
           "ITEM_UNAVAILABLE",
+          { name: product.name },
         );
+      }
+
+      if (availability.reason === "soldOut") {
+        throw new HttpError(409, `«${product.name}» is sold out today`, "ITEM_SOLD_OUT", {
+          name: product.name,
+        });
       }
 
       throw new HttpError(
         409,
         `«${product.name}» is not being served at the moment`,
         "ITEM_NOT_SCHEDULED",
+        { name: product.name },
       );
     }
 
@@ -322,6 +333,7 @@ function resolveLineOptions(
         422,
         `«${group.name}» must be chosen for «${product.name}»`,
         "OPTION_REQUIRED",
+        { name: product.name },
       );
     }
     if (chosen.length > group.maxSelect) {
@@ -329,6 +341,7 @@ function resolveLineOptions(
         422,
         `Too many choices for «${group.name}»`,
         "OPTION_LIMIT_EXCEEDED",
+        { name: group.name },
       );
     }
 
@@ -338,6 +351,7 @@ function resolveLineOptions(
           409,
           `«${choice.name}» is currently unavailable`,
           "OPTION_UNAVAILABLE",
+          { name: choice.name },
         );
       }
       out.push({
@@ -706,6 +720,20 @@ async function placeOrder(
   });
 
   /*
+    What this site has run out of today. Per site — `restaurant.id` is the
+    branch the guest is in — even though the dishes are the chain's.
+  */
+  const soldOutRows = await prisma.soldOutProduct.findMany({
+    where: {
+      restaurantId: restaurant.id,
+      productId: { in: productIds },
+      until: { gt: new Date() },
+    },
+    select: { productId: true },
+  });
+  const soldOut = new Set(soldOutRows.map((row) => row.productId));
+
+  /*
     Availability is judged at the moment the order is submitted, not when the
     basket was filled. A guest who added a dish at 21:59 and pays at 22:01 is
     refused, which is the whole point of revalidating here.
@@ -714,6 +742,7 @@ async function placeOrder(
     input.items,
     products.map((product) => ({
       ...product,
+      soldOut: soldOut.has(product.id),
       schedule: {
         scheduleEnabled: product.scheduleEnabled,
         windows: product.availabilityWindows,

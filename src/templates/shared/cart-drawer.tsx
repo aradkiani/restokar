@@ -19,6 +19,7 @@ import { RecommendationStrip } from "./recommendations";
 import { formatMoney, localizeDigits, toEnglishDigits } from "@/lib/format";
 import { calculatePrice } from "@/lib/pricing";
 import { useStoredValue, writeStoredValue } from "@/lib/use-stored-value";
+import { localizeApiError } from "@/lib/api-error";
 
 type Step = "cart" | "details";
 
@@ -187,7 +188,11 @@ export function CartDrawer() {
       const payload = await response.json();
 
       if (!response.ok || !payload.ok) {
-        setDiscountReason(payload?.error?.message ?? t.publicMenu.discountCheckFailed);
+        setDiscountReason(
+          payload?.error
+            ? localizeApiError(payload.error, t)
+            : t.publicMenu.discountCheckFailed,
+        );
         return;
       }
 
@@ -304,7 +309,9 @@ export function CartDrawer() {
       const payload = await response.json();
 
       if (!response.ok || !payload.ok) {
-        setError(payload?.error?.message ?? t.common.error);
+        // Worded in the guest's language from the error code (with the dish
+        // name filled in), never the server's internal English message.
+        setError(payload?.error ? localizeApiError(payload.error, t) : t.common.error);
         submitLock.current = false;
         setSubmitting(false);
         return;

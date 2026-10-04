@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { staffCallVisibleSince } from "@/lib/constants";
 import { boardInclude, boardWhere, toBoardOrder } from "@/lib/kitchen-board";
 import { expireAbandonedOnlineOrders } from "@/lib/orders";
+import { soldOutProductIds } from "@/lib/sold-out-server";
 import { KitchenBoard, type KitchenOrder } from "./board";
 
 export const metadata: Metadata = { title: "سفارش‌ها" };
@@ -28,6 +29,8 @@ export default async function OrdersPage() {
 
   const initial: KitchenOrder[] = orders.map(toBoardOrder);
 
+  const soldOut = await soldOutProductIds(restaurantId);
+
   const openCalls = await prisma.staffCall.findMany({
     where: {
       restaurantId,
@@ -49,6 +52,7 @@ export default async function OrdersPage() {
         createdAt: call.createdAt.toISOString(),
       }))}
       locale={locale}
+      soldOutCount={soldOut.size}
     />
   );
 }

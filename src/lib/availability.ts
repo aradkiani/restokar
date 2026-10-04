@@ -55,6 +55,8 @@ export interface Schedulable {
 export type UnavailableReason =
   /** The owner marked it unavailable, or emptied the shelf. */
   | "manual"
+  /** The kitchen ran out of it today (cleared at the start of the next day). */
+  | "soldOut"
   /** Outside its own opening hours. */
   | "schedule"
   /** Its category is outside *its* opening hours. */
@@ -143,6 +145,11 @@ export function resolveAvailability(
   input: {
     /** The existing manual switch. Nothing here overrides it. */
     isAvailable: boolean;
+    /**
+     * Run out of at this site for the rest of the trading day. Resolved by
+     * the caller from SoldOutProduct, which is per site and absolute-time.
+     */
+    soldOut?: boolean;
     product: Schedulable;
     /** Absent for a dish read outside any category context. */
     category?: Schedulable;
@@ -150,6 +157,7 @@ export function resolveAvailability(
   at: ZonedMoment,
 ): AvailabilityState {
   if (!input.isAvailable) return { available: false, reason: "manual" };
+  if (input.soldOut) return { available: false, reason: "soldOut" };
 
   if (input.category && !scheduleAllows(input.category, at)) {
     return { available: false, reason: "category" };
