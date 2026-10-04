@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "./prisma";
 import { endOfDayInZone, startOfDayInZone, zonedParts } from "./time";
 import { COUNTED_ORDER } from "./order-status";
+import { summariseKitchenSpeed, type KitchenSpeed } from "./kitchen-speed";
 import { menuOwnerId } from "./menu";
 
 /**
@@ -374,6 +375,34 @@ export async function getHourlyDistribution(
   for (const order of orders) hours[zonedParts(order.placedAt).hour]!.orders += 1;
 
   return hours;
+}
+
+/**
+ * Placed → ready, over a window. Orders never marked ready are not in it —
+ * there is nothing to measure — and nor are cancellations.
+ */
+export async function getKitchenSpeed(
+  restaurantId: string,
+  window: number | DateRange,
+): Promise<KitchenSpeed> {
+  const { from, to } = resolveRange(window);
+  const orders = await prisma.order.findMany({
+    where: {
+      restaurantId,
+      ...COUNTED,
+      placedAt: { gte: from, lte: to },
+      readyAt: { not: null },
+    },
+    select: { placedAt: true, readyAt: true, serviceType: true },
+  });
+  return summariseKitchenSpeed(
+    orders.map((order) => ({
+      placedAt: order.placedAt,
+      readyAt: order.readyAt!,
+      serviceType: order.serviceType,
+      hour: zonedParts(order.placedAt).hour,
+    })),
+  );
 }
 
 export interface TodayStats {

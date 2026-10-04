@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { QrCode, Receipt, ShoppingBag, TrendingUp, Wallet } from "lucide-react";
+import { QrCode, Receipt, ShoppingBag, Timer, TrendingUp, Wallet } from "lucide-react";
 import { requirePageTab } from "@/lib/auth/guards";
 import { getI18n } from "@/lib/i18n";
 import {
   getCategoryBreakdown,
   getHourlyDistribution,
+  getKitchenSpeed,
   getRangeSummary,
   getTopProducts,
   resolveRange,
@@ -28,6 +29,7 @@ import {
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ColumnChart, RankedBars, StatTile, TrendChart } from "@/components/charts";
 import { cn } from "@/lib/utils";
+import { ORDER_URGENT_MINUTES } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "گزارش فروش" };
 export const dynamic = "force-dynamic";
@@ -81,6 +83,7 @@ export default async function AnalyticsPage({
     recommendations,
     featured,
     insightResult,
+    speed,
   ] = await Promise.all([
     getRangeSummary(restaurantId, days),
     // The preceding window of equal length, for the period-over-period delta.
@@ -99,7 +102,11 @@ export default async function AnalyticsPage({
     // Its own window, chosen separately: the tile deltas describe the chart's
     // range, while the insights answer "what changed lately?".
     getSalesInsights(restaurantId, preset),
+    getKitchenSpeed(restaurantId, days),
   ]);
+
+  const mins = (value: number | null) =>
+    value === null ? "—" : `${formatNumber(value, locale)} ${t.analytics.minutes}`;
 
   const previousRevenue = previous.revenue - summary.revenue;
   const delta =
@@ -296,6 +303,86 @@ export default async function AnalyticsPage({
               value: hour.orders,
             }))}
           />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>{t.analytics.kitchenSpeed}</CardTitle>
+            <p className="mt-0.5 text-xs text-ink-500">{t.analytics.kitchenSpeedHint}</p>
+          </div>
+          <span className="text-xs font-semibold text-ink-500">{rangeLabel[days]}</span>
+        </CardHeader>
+        <CardBody className="space-y-4">
+          {speed.measured === 0 ? (
+            <p className="text-sm text-ink-500">{t.analytics.prepNone}</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatTile
+                  label={t.analytics.prepMedian}
+                  value={mins(speed.median)}
+                  tone="brand"
+                  icon={<Timer className="size-4" />}
+                  hint={
+                    speed.byService.TAKEAWAY.count > 0
+                      ? t.analytics.prepByService
+                          .replace("{dineIn}", mins(speed.byService.DINE_IN.median))
+                          .replace("{takeaway}", mins(speed.byService.TAKEAWAY.median))
+                      : undefined
+                  }
+                />
+                <StatTile label={t.analytics.prepP90} value={mins(speed.p90)} />
+                <StatTile
+                  label={t.analytics.prepWithinTarget.replace(
+                    "{minutes}",
+                    formatNumber(ORDER_URGENT_MINUTES, locale),
+                  )}
+                  value={
+                    speed.withinTarget === null
+                      ? "—"
+                      : formatPercent(speed.withinTarget, locale)
+                  }
+                  tone={
+                    speed.withinTarget !== null && speed.withinTarget < 0.8
+                      ? "negative"
+                      : "positive"
+                  }
+                />
+                <StatTile
+                  label={t.analytics.prepMeasured}
+                  value={formatNumber(speed.measured, locale)}
+                />
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-semibold text-ink-500">
+                  {t.analytics.prepByHour}
+                </p>
+                <ColumnChart
+                  locale={locale}
+                  emptyLabel={t.analytics.noData}
+                  data={speed.byHour.map((hour) => ({
+                    label: localizeDigits(
+                      `${String(hour.hour).padStart(2, "0")}:00`,
+                      locale,
+                    ),
+                    value: hour.median,
+                  }))}
+                />
+              </div>
+
+              {speed.skipped > 0 && (
+                <p className="text-xs text-ink-500">
+                  {t.analytics.prepSkipped.replace(
+                    "{count}",
+                    formatNumber(speed.skipped, locale),
+                  )}
+                </p>
+              )}
+            </>
+          )}
         </CardBody>
       </Card>
 

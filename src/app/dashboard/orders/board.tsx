@@ -30,15 +30,9 @@ import {
   formatRelative,
   formatTime,
   localizeDigits,
-  minutesSince,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import {
-  ORDER_POLL_MS,
-  ORDER_URGENT_MINUTES,
-  REFUND_CLEAR_AFTER_MS,
-  needsRefund,
-} from "@/lib/constants";
+import { ORDER_POLL_MS, REFUND_CLEAR_AFTER_MS, needsRefund } from "@/lib/constants";
 import { isRetired } from "@/lib/order-retirement";
 import { NEXT_STATUS } from "@/lib/order-flow";
 import { SoldOutButton } from "./sold-out-dialog";
@@ -68,6 +62,7 @@ function printTicketInBackground(orderId: string) {
 import { OrderDetailDialog } from "./order-detail";
 import type { Locale } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
+import { minutesBetween, waitLevel } from "@/lib/kitchen-speed";
 
 type Status = "RECEIVED" | "PREPARING" | "READY" | "DELIVERED" | "CANCELED";
 
@@ -628,10 +623,14 @@ export function KitchenBoard({
 
                 <ul className="space-y-3">
                   {columnOrders.map((order) => {
-                    const waiting = minutesSince(order.placedAt);
-                    // Anything sitting past 20 minutes gets flagged red.
-                    const urgent =
-                      status !== "DELIVERED" && waiting >= ORDER_URGENT_MINUTES;
+                    // Read off the shared clock, so the render stays pure and
+                    // every card ages together. Amber first, then red.
+                    const waiting =
+                      now === 0
+                        ? 0
+                        : minutesBetween(new Date(order.placedAt), new Date(now));
+                    const level = status === "DELIVERED" ? "ok" : waitLevel(waiting);
+                    const urgent = level === "late";
 
                     return (
                       <li
@@ -640,7 +639,9 @@ export function KitchenBoard({
                           "rounded-[var(--radius-md)] border bg-surface p-3 shadow-[var(--shadow-soft)] transition-all",
                           urgent
                             ? "border-red-300 ring-2 ring-red-100"
-                            : "border-ink-200",
+                            : level === "warn"
+                              ? "border-amber-300 ring-2 ring-amber-100"
+                              : "border-ink-200",
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -671,13 +672,20 @@ export function KitchenBoard({
 
                           <div className="flex shrink-0 items-center gap-1.5">
                             <span
+                              title={formatTime(order.placedAt, locale)}
                               className={cn(
                                 "flex items-center gap-1 text-[11px] font-bold tabular-nums",
-                                urgent ? "text-red-600" : "text-ink-500",
+                                urgent
+                                  ? "text-red-600"
+                                  : level === "warn"
+                                    ? "text-amber-700"
+                                    : "text-ink-500",
                               )}
                             >
                               <Clock className="size-3" />
-                              {formatTime(order.placedAt, locale)}
+                              {status === "DELIVERED" || now === 0
+                                ? formatTime(order.placedAt, locale)
+                                : `${formatNumber(waiting, locale)} ${t.analytics.minutes}`}
                             </span>
 
                             {/*
