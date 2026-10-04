@@ -67,6 +67,47 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
     await db.query(`DELETE FROM "Product" WHERE name = $1`, [name]);
   });
 
+  test("tags a dish as spicy and guests can filter the menu for it", async ({
+    page,
+  }, testInfo) => {
+    const errors = watchForErrors(page);
+    const name = `خوراک تند ${testInfo.project.name}`;
+    await db.query(`DELETE FROM "Product" WHERE name = $1`, [name]);
+    await page.goto("/dashboard/menu");
+    await page.getByRole("button", { name: "افزودن محصول" }).first().click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("نام محصول").fill(name);
+    await dialog.getByLabel("قیمت", { exact: true }).fill("۹۵۰۰۰");
+    await dialog.getByRole("button", { name: "تند", exact: true }).click();
+    await expect(
+      dialog.getByRole("button", { name: "تند", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await dialog
+      .getByRole("button", { name: /ذخیره|افزودن|ثبت/ })
+      .last()
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const saved = await one<{ dietaryTags: string[] }>(
+      `SELECT "dietaryTags" FROM "Product" WHERE name = $1`,
+      [name],
+    );
+    expect(saved.dietaryTags).toEqual(["spicy"]);
+
+    // Guests: the spicy filter exists only because this dish does.
+    await page.goto("/menu/cafe-narenj");
+    const filters = page.getByRole("group", { name: "فیلتر منو" });
+    await filters.getByRole("button", { name: "تند", exact: true }).click();
+    await expect(page.getByText(name)).toBeVisible();
+    await expect(page.getByText("اسپرسو", { exact: true })).toHaveCount(0);
+    await page.getByText(name).first().click();
+    await expect(
+      page.getByRole("dialog").getByRole("list", { name: "ویژگی‌های غذا" }),
+    ).toContainText("تند");
+
+    await db.query(`DELETE FROM "Product" WHERE name = $1`, [name]);
+    expect(errors).toEqual([]);
+  });
+
   test("the table limit is explained, not a silent failure", async ({ page }) => {
     const response = await page.request.post("/api/tables", { data: { number: "99" } });
     expect(response.status()).toBe(402);

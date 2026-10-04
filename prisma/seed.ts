@@ -23,6 +23,7 @@ import {
   RESTAURANT_MENU,
   SOUVENIR_MENU,
   type SeedCategory,
+  SEED_DISH_TAGS,
 } from "./menu-data";
 
 try {
@@ -375,6 +376,7 @@ async function refreshDemoContent(
           priceExact: product.price,
           costPrice: product.cost,
           prepMinutes: product.prep ?? null,
+          dietaryTags: SEED_DISH_TAGS[product.name] ?? [],
           isFeatured: product.featured ?? false,
           sortOrder: productIndex,
           infoSections: {
@@ -595,6 +597,7 @@ async function seedRestaurant(options: {
           priceExact: product.price,
           costPrice: product.cost,
           prepMinutes: product.prep ?? null,
+          dietaryTags: SEED_DISH_TAGS[product.name] ?? [],
           isFeatured: product.featured ?? false,
           sortOrder: productIndex,
           infoSections: {

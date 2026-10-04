@@ -44,6 +44,7 @@ import {
   RESTAURANT_MENU,
   SOUVENIR_MENU,
   type SeedCategory,
+  SEED_DISH_TAGS,
 } from "./menu-data";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL as string });
@@ -769,6 +770,7 @@ async function createVenue(spec: VenueSpec) {
           price: product.price,
           priceExact: product.price,
           costPrice: product.cost,
+          dietaryTags: SEED_DISH_TAGS[product.name] ?? [],
           imageUrl,
           isFeatured: product.featured ?? pi === 0,
           // One sold-out dish per menu, so the unavailable state is visible.

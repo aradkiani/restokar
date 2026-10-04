@@ -15,7 +15,13 @@
  */
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { CAFE_MENU, PERSIAN_MENU, CUSTOMER_NAMES, type SeedCategory } from "./menu-data";
+import {
+  CAFE_MENU,
+  PERSIAN_MENU,
+  CUSTOMER_NAMES,
+  SEED_DISH_TAGS,
+  type SeedCategory,
+} from "./menu-data";
 
 // Prisma 7 no longer auto-loads .env; the other seeders do the same.
 try {
@@ -136,6 +142,7 @@ async function ensureMenu(
           priceExact: product.price,
           costPrice: product.cost,
           prepMinutes: product.prep ?? null,
+          dietaryTags: SEED_DISH_TAGS[product.name] ?? [],
           sortOrder: productOrder++,
         },
         select: { id: true, name: true, price: true, costPrice: true },

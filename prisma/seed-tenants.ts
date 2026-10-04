@@ -24,6 +24,7 @@ import {
   PERSIAN_MENU,
   RESTAURANT_MENU,
   type SeedCategory,
+  SEED_DISH_TAGS,
 } from "./menu-data";
 
 try {
@@ -252,6 +253,7 @@ async function createMenu(
           priceExact: product.price,
           costPrice: product.cost,
           prepMinutes: product.prep ?? null,
+          dietaryTags: SEED_DISH_TAGS[product.name] ?? [],
           isFeatured: product.featured ?? false,
           sortOrder: productIndex,
           infoSections: {

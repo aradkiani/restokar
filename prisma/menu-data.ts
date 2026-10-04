@@ -6,6 +6,8 @@
  * it runs main() on import.
  */
 
+import type { DishTag } from "../src/lib/dish-tags";
+
 export interface SeedProduct {
   name: string;
   nameEn: string;
@@ -17,6 +19,40 @@ export interface SeedProduct {
   featured?: boolean;
   info: { title: string; content: string; icon: string }[];
 }
+
+/**
+ * Dietary tags for the demo dishes, by name, so every seeder tags the same
+ * dish the same way without each product literal growing another field.
+ */
+export const SEED_DISH_TAGS: Record<string, DishTag[]> = {
+  لاته: ["containsDairy"],
+  موکا: ["containsDairy"],
+  "چیزکیک نیویورکی": ["vegetarian", "containsDairy"],
+  "براونی شکلاتی": ["vegetarian", "containsNuts", "containsDairy"],
+  "کروسان بادام": ["vegetarian", "containsNuts", "containsDairy"],
+  "لیموناد نعناع": ["vegan", "glutenFree"],
+  "اسموتی انبه": ["vegan", "glutenFree"],
+  "برگر مرغ سوخاری": ["spicy"],
+  "برگر گیاهی": ["vegetarian"],
+  "پیتزا مارگاریتا": ["vegetarian", "containsDairy"],
+  "پیتزا پپرونی": ["spicy", "containsDairy"],
+  "سیب‌زمینی سرخ‌کرده": ["vegan"],
+  "سالاد سزار": ["containsDairy"],
+  "دوغ سنتی": ["glutenFree", "containsDairy"],
+  "جوجه‌کباب زعفرانی": ["glutenFree"],
+  فسنجان: ["glutenFree", "containsNuts"],
+  "کشک بادمجان": ["vegetarian", "containsDairy"],
+  "ماست و خیار": ["vegetarian", "glutenFree", "containsDairy"],
+  "سوپ قارچ ترافل": ["vegetarian", "containsDairy"],
+  "فیله ماهی سالمون": ["glutenFree"],
+  "سوفله شکلات": ["vegetarian", "containsDairy"],
+  "گز اصفهان": ["containsNuts"],
+  "سوهان قم": ["containsNuts", "containsDairy"],
+  "پسته اکبری": ["vegan", "glutenFree", "containsNuts"],
+  "سالاد چغندر و پنیر بزی": ["vegetarian", "glutenFree", "containsDairy"],
+  "ریزوتو قارچ پورچینی": ["vegetarian", "glutenFree", "containsDairy"],
+  "املت گوجه": ["vegetarian"],
+};
 
 export interface SeedCategory {
   name: string;
