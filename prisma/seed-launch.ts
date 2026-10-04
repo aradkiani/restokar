@@ -700,7 +700,8 @@ async function createVenue(spec: VenueSpec) {
 
   // Stock first, so recipes can point at it.
   const stockIds = new Map<string, string>();
-  const openings: { itemId: string; milli: number; cost: number | null }[] = [];
+  const openings: { itemId: string; milli: number; cost: number | null; unit: string }[] =
+    [];
   for (const item of spec.stock) {
     const created = await prisma.inventoryItem.create({
       data: {
@@ -720,7 +721,12 @@ async function createVenue(spec: VenueSpec) {
       priceUnit: item.priceUnit,
     });
     seedUnitCost.set(created.id, cost);
-    openings.push({ itemId: created.id, milli: Math.round(item.opening * 1000), cost });
+    openings.push({
+      itemId: created.id,
+      milli: Math.round(item.opening * 1000),
+      cost,
+      unit: item.unit,
+    });
   }
   await openShelves(restaurant.id, openings, spec.historyDays);
 
@@ -819,6 +825,17 @@ async function createVenue(spec: VenueSpec) {
     where: { id: restaurant.id },
     data: { orderSequence: sequence },
   });
+  const supplier =
+    openings.length > 0
+      ? await prisma.supplier.create({
+          data: {
+            restaurantId: restaurant.id,
+            name: "پخش مواد غذایی البرز",
+            phone: "02100000000",
+          },
+        })
+      : null;
+  await restock(restaurant.id, openings, supplier?.id ?? null, spec.ownerName);
 
   await createExpenses(rand, restaurant.id, spec.historyDays);
 
@@ -866,6 +883,7 @@ async function createVenue(spec: VenueSpec) {
       where: { id: site.id },
       data: { orderSequence: branchSequence },
     });
+    await restock(site.id, openings, supplier?.id ?? null, branch.managerName);
     await createExpenses(rng(`${branch.slug}-x`), site.id, spec.historyDays);
   }
 
@@ -910,6 +928,80 @@ async function openShelves(
       createdAt: new Date(Date.now() - (historyDays + 1) * DAY_MS),
     })),
   });
+}
+
+/**
+ * A delivery three days ago, topping each shelf back up to its opening level,
+ * so the demo shows a purchase and stock that is not below zero. Written as
+ * the real code writes it: an invoice, its lines, PURCHASE ledger rows at the
+ * paid price, and the level moved by the same amount.
+ */
+async function restock(
+  siteId: string,
+  openings: { itemId: string; milli: number; cost: number | null; unit: string }[],
+  supplierId: string | null,
+  byLabel: string,
+) {
+  const levels = await prisma.stockLevel.findMany({
+    where: { restaurantId: siteId, itemId: { in: openings.map((o) => o.itemId) } },
+    select: { itemId: true, quantityMilli: true, avgCost: true },
+  });
+  const lines = openings
+    .map((o) => {
+      const level = levels.find((l) => l.itemId === o.itemId);
+      const short = o.milli - (level?.quantityMilli ?? 0);
+      // Whole units, like a real order to a supplier.
+      const milli = Math.ceil(Math.max(0, short) / 1000) * 1000;
+      return { ...o, milli, level };
+    })
+    .filter((line) => line.milli > 0 && line.cost !== null);
+  if (lines.length === 0) return;
+
+  const at = new Date(Date.now() - 3 * DAY_MS);
+  const priced = lines.map((line) => ({
+    ...line,
+    lineTotal: Math.round((line.milli / 1000) * line.cost!),
+  }));
+  const purchase = await prisma.purchase.create({
+    data: {
+      restaurantId: siteId,
+      supplierId,
+      purchasedAt: at,
+      invoiceNumber: "1042",
+      total: priced.reduce((sum, line) => sum + line.lineTotal, 0),
+      paymentStatus: "PAID",
+      paidAt: at,
+      createdByLabel: byLabel,
+      createdAt: at,
+      lines: {
+        create: priced.map((line) => ({
+          itemId: line.itemId,
+          quantityMilli: line.milli,
+          unit: line.unit,
+          lineTotal: line.lineTotal,
+        })),
+      },
+    },
+  });
+  for (const line of priced) {
+    await prisma.stockMovement.create({
+      data: {
+        itemId: line.itemId,
+        restaurantId: siteId,
+        deltaMilli: line.milli,
+        reason: "PURCHASE",
+        unitCost: line.cost,
+        purchaseId: purchase.id,
+        actorLabel: byLabel,
+        note: "#1042",
+        createdAt: at,
+      },
+    });
+    await prisma.stockLevel.update({
+      where: { itemId_restaurantId: { itemId: line.itemId, restaurantId: siteId } },
+      data: { quantityMilli: { increment: line.milli } },
+    });
+  }
 }
 
 async function createHistory(

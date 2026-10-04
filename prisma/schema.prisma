@@ -1726,10 +1726,12 @@ model ProductIngredient {
 model StockMovement {
   id     String        @id @default(cuid())
   itemId String
-  /// NoAction rather than Cascade: a row in the ledger outlives any attempt to
-  /// delete its item, which is archived instead. Deleting a whole venue still
-  /// works, because the venue's own cascade removes both in one statement.
-  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction)
+  /// Cascade at the database level, guarded in the app: an item with any
+  /// history is archived, never deleted (DELETE /api/inventory/[id]). A
+  /// NO ACTION key looked stricter but broke deleting a whole venue — Postgres
+  /// runs each cascade as its own inner statement, so the item went before
+  /// the invoices that named it and the check fired half-way through.
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   /// The site whose shelf moved. Null only on rows written before per-site
   /// stock existed; the migration filled those with the item's owner.
@@ -1862,7 +1864,7 @@ model PurchaseLine {
   purchaseId    String
   purchase      Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   itemId        String
-  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction)
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   /// Thousandths of the item's unit, whatever unit it was typed in.
   quantityMilli Int
   /// The unit the amount was typed in, so the invoice reads back as written.
@@ -1899,7 +1901,7 @@ model StocktakeLine {
   stocktakeId   String
   stocktake     Stocktake     @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
   itemId        String
-  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction)
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   /// What the books said at the moment of posting.
   expectedMilli Int
   countedMilli  Int
