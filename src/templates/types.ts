@@ -1,6 +1,7 @@
 import type { ResolvedTheme } from "@/lib/theme";
 import type { Locale } from "@/lib/i18n";
 import type { SocialLink } from "@/lib/socials";
+import type { DishTag } from "@/lib/dish-tags";
 
 /**
  * The contract every menu template renders against.
@@ -123,6 +124,11 @@ export interface MenuProduct {
    */
   featuredOrder: number;
   prepMinutes: number | null;
+  /**
+   * Spicy, vegetarian, contains nuts… Keys in canonical order, unknown ones
+   * already dropped. `<DishTags>` draws them; templates need not know the list.
+   */
+  dietaryTags: DishTag[];
   categoryId: string;
   infoSections: MenuInfoSection[];
   /**

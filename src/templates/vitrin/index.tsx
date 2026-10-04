@@ -4,6 +4,7 @@ import * as React from "react";
 import { ChevronLeft, ChevronRight, Clock, MoveHorizontal } from "lucide-react";
 import type { MenuCategory, MenuProduct, TemplateProps } from "../types";
 import { useAddToCart, useMenu } from "../shared/runtime";
+import { DishTagFilter, DishTagIcons } from "../shared/dish-tags";
 import { useCart } from "../shared/cart";
 import {
   CartBar,
@@ -67,7 +68,9 @@ export default function VitrinTemplate({ data }: TemplateProps) {
   const { t, locale, openProduct } = useMenu();
   const cart = useCart();
   const addToCart = useAddToCart();
-  const { query, setQuery, filtered, isSearching } = useMenuSearch(data.categories);
+  const { query, setQuery, tags, setTags, filtered, isSearching } = useMenuSearch(
+    data.categories,
+  );
   const { restaurant } = data;
 
   // Categories stack down the page, so the rail reflects where the reader
@@ -110,6 +113,7 @@ export default function VitrinTemplate({ data }: TemplateProps) {
 
       <div className="px-4 pb-3">
         <SearchField value={query} onChange={setQuery} />
+        <DishTagFilter value={tags} onChange={setTags} className="mt-2" />
       </div>
 
       {filtered.length === 0 ? (
@@ -906,6 +910,7 @@ function VitrinCard({
         >
           <h2 className="text-2xl leading-tight font-black text-balance">
             {product.name}
+            <DishTagIcons tags={product.dietaryTags} />
           </h2>
           {product.shortDescription && (
             <p className="mt-1.5 line-clamp-2 text-sm leading-6 opacity-70">
@@ -1092,7 +1097,10 @@ function SearchRow({
           className="size-14 shrink-0"
         />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-extrabold">{product.name}</span>
+          <span className="block truncate text-sm font-extrabold">
+            {product.name}
+            <DishTagIcons tags={product.dietaryTags} />
+          </span>
           <PriceTag
             price={product.price}
             compareAt={product.compareAtPrice}

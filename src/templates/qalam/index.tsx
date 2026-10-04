@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { MenuProduct, TemplateProps } from "../types";
 import { useAddToCart, useMenu } from "../shared/runtime";
+import { DishTagFilter, DishTagIcons } from "../shared/dish-tags";
 import { useCart } from "../shared/cart";
 import {
   CartBar,
@@ -50,7 +51,9 @@ export default function QalamTemplate({ data }: TemplateProps) {
   const { t, locale, openProduct } = useMenu();
   const cart = useCart();
   const addToCart = useAddToCart();
-  const { query, setQuery, filtered, isSearching } = useMenuSearch(data.categories);
+  const { query, setQuery, tags, setTags, filtered, isSearching } = useMenuSearch(
+    data.categories,
+  );
   const activeId = useActiveCategory(filtered.map((c) => c.id));
   const { restaurant } = data;
 
@@ -143,6 +146,7 @@ export default function QalamTemplate({ data }: TemplateProps) {
             }}
           />
         </div>
+        <DishTagFilter value={tags} onChange={setTags} className="mt-2" />
 
         {!isSearching && (
           <CategoryChips
@@ -256,7 +260,10 @@ function QalamLead({
           </div>
         )}
 
-        <h3 className="text-[1.0625rem] leading-7 font-bold">{product.name}</h3>
+        <h3 className="text-[1.0625rem] leading-7 font-bold">
+          {product.name}
+          <DishTagIcons tags={product.dietaryTags} />
+        </h3>
 
         {/* Unclamped: the lead is the one entry with room for its full line. */}
         {product.shortDescription && (
@@ -332,7 +339,10 @@ function QalamRow({
           className="min-w-0 flex-1 text-start focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{ outlineColor: "var(--m-primary)" }}
         >
-          <h3 className="text-sm leading-6 font-semibold">{product.name}</h3>
+          <h3 className="text-sm leading-6 font-semibold">
+            {product.name}
+            <DishTagIcons tags={product.dietaryTags} />
+          </h3>
 
           {product.shortDescription && (
             <p className="mt-1 line-clamp-2 text-xs leading-6 opacity-70">

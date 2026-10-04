@@ -12,6 +12,12 @@ import { ImageUploader } from "@/components/image-uploader";
 import { CATEGORY_ICON_NAMES, CategoryIcon } from "@/components/icon";
 import { api } from "@/lib/client-api";
 import { parseAmount } from "@/lib/format";
+import {
+  DISH_TAGS,
+  DISH_TAG_ICONS,
+  normaliseDishTags,
+  type DishTag,
+} from "@/lib/dish-tags";
 import type { Locale } from "@/lib/i18n";
 import { PriceHealthNote, type MenuPricing } from "./price-health";
 import type { CategoryRow, ProductRow } from "./builder";
@@ -71,6 +77,7 @@ export interface ProductDraft {
   /** The cost comes from the recipe and is not typed here. */
   costFromRecipe: boolean;
   prepMinutes: number | null;
+  dietaryTags: DishTag[];
   isAvailable: boolean;
   hideWhenUnavailable: boolean;
   isFeatured: boolean;
@@ -187,6 +194,7 @@ export function ProductDialog({
       // ignores a typed one, and not sending it keeps the request honest.
       costPrice: form.costFromRecipe ? undefined : form.costPrice,
       prepMinutes: form.prepMinutes,
+      dietaryTags: form.dietaryTags,
       isAvailable: form.isAvailable,
       hideWhenUnavailable: form.hideWhenUnavailable,
       isFeatured: form.isFeatured,
@@ -493,6 +501,40 @@ export function ProductDialog({
             />
           </div>
         </div>
+
+        <fieldset>
+          <legend className="text-sm font-bold text-ink-800">{t.dishTags.title}</legend>
+          <p className="mt-1 text-xs text-ink-500">{t.dishTags.hint}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {DISH_TAGS.map((tag) => {
+              const on = form.dietaryTags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    setField(
+                      "dietaryTags",
+                      on
+                        ? form.dietaryTags.filter((x) => x !== tag)
+                        : normaliseDishTags([...form.dietaryTags, tag]),
+                    )
+                  }
+                  className={
+                    "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition-colors " +
+                    (on
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-ink-200 bg-surface text-ink-600 hover:border-ink-300")
+                  }
+                >
+                  <span aria-hidden>{DISH_TAG_ICONS[tag]}</span>
+                  {t.dishTags.labels[tag]}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
 
         {/*
           Shown while the product is unavailable — and now also whenever it has

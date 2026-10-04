@@ -11,6 +11,7 @@ import {
   recommendationSelect,
 } from "@/lib/recommendations-server";
 import { bundleItemOrderBy, bundleItemSelect } from "@/lib/bundles-server";
+import { normaliseDishTags } from "@/lib/dish-tags";
 
 export const metadata: Metadata = { title: "مدیریت منو" };
 export const dynamic = "force-dynamic";
@@ -87,6 +88,7 @@ export default async function MenuPage() {
         costPrice: product.costPrice,
         costFromRecipe: product.costFromRecipe,
         prepMinutes: product.prepMinutes,
+        dietaryTags: normaliseDishTags(product.dietaryTags),
         isAvailable: product.isAvailable,
         hideWhenUnavailable: product.hideWhenUnavailable,
         isFeatured: product.isFeatured,

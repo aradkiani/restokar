@@ -15,6 +15,7 @@ import {
   replaceBundleItems,
 } from "@/lib/bundles-server";
 import { shownPrices } from "@/lib/costing";
+import { normaliseDishTags } from "@/lib/dish-tags";
 
 export const runtime = "nodejs";
 
@@ -107,6 +108,7 @@ export const POST = route(async (request: Request) => {
         // until one is recorded.
         costPrice: input.costPrice,
         prepMinutes: input.prepMinutes ?? null,
+        dietaryTags: normaliseDishTags(input.dietaryTags),
         isAvailable: input.isAvailable,
         hideWhenUnavailable: input.hideWhenUnavailable,
         isFeatured: input.isFeatured,

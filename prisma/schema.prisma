@@ -830,6 +830,12 @@ model Product {
   /// Preparation time in minutes, shown on the menu card.
   prepMinutes Int?
 
+  /// What a guest needs to know before ordering: spicy, vegetarian, contains
+  /// nuts… Keys from DISH_TAGS in src/lib/dish-tags.ts, translated and drawn by
+  /// the menu. Text rather than a Postgres enum so adding a tag is a code
+  /// change, not a migration; unknown values are dropped on read.
+  dietaryTags String[] @default([])
+
   infoSections ProductInfoSection[]
   optionGroups ProductOptionGroup[]
   orderItems   OrderItem[]

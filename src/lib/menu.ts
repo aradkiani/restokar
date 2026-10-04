@@ -7,6 +7,7 @@ import { DAY_MS, GRACE_DAYS } from "./constants";
 import { PAYMENTS_ENABLED } from "./features";
 import { resolveAvailability } from "./availability";
 import { isFeaturedNow } from "./featured";
+import { normaliseDishTags } from "./dish-tags";
 import { zonedMoment } from "./time";
 import { getTemplateMeta } from "@/templates/registry";
 import type { MenuData, MenuPairStat } from "@/templates/types";
@@ -381,6 +382,7 @@ function toPublicMenu(
           featuredLabelText: product.featuredLabelText,
           featuredOrder: product.featuredOrder,
           prepMinutes: product.prepMinutes,
+          dietaryTags: normaliseDishTags(product.dietaryTags),
           categoryId: product.categoryId,
           recommendedProductIds: recommendationsBySource.get(product.id) ?? [],
           bundleComponents: bundleComponentsByBundle.get(product.id) ?? [],

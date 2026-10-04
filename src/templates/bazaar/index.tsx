@@ -4,6 +4,7 @@ import * as React from "react";
 import { Gift } from "lucide-react";
 import type { MenuCategory, MenuProduct, TemplateProps } from "../types";
 import { useAddToCart, useMenu } from "../shared/runtime";
+import { DishTagFilter, DishTagIcons } from "../shared/dish-tags";
 import { useCart } from "../shared/cart";
 import {
   CartBar,
@@ -41,7 +42,9 @@ export default function BazaarTemplate({ data }: TemplateProps) {
   const { t, locale, openProduct } = useMenu();
   const cart = useCart();
   const addToCart = useAddToCart();
-  const { query, setQuery, filtered, isSearching } = useMenuSearch(data.categories);
+  const { query, setQuery, tags, setTags, filtered, isSearching } = useMenuSearch(
+    data.categories,
+  );
   const { restaurant } = data;
 
   // Souvenirs are pulled to the end regardless of the owner's sort order, but
@@ -99,6 +102,7 @@ export default function BazaarTemplate({ data }: TemplateProps) {
             }}
           />
         </div>
+        <DishTagFilter value={tags} onChange={setTags} className="mt-2" />
 
         {!isSearching && (
           <CategoryChips
@@ -243,7 +247,10 @@ function StallCard({
         </div>
 
         <div className="flex flex-1 flex-col p-3">
-          <h3 className="text-sm leading-6 font-bold">{name}</h3>
+          <h3 className="text-sm leading-6 font-bold">
+            {name}
+            <DishTagIcons tags={product.dietaryTags} />
+          </h3>
           {product.shortDescription && (
             <p className="mt-1 line-clamp-2 text-xs leading-5 opacity-60">
               {product.shortDescription}
@@ -362,7 +369,10 @@ function SouvenirSection({
                 </div>
 
                 <div className="flex min-w-0 flex-1 flex-col justify-center py-3 pe-1">
-                  <h3 className="text-sm font-bold">{productName}</h3>
+                  <h3 className="text-sm font-bold">
+                    {productName}
+                    <DishTagIcons tags={product.dietaryTags} />
+                  </h3>
                   {product.shortDescription && (
                     <p className="mt-1 line-clamp-2 text-xs leading-5 opacity-60">
                       {product.shortDescription}

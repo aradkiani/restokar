@@ -21,6 +21,7 @@ import {
   replaceBundleItems,
 } from "@/lib/bundles-server";
 import { shownPrices } from "@/lib/costing";
+import { normaliseDishTags } from "@/lib/dish-tags";
 
 export const runtime = "nodejs";
 
@@ -222,6 +223,9 @@ export const PATCH = route(async (request: Request, context: unknown) => {
           ? { costPrice: input.costPrice }
           : {}),
         ...(input.prepMinutes !== undefined ? { prepMinutes: input.prepMinutes } : {}),
+        ...(input.dietaryTags !== undefined
+          ? { dietaryTags: normaliseDishTags(input.dietaryTags) }
+          : {}),
         ...(input.isAvailable !== undefined ? { isAvailable: input.isAvailable } : {}),
         ...(input.hideWhenUnavailable !== undefined
           ? { hideWhenUnavailable: input.hideWhenUnavailable }

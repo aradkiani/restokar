@@ -9,6 +9,7 @@ import { PriceTag, ProductImage, QuantityStepper } from "./pieces";
 import { PairingSuggestions } from "./pairings";
 import { BundleOffers } from "./bundle-offer";
 import { UpgradePrompt } from "./upgrade-prompt";
+import { DishTagChips } from "./dish-tags";
 import { CategoryIcon } from "@/components/icon";
 import {
   defaultSelection,
@@ -238,6 +239,8 @@ export function ProductSheet({
                 {formatNumber(product.prepMinutes, locale)} {t.publicMenu.minutes}
               </p>
             ) : null}
+
+            <DishTagChips tags={product.dietaryTags} className="mt-3" />
 
             {(product.fullDescription || product.shortDescription) && (
               <p className="mt-4 text-sm leading-8 opacity-80">

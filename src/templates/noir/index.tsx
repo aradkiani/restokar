@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { TemplateProps } from "../types";
 import { useAddToCart, useMenu } from "../shared/runtime";
+import { DishTagFilter, DishTagIcons } from "../shared/dish-tags";
 import { useCart } from "../shared/cart";
 import {
   CartBar,
@@ -28,7 +29,9 @@ export default function NoirTemplate({ data }: TemplateProps) {
   const { t, locale, openProduct } = useMenu();
   const cart = useCart();
   const addToCart = useAddToCart();
-  const { query, setQuery, filtered, isSearching } = useMenuSearch(data.categories);
+  const { query, setQuery, tags, setTags, filtered, isSearching } = useMenuSearch(
+    data.categories,
+  );
   const activeId = useActiveCategory(filtered.map((c) => c.id));
   const { restaurant } = data;
 
@@ -90,6 +93,7 @@ export default function NoirTemplate({ data }: TemplateProps) {
             }}
           />
         </div>
+        <DishTagFilter value={tags} onChange={setTags} className="mt-2" />
 
         {!isSearching && (
           <CategoryChips
@@ -159,6 +163,7 @@ export default function NoirTemplate({ data }: TemplateProps) {
                               the price out of the row. See linen/index.tsx. */}
                           <h3 className="min-w-0 text-sm font-medium tracking-wide">
                             {product.name}
+                            <DishTagIcons tags={product.dietaryTags} />
                           </h3>
                           <span
                             className="h-px min-w-4 flex-1 translate-y-[-3px]"

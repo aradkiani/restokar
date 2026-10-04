@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { TemplateProps } from "../types";
 import { useAddToCart, useMenu } from "../shared/runtime";
+import { DishTagFilter, DishTagIcons } from "../shared/dish-tags";
 import { useCart } from "../shared/cart";
 import {
   CartBar,
@@ -27,7 +28,9 @@ export default function LinenTemplate({ data }: TemplateProps) {
   const { t, locale, openProduct } = useMenu();
   const cart = useCart();
   const addToCart = useAddToCart();
-  const { query, setQuery, filtered, isSearching } = useMenuSearch(data.categories);
+  const { query, setQuery, tags, setTags, filtered, isSearching } = useMenuSearch(
+    data.categories,
+  );
   const activeId = useActiveCategory(filtered.map((c) => c.id));
   const { restaurant } = data;
 
@@ -92,6 +95,7 @@ export default function LinenTemplate({ data }: TemplateProps) {
             }}
           />
         </div>
+        <DishTagFilter value={tags} onChange={setTags} className="mt-2" />
 
         {!isSearching && (
           <CategoryChips
@@ -155,7 +159,10 @@ export default function LinenTemplate({ data }: TemplateProps) {
                             `shrink-0`, because a truncated price is worse than
                             an untidy one.
                           */}
-                          <h3 className="min-w-0 text-sm font-bold">{product.name}</h3>
+                          <h3 className="min-w-0 text-sm font-bold">
+                            {product.name}
+                            <DishTagIcons tags={product.dietaryTags} />
+                          </h3>
                           <span
                             className="h-[3px] min-w-3 flex-1 translate-y-[-2px] opacity-40"
                             style={{

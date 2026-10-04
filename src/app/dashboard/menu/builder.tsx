@@ -30,6 +30,7 @@ import { windowsToRows } from "./schedule-editor";
 import { recommendationsToRows } from "./recommendation-editor";
 import { bundleItemsToRows } from "./bundle-editor";
 import { zonedWallClockOf } from "@/lib/time";
+import type { DishTag } from "@/lib/dish-tags";
 
 /**
  * A stored instant as the editor's `datetime-local` input wants it.
@@ -79,6 +80,7 @@ export interface ProductRow {
   costPrice: number;
   costFromRecipe: boolean;
   prepMinutes: number | null;
+  dietaryTags: DishTag[];
   isAvailable: boolean;
   hideWhenUnavailable: boolean;
   isFeatured: boolean;
@@ -315,6 +317,7 @@ export function MenuBuilder({
                 costPrice: 0,
                 costFromRecipe: false,
                 prepMinutes: null,
+                dietaryTags: [],
                 isAvailable: true,
                 hideWhenUnavailable: false,
                 isFeatured: false,
@@ -517,6 +520,7 @@ export function MenuBuilder({
                           costPrice: 0,
                           costFromRecipe: false,
                           prepMinutes: null,
+                          dietaryTags: [],
                           isAvailable: true,
                           hideWhenUnavailable: false,
                           isFeatured: false,
@@ -607,6 +611,7 @@ export function MenuBuilder({
                                   costPrice: product.costPrice,
                                   costFromRecipe: product.costFromRecipe,
                                   prepMinutes: product.prepMinutes,
+                                  dietaryTags: product.dietaryTags,
                                   isAvailable: product.isAvailable,
                                   hideWhenUnavailable: product.hideWhenUnavailable,
                                   isFeatured: product.isFeatured,

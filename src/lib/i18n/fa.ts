@@ -669,6 +669,22 @@ export const fa = {
     specialToday: "ویژه امروز",
     limitedTime: "زمان محدود",
   },
+  /** Dietary tags on a dish. Keyed by DISH_TAGS in src/lib/dish-tags.ts. */
+  dishTags: {
+    title: "ویژگی‌های غذا",
+    hint: "به مهمان کمک می‌کند بدون پرسیدن از گارسون انتخاب کند.",
+    filterLabel: "فیلتر منو",
+    clearFilters: "همه غذاها",
+    noMatch: "غذایی با این ویژگی‌ها پیدا نشد.",
+    labels: {
+      spicy: "تند",
+      vegetarian: "گیاهی",
+      vegan: "وگان",
+      glutenFree: "بدون گلوتن",
+      containsNuts: "دارای مغزها",
+      containsDairy: "دارای لبنیات",
+    },
+  },
   /** Merchandising: featured dishes, and how they performed. */
   featured: {
     title: "محصول ویژه",

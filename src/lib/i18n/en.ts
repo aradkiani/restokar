@@ -635,6 +635,21 @@ export const en: Dictionary = {
     specialToday: "Today's special",
     limitedTime: "Limited time",
   },
+  dishTags: {
+    title: "Dietary info",
+    hint: "Helps guests choose without asking the waiter.",
+    filterLabel: "Filter the menu",
+    clearFilters: "All dishes",
+    noMatch: "No dishes match these filters.",
+    labels: {
+      spicy: "Spicy",
+      vegetarian: "Vegetarian",
+      vegan: "Vegan",
+      glutenFree: "Gluten-free",
+      containsNuts: "Contains nuts",
+      containsDairy: "Contains dairy",
+    },
+  },
   featured: {
     title: "Featured product",
     hint: "This product appears in the Featured strip at the top of the menu.",

@@ -11,6 +11,7 @@ import { MAX_SOCIAL_LINKS, SOCIAL_PLATFORM_IDS } from "./socials";
 import { MAX_BULK_PERCENT, MIN_BULK_PERCENT, PRICE_ROUNDING_STEPS } from "./bulk-pricing";
 import { MAX_SCHEDULE_WINDOWS, parseTimeOfDay } from "./availability";
 import { FEATURED_LABELS, MAX_CUSTOM_LABEL_LENGTH } from "./featured";
+import { DISH_TAGS } from "./dish-tags";
 import { UNIT_CODES, isUnitCode, sameDimension } from "./units";
 import { MAX_BROADCAST_TEXT_LENGTH, SMS_AUDIENCES } from "./sms-broadcast";
 import { MAX_BUNDLE_COMPONENTS } from "./bundles";
@@ -457,6 +458,15 @@ const ProductFields = z.object({
    * did not mention it.
    */
   bundleItems: BundleComponentListSchema.optional(),
+  /**
+   * Spicy, vegetarian, contains nuts… Optional with no default, for the same
+   * reason as `bundleItems`: absent leaves the tags alone, an empty array
+   * clears them.
+   */
+  dietaryTags: z
+    .array(z.enum(DISH_TAGS, { error: "برچسب غذا معتبر نیست" }))
+    .max(DISH_TAGS.length)
+    .optional(),
   categoryId: z.string().min(1, "دسته‌بندی را انتخاب کنید"),
   name: z.string().trim().min(1, "نام محصول الزامی است").max(80),
   nameEn: z.string().trim().max(80).optional().or(z.literal("")),

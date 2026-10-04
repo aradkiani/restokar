@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { MenuProduct, TemplateProps } from "../types";
 import { useAddToCart, useMenu } from "../shared/runtime";
+import { DishTagFilter, DishTagIcons } from "../shared/dish-tags";
 import { useCart } from "../shared/cart";
 import {
   CartBar,
@@ -34,7 +35,9 @@ export default function AtlasTemplate({ data }: TemplateProps) {
   const { t, locale, openProduct } = useMenu();
   const cart = useCart();
   const addToCart = useAddToCart();
-  const { query, setQuery, filtered, isSearching } = useMenuSearch(data.categories);
+  const { query, setQuery, tags, setTags, filtered, isSearching } = useMenuSearch(
+    data.categories,
+  );
   const activeId = useActiveCategory(filtered.map((c) => c.id));
   const { restaurant } = data;
 
@@ -93,6 +96,7 @@ export default function AtlasTemplate({ data }: TemplateProps) {
             }}
           />
         </div>
+        <DishTagFilter value={tags} onChange={setTags} className="mt-2" />
 
         {!isSearching && (
           <CategoryChips
@@ -213,7 +217,10 @@ function AtlasRow({
 
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-3">
-              <h3 className="min-w-0 text-sm leading-6 font-bold">{name}</h3>
+              <h3 className="min-w-0 text-sm leading-6 font-bold">
+                {name}
+                <DishTagIcons tags={product.dietaryTags} />
+              </h3>
               <PriceTag
                 price={product.price}
                 compareAt={product.compareAtPrice}

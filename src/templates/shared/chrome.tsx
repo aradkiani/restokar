@@ -10,6 +10,7 @@ import { useMenu } from "./runtime";
 import { formatMoney, formatNumber, localizeDigits, toEnglishDigits } from "@/lib/format";
 import type { MenuCategory } from "../types";
 import { localizeApiError } from "@/lib/api-error";
+import { matchesDishFilters, type DishTag } from "@/lib/dish-tags";
 
 /**
  * Chrome shared by every template: search, cart affordances and category
@@ -19,24 +20,37 @@ import { localizeApiError } from "@/lib/api-error";
 
 export function useMenuSearch(categories: MenuCategory[]) {
   const [query, setQuery] = React.useState("");
+  // Dietary filters narrow the same list the search does, so every template
+  // that already handles "searching" handles "filtering" with no extra code.
+  const [tags, setTags] = React.useState<DishTag[]>([]);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return categories;
+    if (!q && tags.length === 0) return categories;
 
     return categories
       .map((category) => ({
         ...category,
-        products: category.products.filter((p) =>
-          [p.name, p.nameEn, p.shortDescription]
-            .filter(Boolean)
-            .some((field) => field!.toLowerCase().includes(q)),
+        products: category.products.filter(
+          (p) =>
+            matchesDishFilters(p.dietaryTags, tags) &&
+            (!q ||
+              [p.name, p.nameEn, p.shortDescription]
+                .filter(Boolean)
+                .some((field) => field!.toLowerCase().includes(q))),
         ),
       }))
       .filter((category) => category.products.length > 0);
-  }, [categories, query]);
+  }, [categories, query, tags]);
 
-  return { query, setQuery, filtered, isSearching: query.trim().length > 0 };
+  return {
+    query,
+    setQuery,
+    tags,
+    setTags,
+    filtered,
+    isSearching: query.trim().length > 0 || tags.length > 0,
+  };
 }
 
 /**

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Flame } from "lucide-react";
 import type { TemplateProps } from "../types";
 import { useAddToCart, useMenu } from "../shared/runtime";
+import { DishTagFilter, DishTagIcons } from "../shared/dish-tags";
 import { useCart } from "../shared/cart";
 import {
   CartBar,
@@ -32,7 +33,9 @@ export default function EmberTemplate({ data }: TemplateProps) {
   const { t, locale, openProduct } = useMenu();
   const cart = useCart();
   const addToCart = useAddToCart();
-  const { query, setQuery, filtered, isSearching } = useMenuSearch(data.categories);
+  const { query, setQuery, tags, setTags, filtered, isSearching } = useMenuSearch(
+    data.categories,
+  );
   const activeId = useActiveCategory(filtered.map((c) => c.id));
   const { restaurant } = data;
 
@@ -97,6 +100,7 @@ export default function EmberTemplate({ data }: TemplateProps) {
 
       <div className="px-4 pt-4">
         <SearchField value={query} onChange={setQuery} />
+        <DishTagFilter value={tags} onChange={setTags} className="mt-2" />
       </div>
 
       {/*
@@ -200,6 +204,7 @@ export default function EmberTemplate({ data }: TemplateProps) {
                           <div className="min-w-0">
                             <h3 className="line-clamp-1 text-base font-extrabold">
                               {product.name}
+                              <DishTagIcons tags={product.dietaryTags} />
                             </h3>
                             {product.shortDescription && (
                               <p className="mt-1 line-clamp-2 text-xs leading-5 opacity-60">
