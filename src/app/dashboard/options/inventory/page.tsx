@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requirePageOwner } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
 import { catalogueItems } from "@/lib/stock";
+import { listSuppliers } from "@/lib/inventory-server";
 import { InventoryManager } from "./manager";
 
 export const metadata: Metadata = { title: "موجودی انبار" };
@@ -24,7 +25,7 @@ export default async function InventoryPage() {
     "/dashboard/options/inventory",
   );
 
-  const [items, products] = await Promise.all([
+  const [items, products, suppliers] = await Promise.all([
     catalogueItems(prisma, ownerId, { isActive: true }),
     prisma.product.findMany({
       where: { restaurantId: ownerId },
@@ -36,7 +37,10 @@ export default async function InventoryPage() {
         ingredients: { select: { itemId: true, perUnitMilli: true, unit: true } },
       },
     }),
+    listSuppliers(ownerId),
   ]);
 
-  return <InventoryManager initialItems={items} products={products} />;
+  return (
+    <InventoryManager initialItems={items} products={products} suppliers={suppliers} />
+  );
 }

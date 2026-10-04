@@ -34,6 +34,16 @@ interface Item {
   lowStockMilli: number;
   purchasePrice: number | null;
   priceUnit: string | null;
+  /** Free-text group for the stock list. */
+  categoryName: string | null;
+  /** The usual supplier, from the inventory section's supplier list. */
+  supplierId: string | null;
+}
+
+interface SupplierOption {
+  id: string;
+  name: string;
+  isActive: boolean;
 }
 
 interface RecipeLine {
@@ -82,9 +92,11 @@ const asUnit = (value: string | null | undefined): UnitCode =>
 export function InventoryManager({
   initialItems,
   products,
+  suppliers,
 }: {
   initialItems: Item[];
   products: ProductRow[];
+  suppliers: SupplierOption[];
 }) {
   const { t, locale } = useI18n();
   const c = t.costing;
@@ -296,8 +308,9 @@ export function InventoryManager({
                 <ItemRow
                   // Keyed on what is stored, so the uncontrolled inputs start
                   // from the saved values again after every save.
-                  key={`${item.id}:${item.unit}:${item.quantityMilli}:${item.lowStockMilli}:${item.purchasePrice}:${item.priceUnit}`}
+                  key={`${item.id}:${item.unit}:${item.quantityMilli}:${item.lowStockMilli}:${item.purchasePrice}:${item.priceUnit}:${item.categoryName}:${item.supplierId}`}
                   item={item}
+                  suppliers={suppliers}
                   locale={locale}
                   onSave={(patch) => saveField(item, patch)}
                   onRemove={() => removeItem(item)}
@@ -407,11 +420,13 @@ function UnitSelect({
 
 function ItemRow({
   item,
+  suppliers,
   locale,
   onSave,
   onRemove,
 }: {
   item: Item;
+  suppliers: SupplierOption[];
   locale: ReturnType<typeof useI18n>["locale"];
   onSave: (patch: Record<string, unknown>) => void;
   onRemove: () => void;
@@ -522,6 +537,39 @@ function ItemRow({
             />
           </div>
         </div>
+      </div>
+
+      {/* Where it sits in the stock list, and who usually supplies it. */}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[11px] font-semibold text-ink-500">
+          {t.stock.category}
+          <input
+            defaultValue={item.categoryName ?? ""}
+            maxLength={40}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              if (next !== (item.categoryName ?? "")) onSave({ categoryName: next });
+            }}
+            className="mt-1 h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-2 text-sm font-semibold text-ink-700"
+          />
+        </label>
+        <label className="text-[11px] font-semibold text-ink-500">
+          {t.stock.supplier}
+          <Select
+            value={item.supplierId ?? ""}
+            onChange={(e) => onSave({ supplierId: e.target.value || null })}
+            className="mt-1"
+          >
+            <option value="">{t.stock.noSupplier}</option>
+            {suppliers
+              .filter((s) => s.isActive || s.id === item.supplierId)
+              .map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.name}
+                </option>
+              ))}
+          </Select>
+        </label>
       </div>
 
       <p className="text-[11px] text-ink-500 tabular-nums">
