@@ -16,6 +16,8 @@ const StaffCallInput = z.object({
     .min(1, "شماره میز را وارد کنید")
     .max(20, "شماره میز بیش از حد بلند است"),
   note: z.string().trim().max(200).optional(),
+  /** Come to the table, or bring the bill. */
+  kind: z.enum(["CALL", "BILL"]).default("CALL"),
 });
 
 /**
@@ -68,6 +70,7 @@ export const POST = route(async (request: Request) => {
       restaurantId: restaurant.id,
       tableNumber,
       note: input.note ?? null,
+      kind: input.kind,
     },
     select: { id: true, createdAt: true },
   });

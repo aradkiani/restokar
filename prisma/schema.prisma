@@ -141,6 +141,8 @@ enum AuditAction {
   PLAN_UPDATED
   /// Staff marked a dish sold out for the day, or back in stock.
   SOLD_OUT_CHANGED
+  /// A cashier settled every open order on a table in cash at once.
+  TABLE_SETTLED
 }
 
 /// Where a campaign is in its life.
@@ -948,6 +950,14 @@ model ProductInfoSection {
 /// Kept as a row rather than a fire-and-forget event so a call survives a
 /// dashboard reload and staff can see it was already answered. Delivery is the
 /// existing in-process SSE stream — no SMS gateway, no external service.
+/// Why a guest pressed the button at their table.
+enum StaffCallKind {
+  /// Come to the table.
+  CALL
+  /// Bring the bill; the cashier can open that table's combined bill.
+  BILL
+}
+
 model StaffCall {
   id           String     @id @default(cuid())
   restaurantId String
@@ -955,6 +965,9 @@ model StaffCall {
 
   tableNumber String
   note        String?
+
+  /// What the guest asked for: the waiter, or the bill. Older calls are CALL.
+  kind StaffCallKind @default(CALL)
 
   acknowledgedAt DateTime?
   createdAt      DateTime  @default(now())

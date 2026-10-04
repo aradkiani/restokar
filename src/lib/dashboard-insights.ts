@@ -157,9 +157,15 @@ export async function getMenuHealth(restaurantId: string): Promise<MenuHealth> {
  * every other number describes the past, while this one is a person at a table
  * with their hand up right now.
  */
-export async function getPendingStaffCalls(
-  restaurantId: string,
-): Promise<{ id: string; tableNumber: string; note: string | null; createdAt: Date }[]> {
+export async function getPendingStaffCalls(restaurantId: string): Promise<
+  {
+    id: string;
+    tableNumber: string;
+    note: string | null;
+    kind: "CALL" | "BILL";
+    createdAt: Date;
+  }[]
+> {
   return prisma.staffCall.findMany({
     where: {
       restaurantId,
@@ -168,7 +174,7 @@ export async function getPendingStaffCalls(
     },
     orderBy: { createdAt: "asc" },
     take: 5,
-    select: { id: true, tableNumber: true, note: true, createdAt: true },
+    select: { id: true, tableNumber: true, note: true, kind: true, createdAt: true },
   });
 }
 

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BellRing, Search, ShoppingBag, X } from "lucide-react";
+import { BellRing, Receipt, Search, ShoppingBag, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/client-api";
 import { useCart } from "./cart";
@@ -493,7 +493,7 @@ function StaffCallButton() {
   const [state, setState] = React.useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = React.useState<string | null>(null);
 
-  async function send() {
+  async function send(kind: "CALL" | "BILL" = "CALL") {
     const trimmed = toEnglishDigits(table.trim());
     if (!trimmed) {
       setState("error");
@@ -506,7 +506,7 @@ function StaffCallButton() {
       const response = await fetch("/api/public/staff-call", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slug: data.restaurant.slug, tableNumber: trimmed }),
+        body: JSON.stringify({ slug: data.restaurant.slug, tableNumber: trimmed, kind }),
       });
       const payload = await response.json();
 
@@ -517,7 +517,9 @@ function StaffCallButton() {
       }
 
       setState("sent");
-      setMessage(t.publicMenu.staffCallSent);
+      setMessage(
+        kind === "BILL" ? t.publicMenu.billRequested : t.publicMenu.staffCallSent,
+      );
       // Collapse the panel once the guest has read the confirmation.
       window.setTimeout(() => {
         setOpen(false);
@@ -597,7 +599,7 @@ function StaffCallButton() {
             />
             <button
               type="button"
-              onClick={send}
+              onClick={() => void send("CALL")}
               disabled={state === "sending"}
               className="tap-safe h-11 shrink-0 rounded-[var(--m-radius-sm)] px-4 text-sm font-extrabold disabled:opacity-60"
               style={{
@@ -610,6 +612,22 @@ function StaffCallButton() {
                 : t.publicMenu.staffCallSend}
             </button>
           </div>
+          {/* The other reason to wave: the bill. The cashier sees it marked as
+              such, with that table's combined bill one tap away. */}
+          <button
+            type="button"
+            onClick={() => void send("BILL")}
+            disabled={state === "sending"}
+            className="tap-safe mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[var(--m-radius-sm)] text-sm font-extrabold disabled:opacity-60"
+            style={{
+              background: "var(--m-bg)",
+              color: "var(--m-primary)",
+              border: "1px solid var(--m-border)",
+            }}
+          >
+            <Receipt className="size-4 shrink-0" />
+            {t.publicMenu.requestBill}
+          </button>
           {state === "error" && message && (
             <p role="alert" className="mt-2 text-xs font-semibold text-red-600">
               {message}

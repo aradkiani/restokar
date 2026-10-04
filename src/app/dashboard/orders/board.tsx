@@ -12,6 +12,7 @@ import {
   Info,
   Printer,
   Radio,
+  Receipt,
   Volume2,
   VolumeX,
   Wallet,
@@ -40,6 +41,7 @@ import {
 import { isRetired } from "@/lib/order-retirement";
 import { NEXT_STATUS } from "@/lib/order-flow";
 import { SoldOutButton } from "./sold-out-dialog";
+import { TablesView } from "./tables-view";
 import { useStoredValue, writeStoredValue } from "@/lib/use-stored-value";
 
 /** This device prints a kitchen ticket for every new order (kitchen PC only). */
@@ -72,6 +74,8 @@ export interface StaffCall {
   id: string;
   tableNumber: string;
   note: string | null;
+  /** The waiter, or the bill. */
+  kind: "CALL" | "BILL";
   createdAt: string;
 }
 
@@ -130,6 +134,10 @@ export function KitchenBoard({
   const [busyId, setBusyId] = React.useState<string | null>(null);
   /** The order whose full detail is open, if any. */
   const [detailId, setDetailId] = React.useState<string | null>(null);
+  /** Orders by stage, or tables with their open tabs. */
+  const [view, setView] = React.useState<"orders" | "tables">("orders");
+  /** Bumped by every live event, so the Tables view re-reads at once. */
+  const [liveTick, setLiveTick] = React.useState(0);
   /*
     The clock, re-read on a timer so "5 minutes ago" ages and cards turn urgent
     without a data refetch. One shared reading keeps the render pure and gives
@@ -205,13 +213,18 @@ export function KitchenBoard({
           /* a malformed frame prints nothing */
         }
       }
+      setLiveTick((tick) => tick + 1);
       void refresh();
     });
-    source.addEventListener("updated", () => void refresh());
+    source.addEventListener("updated", () => {
+      setLiveTick((tick) => tick + 1);
+      void refresh();
+    });
     // A guest pressing "call the waiter" is at least as urgent as a new order,
     // so it chimes too.
     source.addEventListener("staff-called", () => {
       if (soundRef.current) playChime();
+      setLiveTick((tick) => tick + 1);
       void refreshCalls();
     });
 
@@ -383,24 +396,29 @@ export function KitchenBoard({
               writeStoredValue(AUTO_PRINT_KEY, next ? "1" : "0");
             }}
             aria-pressed={autoPrint}
+            aria-label={t.print.autoPrint}
             title={t.print.autoPrintHint}
             className={cn(
-              "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-bold",
+              "inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-bold sm:px-4",
               autoPrint
                 ? "border-brand-400 bg-brand-50 text-brand-800"
                 : "border-ink-300 bg-surface text-ink-800 hover:border-ink-400",
             )}
           >
             <Printer className="size-4" />
-            {t.print.autoPrint}
+            {/* Icon only on a phone, where three labelled buttons took three rows. */}
+            <span className="hidden sm:inline">{t.print.autoPrint}</span>
           </button>
           <button
             type="button"
             onClick={() => setSoundOn((v) => !v)}
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-300 bg-surface px-4 text-sm font-bold text-ink-800 hover:border-ink-400"
+            aria-label={soundOn ? t.kitchen.soundOn : t.kitchen.soundOff}
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-300 bg-surface px-3 text-sm font-bold text-ink-800 hover:border-ink-400 sm:px-4"
           >
             {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-            {soundOn ? t.kitchen.soundOn : t.kitchen.soundOff}
+            <span className="hidden sm:inline">
+              {soundOn ? t.kitchen.soundOn : t.kitchen.soundOff}
+            </span>
           </button>
         </div>
       </header>
@@ -518,10 +536,17 @@ export function KitchenBoard({
                 <button
                   type="button"
                   onClick={() => void acknowledgeCall(call.id)}
-                  className="tap-safe inline-flex min-h-11 items-center gap-2 rounded-full border border-amber-300 bg-surface px-3 text-xs font-bold text-amber-900 hover:border-amber-400"
+                  className={cn(
+                    "tap-safe inline-flex min-h-11 items-center gap-2 rounded-full border bg-surface px-3 text-xs font-bold hover:border-amber-400",
+                    call.kind === "BILL"
+                      ? "border-emerald-400 text-emerald-900"
+                      : "border-amber-300 text-amber-900",
+                  )}
                 >
+                  {call.kind === "BILL" && <Receipt className="size-3.5 shrink-0" />}
                   <span>
                     {t.kitchen.table} {localizeDigits(call.tableNumber, locale)}
+                    {call.kind === "BILL" && ` — ${t.kitchen.billRequest}`}
                   </span>
                   {/* Read from the clock, so the server and the phone can land
                       either side of a minute; the board re-renders on mount and
@@ -537,189 +562,220 @@ export function KitchenBoard({
         </section>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-4">
-        {COLUMNS.map(({ status, tone }) => {
-          const columnOrders = byStatus(status);
-          const label =
-            status === "RECEIVED"
-              ? t.kitchen.newOrders
-              : status === "PREPARING"
-                ? t.kitchen.preparing
-                : status === "READY"
-                  ? t.kitchen.ready
-                  : t.kitchen.delivered;
+      <div
+        role="tablist"
+        aria-label={t.kitchen.title}
+        className="inline-flex gap-1 rounded-full bg-ink-100 p-1"
+      >
+        {(["orders", "tables"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={view === value}
+            onClick={() => setView(value)}
+            className={cn(
+              "min-h-9 rounded-full px-4 text-sm font-bold transition-colors",
+              view === value
+                ? "bg-surface text-ink-900 shadow-sm"
+                : "text-ink-600 hover:text-ink-900",
+            )}
+          >
+            {value === "orders" ? t.kitchen.viewOrders : t.kitchen.viewTables}
+          </button>
+        ))}
+      </div>
 
-          return (
-            <section
-              key={status}
-              className={cn(
-                "rounded-[var(--radius-lg)] border border-t-4 border-ink-200 bg-ink-100/60 p-3",
-                tone,
-              )}
-            >
-              <h2 className="mb-3 flex items-center justify-between px-1 text-sm font-black text-ink-800">
-                {label}
-                <span className="rounded-full bg-surface px-2 py-0.5 text-xs tabular-nums">
-                  {formatNumber(columnOrders.length, locale)}
-                </span>
-              </h2>
+      {view === "tables" ? (
+        <TablesView refreshKey={liveTick} />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-4">
+          {COLUMNS.map(({ status, tone }) => {
+            const columnOrders = byStatus(status);
+            const label =
+              status === "RECEIVED"
+                ? t.kitchen.newOrders
+                : status === "PREPARING"
+                  ? t.kitchen.preparing
+                  : status === "READY"
+                    ? t.kitchen.ready
+                    : t.kitchen.delivered;
 
-              <ul className="space-y-3">
-                {columnOrders.map((order) => {
-                  const waiting = minutesSince(order.placedAt);
-                  // Anything sitting past 20 minutes gets flagged red.
-                  const urgent =
-                    status !== "DELIVERED" && waiting >= ORDER_URGENT_MINUTES;
+            return (
+              <section
+                key={status}
+                className={cn(
+                  "rounded-[var(--radius-lg)] border border-t-4 border-ink-200 bg-ink-100/60 p-3",
+                  tone,
+                )}
+              >
+                <h2 className="mb-3 flex items-center justify-between px-1 text-sm font-black text-ink-800">
+                  {label}
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-xs tabular-nums">
+                    {formatNumber(columnOrders.length, locale)}
+                  </span>
+                </h2>
 
-                  return (
-                    <li
-                      key={order.id}
-                      className={cn(
-                        "rounded-[var(--radius-md)] border bg-surface p-3 shadow-[var(--shadow-soft)] transition-all",
-                        urgent ? "border-red-300 ring-2 ring-red-100" : "border-ink-200",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-black text-ink-900">
-                            #{formatNumber(order.orderNumber, locale)}
-                            {order.tableNumber && (
-                              // `text-ink-50`, not `text-white`: ink-900 is the
-                              // *inverting* end of the scale, so in dark mode it
-                              // becomes near-white and white text vanished into
-                              // it at 1.11:1. Paired with ink-50 the chip flips
-                              // cleanly with the theme.
-                              <span className="ms-2 rounded-md bg-ink-900 px-1.5 py-0.5 text-[11px] font-bold text-ink-50">
-                                {t.kitchen.table}{" "}
-                                {localizeDigits(order.tableNumber, locale)}
-                              </span>
-                            )}
-                          </p>
-                          <p className="mt-0.5 truncate text-xs text-ink-600">
-                            {order.customerName}
-                          </p>
-                        </div>
+                <ul className="space-y-3">
+                  {columnOrders.map((order) => {
+                    const waiting = minutesSince(order.placedAt);
+                    // Anything sitting past 20 minutes gets flagged red.
+                    const urgent =
+                      status !== "DELIVERED" && waiting >= ORDER_URGENT_MINUTES;
 
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "flex items-center gap-1 text-[11px] font-bold tabular-nums",
-                              urgent ? "text-red-600" : "text-ink-500",
-                            )}
-                          >
-                            <Clock className="size-3" />
-                            {formatTime(order.placedAt, locale)}
-                          </span>
+                    return (
+                      <li
+                        key={order.id}
+                        className={cn(
+                          "rounded-[var(--radius-md)] border bg-surface p-3 shadow-[var(--shadow-soft)] transition-all",
+                          urgent
+                            ? "border-red-300 ring-2 ring-red-100"
+                            : "border-ink-200",
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-ink-900">
+                              #{formatNumber(order.orderNumber, locale)}
+                              {order.tableNumber && (
+                                // `text-ink-50`, not `text-white`: ink-900 is the
+                                // *inverting* end of the scale, so in dark mode it
+                                // becomes near-white and white text vanished into
+                                // it at 1.11:1. Paired with ink-50 the chip flips
+                                // cleanly with the theme.
+                                <span className="ms-2 rounded-md bg-ink-900 px-1.5 py-0.5 text-[11px] font-bold text-ink-50">
+                                  {t.kitchen.table}{" "}
+                                  {localizeDigits(order.tableNumber, locale)}
+                                </span>
+                              )}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs text-ink-600">
+                              {order.customerName}
+                            </p>
+                          </div>
 
-                          {/*
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <span
+                              className={cn(
+                                "flex items-center gap-1 text-[11px] font-bold tabular-nums",
+                                urgent ? "text-red-600" : "text-ink-500",
+                              )}
+                            >
+                              <Clock className="size-3" />
+                              {formatTime(order.placedAt, locale)}
+                            </span>
+
+                            {/*
                             Its own control rather than a clickable card. The
                             card already carries the paid toggle, the advance
                             button and cancel; wrapping all of that in a button
                             nests interactive elements and turns every mis-aimed
                             tap on a busy pass into an opened dialog.
                           */}
-                          <button
-                            type="button"
-                            onClick={() => setDetailId(order.id)}
-                            aria-label={`${t.orderDetail.open} #${order.orderNumber}`}
-                            title={t.orderDetail.open}
-                            className="tap-safe rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
-                          >
-                            <Info className="size-4" aria-hidden />
-                          </button>
-                          <a
-                            href={`/print/order/${order.id}?kind=ticket&auto=1`}
-                            target="_blank"
-                            rel="noopener"
-                            aria-label={`${t.print.printTicket} #${order.orderNumber}`}
-                            title={t.print.printTicket}
-                            className="tap-safe rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
-                          >
-                            <Printer className="size-4" aria-hidden />
-                          </a>
+                            <button
+                              type="button"
+                              onClick={() => setDetailId(order.id)}
+                              aria-label={`${t.orderDetail.open} #${order.orderNumber}`}
+                              title={t.orderDetail.open}
+                              className="tap-safe rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
+                            >
+                              <Info className="size-4" aria-hidden />
+                            </button>
+                            <a
+                              href={`/print/order/${order.id}?kind=ticket&auto=1`}
+                              target="_blank"
+                              rel="noopener"
+                              aria-label={`${t.print.printTicket} #${order.orderNumber}`}
+                              title={t.print.printTicket}
+                              className="tap-safe rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
+                            >
+                              <Printer className="size-4" aria-hidden />
+                            </a>
+                          </div>
                         </div>
-                      </div>
 
-                      <ul className="my-2.5 space-y-1 border-y border-ink-100 py-2">
-                        {order.items.map((item) => (
-                          <li key={item.id} className="flex gap-2 text-xs">
-                            <span className="shrink-0 font-black text-brand-700 tabular-nums">
-                              {formatNumber(item.quantity, locale)}×
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block font-semibold text-ink-800">
-                                {item.name}
+                        <ul className="my-2.5 space-y-1 border-y border-ink-100 py-2">
+                          {order.items.map((item) => (
+                            <li key={item.id} className="flex gap-2 text-xs">
+                              <span className="shrink-0 font-black text-brand-700 tabular-nums">
+                                {formatNumber(item.quantity, locale)}×
                               </span>
-                              {item.note && (
-                                <span className="block text-[11px] text-amber-700">
-                                  ↳ {item.note}
+                              <span className="min-w-0 flex-1">
+                                <span className="block font-semibold text-ink-800">
+                                  {item.name}
                                 </span>
-                              )}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                                {item.note && (
+                                  <span className="block text-[11px] text-amber-700">
+                                    ↳ {item.note}
+                                  </span>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
 
-                      {order.note && (
-                        <p className="mb-2.5 rounded-[var(--radius-xs)] bg-amber-50 p-2 text-[11px] leading-5 text-amber-900">
-                          {order.note}
-                        </p>
-                      )}
+                        {order.note && (
+                          <p className="mb-2.5 rounded-[var(--radius-xs)] bg-amber-50 p-2 text-[11px] leading-5 text-amber-900">
+                            {order.note}
+                          </p>
+                        )}
 
-                      <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-                        {/*
+                        <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+                          {/*
                           A cash bill is settled by tapping the badge itself —
                           the thing already saying "unpaid" is the thing you
                           press to fix it, so there is no second control to
                           find. Online orders keep the plain badge: their status
                           comes from the gateway and must not be editable here.
                         */}
-                        {/* An online order whose payment never completed is
+                          {/* An online order whose payment never completed is
                           settled the same way: the guest pays at the counter. */}
-                        {order.paymentMethod === "CASH_ON_SITE" ||
-                        order.paymentStatus !== "PAID" ? (
-                          <button
-                            type="button"
-                            disabled={busyId === order.id}
-                            onClick={() =>
-                              togglePaid(order.id, order.paymentStatus !== "PAID")
-                            }
-                            aria-pressed={order.paymentStatus === "PAID"}
-                            title={
-                              order.paymentStatus === "PAID"
-                                ? t.kitchen.markUnpaidHint
-                                : t.kitchen.markPaidHint
-                            }
-                            className={cn(
-                              "tap-safe inline-flex min-h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition-colors disabled:opacity-50",
-                              order.paymentStatus === "PAID"
-                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                                : "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200",
-                            )}
-                          >
-                            {order.paymentStatus === "PAID" ? (
-                              <Check className="size-3" />
-                            ) : (
-                              <Wallet className="size-3" />
-                            )}
-                            {order.paymentStatus === "PAID"
-                              ? t.kitchen.paid
-                              : t.kitchen.unpaid}
-                          </button>
-                        ) : (
-                          <Badge
-                            tone={order.paymentStatus === "PAID" ? "success" : "neutral"}
-                          >
-                            {order.paymentStatus === "PAID"
-                              ? t.kitchen.paid
-                              : t.kitchen.unpaid}
-                          </Badge>
-                        )}
-                        <span className="text-[11px] font-bold text-ink-700 tabular-nums">
-                          {formatMoney(order.total, locale)} {t.common.toman}
-                        </span>
+                          {order.paymentMethod === "CASH_ON_SITE" ||
+                          order.paymentStatus !== "PAID" ? (
+                            <button
+                              type="button"
+                              disabled={busyId === order.id}
+                              onClick={() =>
+                                togglePaid(order.id, order.paymentStatus !== "PAID")
+                              }
+                              aria-pressed={order.paymentStatus === "PAID"}
+                              title={
+                                order.paymentStatus === "PAID"
+                                  ? t.kitchen.markUnpaidHint
+                                  : t.kitchen.markPaidHint
+                              }
+                              className={cn(
+                                "tap-safe inline-flex min-h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition-colors disabled:opacity-50",
+                                order.paymentStatus === "PAID"
+                                  ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                                  : "bg-amber-100 text-amber-900 ring-1 ring-amber-300 hover:bg-amber-200",
+                              )}
+                            >
+                              {order.paymentStatus === "PAID" ? (
+                                <Check className="size-3" />
+                              ) : (
+                                <Wallet className="size-3" />
+                              )}
+                              {order.paymentStatus === "PAID"
+                                ? t.kitchen.paid
+                                : t.kitchen.unpaid}
+                            </button>
+                          ) : (
+                            <Badge
+                              tone={
+                                order.paymentStatus === "PAID" ? "success" : "neutral"
+                              }
+                            >
+                              {order.paymentStatus === "PAID"
+                                ? t.kitchen.paid
+                                : t.kitchen.unpaid}
+                            </Badge>
+                          )}
+                          <span className="text-[11px] font-bold text-ink-700 tabular-nums">
+                            {formatMoney(order.total, locale)} {t.common.toman}
+                          </span>
 
-                        {/*
+                          {/*
                           Shown only when the guest actually left a tip, and not
                           editable here.
 
@@ -730,70 +786,71 @@ export function KitchenBoard({
                           guest's decision, taken at checkout; the kitchen board
                           reports it and nothing more.
                         */}
-                        {order.tip > 0 && (
+                          {order.tip > 0 && (
+                            <span
+                              className="inline-flex min-h-7 items-center gap-1 rounded-full bg-emerald-100 px-2.5 text-[11px] font-bold text-emerald-800 tabular-nums"
+                              title={t.kitchen.tipLabel}
+                            >
+                              <HandCoins className="size-3" />
+                              <bdi>{formatMoney(order.tip, locale)}</bdi>
+                            </span>
+                          )}
+
+                          {/* Clock-derived; see the staff-call label above. */}
                           <span
-                            className="inline-flex min-h-7 items-center gap-1 rounded-full bg-emerald-100 px-2.5 text-[11px] font-bold text-emerald-800 tabular-nums"
-                            title={t.kitchen.tipLabel}
+                            className="text-[11px] text-ink-400"
+                            suppressHydrationWarning
                           >
-                            <HandCoins className="size-3" />
-                            <bdi>{formatMoney(order.tip, locale)}</bdi>
+                            {formatRelative(order.placedAt, locale)}
                           </span>
-                        )}
-
-                        {/* Clock-derived; see the staff-call label above. */}
-                        <span
-                          className="text-[11px] text-ink-400"
-                          suppressHydrationWarning
-                        >
-                          {formatRelative(order.placedAt, locale)}
-                        </span>
-                      </div>
-
-                      {NEXT[order.status] && (
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            disabled={busyId === order.id}
-                            onClick={() => move(order.id, NEXT[order.status]!)}
-                            className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-sm)] bg-ink-900 text-xs font-bold text-ink-50 transition-colors hover:bg-ink-800 disabled:opacity-50"
-                          >
-                            {order.status === "RECEIVED" && (
-                              <ChefHat className="size-3.5" />
-                            )}
-                            {order.status !== "RECEIVED" && (
-                              <Check className="size-3.5" />
-                            )}
-                            {order.status === "RECEIVED"
-                              ? t.kitchen.markPreparing
-                              : order.status === "PREPARING"
-                                ? t.kitchen.markReady
-                                : t.kitchen.markDelivered}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setCancelId(order.id)}
-                            aria-label={t.kitchen.cancelOrder}
-                            className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] border border-ink-200 text-ink-400 hover:border-red-300 hover:text-red-600"
-                          >
-                            <CircleAlert className="size-4" />
-                          </button>
                         </div>
-                      )}
-                    </li>
-                  );
-                })}
 
-                {columnOrders.length === 0 && (
-                  <li className="rounded-[var(--radius-md)] border border-dashed border-ink-300 py-8 text-center text-xs font-semibold text-ink-400">
-                    {t.common.empty}
-                  </li>
-                )}
-              </ul>
-            </section>
-          );
-        })}
-      </div>
+                        {NEXT[order.status] && (
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              disabled={busyId === order.id}
+                              onClick={() => move(order.id, NEXT[order.status]!)}
+                              className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-sm)] bg-ink-900 text-xs font-bold text-ink-50 transition-colors hover:bg-ink-800 disabled:opacity-50"
+                            >
+                              {order.status === "RECEIVED" && (
+                                <ChefHat className="size-3.5" />
+                              )}
+                              {order.status !== "RECEIVED" && (
+                                <Check className="size-3.5" />
+                              )}
+                              {order.status === "RECEIVED"
+                                ? t.kitchen.markPreparing
+                                : order.status === "PREPARING"
+                                  ? t.kitchen.markReady
+                                  : t.kitchen.markDelivered}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setCancelId(order.id)}
+                              aria-label={t.kitchen.cancelOrder}
+                              className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] border border-ink-200 text-ink-400 hover:border-red-300 hover:text-red-600"
+                            >
+                              <CircleAlert className="size-4" />
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+
+                  {columnOrders.length === 0 && (
+                    <li className="rounded-[var(--radius-md)] border border-dashed border-ink-300 py-8 text-center text-xs font-semibold text-ink-400">
+                      {t.common.empty}
+                    </li>
+                  )}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       <ConfirmDialog
         open={cancelId !== null}

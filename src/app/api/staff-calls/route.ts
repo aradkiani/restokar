@@ -26,7 +26,7 @@ export const GET = route(async () => {
     },
     orderBy: { createdAt: "desc" },
     take: 50,
-    select: { id: true, tableNumber: true, note: true, createdAt: true },
+    select: { id: true, tableNumber: true, note: true, kind: true, createdAt: true },
   });
 
   return ok(
@@ -34,6 +34,7 @@ export const GET = route(async () => {
       id: call.id,
       tableNumber: call.tableNumber,
       note: call.note,
+      kind: call.kind,
       createdAt: call.createdAt.toISOString(),
     })),
   );

@@ -24,6 +24,8 @@ const ORDER_ROUTES = [
   "orders/[id]/refund/route.ts",
   "orders/manual/route.ts",
   "orders/sold-out/route.ts",
+  "orders/tables/route.ts",
+  "orders/tables/settle/route.ts",
 ];
 
 describe("order routes require the orders section", () => {

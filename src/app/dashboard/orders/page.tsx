@@ -39,7 +39,7 @@ export default async function OrdersPage() {
     },
     orderBy: { createdAt: "desc" },
     take: 50,
-    select: { id: true, tableNumber: true, note: true, createdAt: true },
+    select: { id: true, tableNumber: true, note: true, kind: true, createdAt: true },
   });
 
   return (
@@ -49,6 +49,7 @@ export default async function OrdersPage() {
         id: call.id,
         tableNumber: call.tableNumber,
         note: call.note,
+        kind: call.kind,
         createdAt: call.createdAt.toISOString(),
       }))}
       locale={locale}

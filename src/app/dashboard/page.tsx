@@ -324,6 +324,7 @@ export default async function DashboardOverviewPage() {
                 className="rounded-full bg-amber-200/70 px-2.5 py-1 text-xs font-bold text-amber-900"
               >
                 {t.kitchen.table} <bdi>{localizeDigits(call.tableNumber, locale)}</bdi>
+                {call.kind === "BILL" && ` — ${t.kitchen.billRequest}`}
                 <span className="mx-1 opacity-60">·</span>
                 <bdi>{formatTime(call.createdAt, locale)}</bdi>
               </span>
