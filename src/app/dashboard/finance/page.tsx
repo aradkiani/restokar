@@ -133,6 +133,39 @@ export default async function FinancePage({
         />
       </section>
 
+      {/*
+        Food cost, and what the shelves lost. Waste and count differences come
+        from the inventory ledger and sit after gross profit, so nothing is
+        entered twice; the row appears only once there is something to show.
+      */}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          label={t.finance.foodCost}
+          value={
+            summary.foodCost === null ? "—" : formatPercent(summary.foodCost, locale)
+          }
+        />
+        {(summary.waste > 0 || summary.stockShortage > 0 || summary.stockSurplus > 0) && (
+          <>
+            <StatTile
+              label={t.finance.wasteLine}
+              value={formatMoney(summary.waste, locale)}
+              tone="negative"
+            />
+            <StatTile
+              label={t.finance.shortageLine}
+              value={formatMoney(summary.stockShortage, locale)}
+              tone="negative"
+            />
+            <StatTile
+              label={t.finance.surplusLine}
+              value={formatMoney(summary.stockSurplus, locale)}
+              tone="positive"
+            />
+          </>
+        )}
+      </section>
+
       <FinancialReportCard locale={locale} />
 
       {/* `[&>*]:min-w-0` is load-bearing: grid children default to

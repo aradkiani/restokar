@@ -24,6 +24,7 @@ export const STAFF_TABS = [
   "qr",
   "analytics",
   "finance",
+  "inventory",
 ] as const;
 
 export type StaffTab = (typeof STAFF_TABS)[number];
@@ -45,12 +46,15 @@ export const EXCLUSIVE_TABS = ["orders"] as const satisfies readonly StaffTab[];
  * answer for every role from one place. It is exactly what
  * `requireBranchOperator` already allowed: a branch runs its own service and
  * its own numbers, and the menu and design belong to the chain that owns them.
+ * Inventory joined when stock became per site: a branch runs its own shelves,
+ * while the catalogue and recipes stay with the chain.
  */
 export const BRANCH_MANAGER_TABS = [
   "orders",
   "qr",
   "analytics",
   "finance",
+  "inventory",
 ] as const satisfies readonly StaffTab[];
 
 /** Where each grantable section lives. */
@@ -61,6 +65,7 @@ export const STAFF_TAB_HREF = {
   qr: "/dashboard/qr",
   analytics: "/dashboard/analytics",
   finance: "/dashboard/finance",
+  inventory: "/dashboard/inventory",
 } as const satisfies Record<StaffTab, string>;
 
 /** Shown to an account that holds nothing; it renders for any signed-in user. */

@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Boxes,
   AlertTriangle,
   Building2,
   ChefHat,
@@ -152,6 +153,13 @@ export function DashboardShell({
       tab: "finance",
       label: labels.finance,
       icon: Wallet,
+      access: "operator",
+    },
+    {
+      href: "/dashboard/inventory",
+      tab: "inventory",
+      label: labels.inventory,
+      icon: Boxes,
       access: "operator",
     },
     {

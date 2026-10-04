@@ -1024,11 +1024,10 @@ async function placeOrder(
     /*
       Take the ingredients off the shelves, in the same transaction.
 
-      Scoped to the *menu owner's* items, because a recipe hangs off a product
-      and products belong to whoever owns the menu. For a single site — nearly
-      every venue — that is the same row. For a chain it means one shared set of
-      shelves rather than one per branch; see the note in
-      dashboard/options/inventory.
+      Recipes are the *menu owner's*, because a recipe hangs off a product and
+      products belong to whoever owns the menu; the shelf is the site that took
+      the order. For a single venue those are the same row. For a chain, a
+      branch's order comes out of that branch's own stock.
 
       Stock is allowed to go negative rather than the order being refused. A
       count is only ever as good as the last time someone updated it, and
@@ -1037,6 +1036,7 @@ async function placeOrder(
     */
     await deductStock(tx, {
       menuOwnerId: menuOwner.id,
+      siteId: restaurant.id,
       orderId: created.id,
       lines: lines.map((line) => ({
         productId: line.productId,

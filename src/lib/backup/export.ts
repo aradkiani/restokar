@@ -77,7 +77,9 @@ const TABLE_ORDER = [
   "AvailabilityWindow",
   "DiscountCode",
   "FeaturedProductEvent",
-  // InventoryItem precedes the two tables that reference it.
+  // An item may name its usual supplier, so suppliers come first.
+  "Supplier",
+  // InventoryItem precedes every table that references it.
   "InventoryItem",
   "ProductIngredient",
   "ProductRecommendation",
@@ -85,6 +87,12 @@ const TABLE_ORDER = [
   // Both reference Product twice over, so they follow it.
   "ProductBundleItem",
   "ProductPairStat",
+  // Per-site shelves, invoices and counts; the ledger references the last two.
+  "StockLevel",
+  "Purchase",
+  "PurchaseLine",
+  "Stocktake",
+  "StocktakeLine",
   "StockMovement",
   "SupportTicket",
   "MenuDailyView",

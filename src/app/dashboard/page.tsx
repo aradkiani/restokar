@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { requirePageBranchOperator } from "@/lib/auth/guards";
 import { canAccessTab, type StaffTab } from "@/lib/staff-tabs";
-import { formatQuantity, isLowStock } from "@/lib/inventory";
+import { formatQuantity } from "@/lib/inventory";
+import { siteScope, stockList } from "@/lib/inventory-server";
 import { getI18n } from "@/lib/i18n";
 import { prisma } from "@/lib/prisma";
 import { getRangeSummary, getTodayStats, getTopProducts } from "@/lib/analytics";
@@ -59,7 +60,9 @@ export default async function DashboardOverviewPage() {
     act on it.
   */
   const canMenu = canAccessTab(user, "menu");
-  const ownsStock = user.role === "OWNER";
+  // Whoever runs this site's shelves: the owner, a branch manager for their
+  // own branch, or staff granted the inventory section.
+  const ownsStock = canAccessTab(user, "inventory");
 
   const [
     today,
@@ -120,21 +123,11 @@ export default async function DashboardOverviewPage() {
     keeps the set small, and a venue's ingredient list is tens of rows, not
     thousands.
   */
-  const watched = ownsStock
-    ? await prisma.inventoryItem.findMany({
-        where: { restaurantId, lowStockMilli: { gt: 0 }, isActive: true },
-        orderBy: { name: "asc" },
-        take: 200,
-        select: {
-          id: true,
-          name: true,
-          unit: true,
-          quantityMilli: true,
-          lowStockMilli: true,
-        },
-      })
+  const lowStock = ownsStock
+    ? (await stockList(await siteScope(restaurantId)))
+        .filter((row) => row.isActive && row.isLow)
+        .map((row) => ({ ...row, id: row.itemId }))
     : [];
-  const lowStock = watched.filter(isLowStock);
 
   // Only the owner of a venue with its own menu sets these things up; a
   // branch serves its chain's menu and design.
@@ -298,7 +291,7 @@ export default async function DashboardOverviewPage() {
             ))}
           </span>
           <Link
-            href="/dashboard/options/inventory"
+            href="/dashboard/inventory"
             className="ms-auto text-xs font-bold text-orange-900 underline"
           >
             {t.inventory.manageLink}

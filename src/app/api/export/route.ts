@@ -9,6 +9,7 @@ import { exportFilename, toCsv } from "@/lib/export/csv";
 import { toXlsx, XLSX_CONTENT_TYPE } from "@/lib/export/xlsx";
 import {
   SENSITIVE_DATASETS,
+  INVENTORY_DATASETS,
   buildExport,
   exportDayKey,
   type ExportDataset,
@@ -62,7 +63,7 @@ export const GET = route(async (request: Request) => {
   */
   const { restaurantId, user } = SENSITIVE_DATASETS.has(dataset)
     ? await requireOwner()
-    : await requireTab("analytics");
+    : await requireTab(INVENTORY_DATASETS.has(dataset) ? "inventory" : "analytics");
 
   /*
     The platform's existing limiter, not a new one.

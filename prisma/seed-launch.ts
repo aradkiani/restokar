@@ -46,6 +46,7 @@ import {
   type SeedCategory,
   SEED_DISH_TAGS,
 } from "./menu-data";
+import { unitCost } from "../src/lib/costing";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL as string });
 const prisma = new PrismaClient({ adapter });
@@ -699,13 +700,13 @@ async function createVenue(spec: VenueSpec) {
 
   // Stock first, so recipes can point at it.
   const stockIds = new Map<string, string>();
+  const openings: { itemId: string; milli: number; cost: number | null }[] = [];
   for (const item of spec.stock) {
     const created = await prisma.inventoryItem.create({
       data: {
         restaurantId: restaurant.id,
         name: item.name,
         unit: item.unit,
-        quantityMilli: Math.round(item.opening * 1000),
         lowStockMilli: Math.round(item.low * 1000),
         purchasePrice: item.price,
         priceUnit: item.priceUnit,
@@ -713,16 +714,15 @@ async function createVenue(spec: VenueSpec) {
       },
     });
     stockIds.set(item.name, created.id);
-    // The opening count, so the ledger adds up to the shelf.
-    await prisma.stockMovement.create({
-      data: {
-        itemId: created.id,
-        deltaMilli: Math.round(item.opening * 1000),
-        reason: "MANUAL_ADJUSTMENT",
-        createdAt: new Date(Date.now() - (spec.historyDays + 1) * DAY_MS),
-      },
+    const cost = unitCost({
+      unit: item.unit,
+      purchasePrice: item.price,
+      priceUnit: item.priceUnit,
     });
+    seedUnitCost.set(created.id, cost);
+    openings.push({ itemId: created.id, milli: Math.round(item.opening * 1000), cost });
   }
+  await openShelves(restaurant.id, openings, spec.historyDays);
 
   const products: SeededProduct[] = [];
   let imageIndex = 0;
@@ -853,6 +853,8 @@ async function createVenue(spec: VenueSpec) {
         number: String(i + 1),
       })),
     });
+    // Each branch keeps its own shelves, stocked like the head office's.
+    await openShelves(site.id, openings, spec.historyDays);
     const branchSequence = await createHistory(
       rng(branch.slug),
       site.id,
@@ -876,6 +878,40 @@ async function createVenue(spec: VenueSpec) {
  * have written them (snapshots fixed at placement, stock taken at placement and
  * put back on cancel).
  */
+/** Toman per item unit at the reference price, for valuing seeded movements. */
+const seedUnitCost = new Map<string, number | null>();
+
+/**
+ * Puts the opening stock on a site's shelves: a level and the OPENING row
+ * that explains it, so the ledger adds up to the shelf from the first day —
+ * the same pair `postMovements` writes for a real venue.
+ */
+async function openShelves(
+  siteId: string,
+  openings: { itemId: string; milli: number; cost: number | null }[],
+  historyDays: number,
+) {
+  if (openings.length === 0) return;
+  await prisma.stockLevel.createMany({
+    data: openings.map((o) => ({
+      itemId: o.itemId,
+      restaurantId: siteId,
+      quantityMilli: o.milli,
+      avgCost: o.cost,
+    })),
+  });
+  await prisma.stockMovement.createMany({
+    data: openings.map((o) => ({
+      itemId: o.itemId,
+      restaurantId: siteId,
+      deltaMilli: o.milli,
+      reason: "OPENING" as const,
+      unitCost: o.cost,
+      createdAt: new Date(Date.now() - (historyDays + 1) * DAY_MS),
+    })),
+  });
+}
+
 async function createHistory(
   rand: Rand,
   restaurantId: string,
@@ -1028,8 +1064,10 @@ async function createHistory(
         await prisma.stockMovement.createMany({
           data: entries.map(([itemId, amount]) => ({
             itemId,
+            restaurantId,
             deltaMilli: -amount,
             reason: "ORDER_PLACED" as const,
+            unitCost: seedUnitCost.get(itemId) ?? null,
             orderId: order.id,
             createdAt: placedAt,
           })),
@@ -1038,8 +1076,10 @@ async function createHistory(
           await prisma.stockMovement.createMany({
             data: entries.map(([itemId, amount]) => ({
               itemId,
+              restaurantId,
               deltaMilli: amount,
               reason: "ORDER_CANCELED" as const,
+              unitCost: seedUnitCost.get(itemId) ?? null,
               orderId: order.id,
               createdAt: minutes(5),
             })),
@@ -1066,8 +1106,8 @@ async function createHistory(
   }
 
   for (const [itemId, amount] of consumed) {
-    await prisma.inventoryItem.update({
-      where: { id: itemId },
+    await prisma.stockLevel.update({
+      where: { itemId_restaurantId: { itemId, restaurantId } },
       data: { quantityMilli: { decrement: amount } },
     });
   }

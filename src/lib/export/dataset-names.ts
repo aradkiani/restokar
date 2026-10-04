@@ -17,6 +17,7 @@ export const EXPORT_DATASETS = [
   "categories",
   "customers",
   "inventory",
+  "purchases",
   "pnl",
   "tables",
 ] as const;
@@ -42,3 +43,12 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
  * state its answer here.
  */
 export const SENSITIVE_DATASETS: ReadonlySet<ExportDataset> = new Set(["customers"]);
+
+/**
+ * Datasets opened by the inventory section's grant rather than the analytics
+ * one: someone who runs the shelves can take the shelves home in a file.
+ */
+export const INVENTORY_DATASETS: ReadonlySet<ExportDataset> = new Set([
+  "inventory",
+  "purchases",
+]);

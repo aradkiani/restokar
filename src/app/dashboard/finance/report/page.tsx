@@ -349,6 +349,11 @@ export default async function FinancialReportPage({
                   [`− ${t.finance.totalCost}`, money(report.summary.cost)],
                   [`= ${t.finance.grossProfit}`, money(report.summary.grossProfit)],
                   [`− ${t.finance.totalExpenses}`, money(report.summary.expenses)],
+                  // Only once there is something to say: a venue that never
+                  // records waste or counts sees the statement it always saw.
+                  ...(report.summary.stockLosses !== 0
+                    ? [[`− ${t.finance.stockLosses}`, money(report.summary.stockLosses)]]
+                    : []),
                   [
                     `= ${report.summary.netProfit >= 0 ? t.finance.netProfit : t.finance.netLoss}`,
                     money(Math.abs(report.summary.netProfit)),

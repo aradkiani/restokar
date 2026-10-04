@@ -149,6 +149,9 @@ enum AuditAction {
   PLAN_UPDATED
   /// Staff marked a dish sold out for the day, or back in stock.
   SOLD_OUT_CHANGED
+  PURCHASE_RECORDED
+  STOCK_WASTED
+  STOCKTAKE_POSTED
   /// A cashier settled every open order on a table in cash at once.
   TABLE_SETTLED
   /// The end-of-day cash close was recorded (or corrected) for a site.
@@ -519,6 +522,13 @@ model Restaurant {
   pairStats            ProductPairStat[]
   soldOut              SoldOutProduct[]
   dailyCloses          DailyClose[]
+  /// Inventory: suppliers belong to the menu owner; stock, purchases, counts
+  /// and ledger rows to the site that holds the shelves.
+  suppliers            Supplier[]
+  stockLevels          StockLevel[]
+  stockMovements       StockMovement[]
+  purchases            Purchase[]
+  stocktakes           Stocktake[]
   customers            Customer[]
   campaigns            Campaign[]
   smsBroadcasts        SmsBroadcast[]
@@ -1647,15 +1657,29 @@ model InventoryItem {
   priceUnit      String?
   priceUpdatedAt DateTime?
 
-  /// Thousandths of `unit` currently on the shelf.
+  /// Legacy: the single chain-wide shelf before per-site stock existed.
+  ///
+  /// Frozen at the migration that introduced StockLevel and no longer written;
+  /// kept one release as the rollback path. Read StockLevel instead.
   quantityMilli Int @default(0)
   /// Warn at or below this. 0 means "do not watch this item".
   lowStockMilli Int @default(0)
 
+  /// False once archived. An item with history is archived, never deleted,
+  /// so the ledger keeps every row it ever wrote.
   isActive Boolean @default(true)
 
-  ingredients ProductIngredient[]
-  movements   StockMovement[]
+  /// Free-text grouping for the stock list — «لبنیات», «نوشیدنی».
+  categoryName String?
+  /// Where it is usually bought; a purchase can still name another.
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  ingredients    ProductIngredient[]
+  movements      StockMovement[]
+  levels         StockLevel[]
+  purchaseLines  PurchaseLine[]
+  stocktakeLines StocktakeLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1702,11 +1726,35 @@ model ProductIngredient {
 model StockMovement {
   id     String        @id @default(cuid())
   itemId String
-  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  /// NoAction rather than Cascade: a row in the ledger outlives any attempt to
+  /// delete its item, which is archived instead. Deleting a whole venue still
+  /// works, because the venue's own cascade removes both in one statement.
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction)
+
+  /// The site whose shelf moved. Null only on rows written before per-site
+  /// stock existed; the migration filled those with the item's owner.
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   /// Negative when consumed, positive when restocked or restored.
   deltaMilli Int
   reason     StockMovementReason
+
+  /// Toman per one item unit at the moment of the movement: the purchase cost
+  /// for a purchase, the site's weighted average for everything else. Null
+  /// when nothing about the item's cost was known.
+  unitCost    Float?
+  /// Who did it, where a person did. Orders are moved by the system.
+  userId      String?
+  actorLabel  String?
+  note        String?
+  /// Why stock was thrown away: a key from WASTE_REASONS in inventory-ledger.ts.
+  wasteReason String?
+
+  purchaseId  String?
+  purchase    Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  stocktakeId String?
+  stocktake   Stocktake? @relation(fields: [stocktakeId], references: [id], onDelete: SetNull)
 
   /// The order that caused it, where there was one. Nulled rather than
   /// cascaded if that order is ever removed: the shelf still moved.
@@ -1719,12 +1767,146 @@ model StockMovement {
   @@unique([orderId, itemId, reason])
   @@index([itemId, createdAt])
   @@index([orderId])
+  @@index([restaurantId, createdAt])
 }
 
 enum StockMovementReason {
   ORDER_PLACED
   ORDER_CANCELED
   MANUAL_ADJUSTMENT
+  /// What was on the shelf when the ledger started, so it sums to the shelf.
+  OPENING
+  PURCHASE
+  WASTE
+  STOCKTAKE
+}
+
+/// How much of one item one site holds, and what it cost on average.
+///
+/// The catalogue — the item, its unit, the recipes using it — belongs to the
+/// menu owner; the shelf belongs to the site. A chain's Vanak branch running
+/// out of flour says nothing about Tajrish. Written only by `postMovements`
+/// in src/lib/stock.ts, in the same transaction as the ledger row.
+model StockLevel {
+  id           String        @id @default(cuid())
+  itemId       String
+  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  /// Thousandths of the item's unit. May go negative: see orders.ts.
+  quantityMilli Int    @default(0)
+  /// Weighted average cost, Toman per one item unit. Null until known.
+  avgCost       Float?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([itemId, restaurantId])
+  @@index([restaurantId])
+}
+
+/// Somewhere a venue buys from. Belongs to the menu owner, shared by branches.
+model Supplier {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  phone        String?
+  note         String?
+  isActive     Boolean    @default(true)
+
+  items     InventoryItem[]
+  purchases Purchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([restaurantId, name])
+}
+
+enum PurchasePaymentStatus {
+  PAID
+  UNPAID
+}
+
+/// Goods received at one site, on one invoice.
+///
+/// Not an expense: a purchase turns cash into stock. The cost reaches profit
+/// when the stock is sold (cost of goods), thrown away (waste) or found
+/// missing at a count (variance) — see src/lib/inventory-ledger.ts.
+model Purchase {
+  id             String                @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant            @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  supplierId     String?
+  supplier       Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchasedAt    DateTime
+  invoiceNumber  String?
+  /// Whole Toman, the sum of the lines.
+  total          Int
+  paymentStatus  PurchasePaymentStatus @default(PAID)
+  paidAt         DateTime?
+  note           String?
+  createdById    String?
+  createdByLabel String
+  createdAt      DateTime              @default(now())
+
+  lines     PurchaseLine[]
+  movements StockMovement[]
+
+  @@index([restaurantId, purchasedAt])
+}
+
+model PurchaseLine {
+  id            String        @id @default(cuid())
+  purchaseId    String
+  purchase      Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction)
+  /// Thousandths of the item's unit, whatever unit it was typed in.
+  quantityMilli Int
+  /// The unit the amount was typed in, so the invoice reads back as written.
+  unit          String
+  /// Whole Toman for the whole line.
+  lineTotal     Int
+
+  @@index([purchaseId])
+}
+
+/// A physical count at one site, posted in one step.
+///
+/// No draft state on purpose: a count left open while the kitchen keeps
+/// cooking compares a shelf counted at 10:00 against books at 14:00. The
+/// expected figure is read when the count is posted, from the same level the
+/// adjustment then corrects.
+model Stocktake {
+  id             String     @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  note           String?
+  createdById    String?
+  createdByLabel String
+  postedAt       DateTime   @default(now())
+
+  lines     StocktakeLine[]
+  movements StockMovement[]
+
+  @@index([restaurantId, postedAt])
+}
+
+model StocktakeLine {
+  id            String        @id @default(cuid())
+  stocktakeId   String
+  stocktake     Stocktake     @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          InventoryItem @relation(fields: [itemId], references: [id], onDelete: NoAction)
+  /// What the books said at the moment of posting.
+  expectedMilli Int
+  countedMilli  Int
+  /// Toman per item unit used to value the difference.
+  unitCost      Float?
+
+  @@index([stocktakeId])
 }
 
 // ------------------------------- support -----------------------------------

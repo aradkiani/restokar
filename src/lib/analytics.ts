@@ -4,6 +4,7 @@ import { prisma } from "./prisma";
 import { endOfDayInZone, startOfDayInZone, zonedParts } from "./time";
 import { COUNTED_ORDER } from "./order-status";
 import { summariseKitchenSpeed, type KitchenSpeed } from "./kitchen-speed";
+import { inventoryLosses } from "./inventory-ledger";
 import { menuOwnerId } from "./menu";
 
 /**
@@ -448,8 +449,15 @@ export interface FinanceSummary {
   cost: number;
   grossProfit: number;
   expenses: number;
+  /** Stock thrown away, at the site's average cost. From the ledger. */
+  waste: number;
+  /** Stock found missing at a count, and found extra. From the ledger. */
+  stockShortage: number;
+  stockSurplus: number;
   netProfit: number;
   margin: number;
+  /** Cost of goods as a share of net revenue; null with no revenue. */
+  foodCost: number | null;
   expensesByCategory: { category: string; amount: number }[];
 }
 
@@ -464,7 +472,7 @@ export async function getFinanceSummary(
 ): Promise<FinanceSummary> {
   const { from, to } = resolveRange(window);
 
-  const [orders, expenses] = await Promise.all([
+  const [orders, expenses, ledger] = await Promise.all([
     prisma.order.aggregate({
       where: { restaurantId, ...COUNTED, placedAt: { gte: from, lte: to } },
       _sum: { total: true, costTotal: true, tax: true, tip: true },
@@ -472,6 +480,19 @@ export async function getFinanceSummary(
     prisma.expense.findMany({
       where: { restaurantId, occurredAt: { gte: from, lte: to } },
       select: { category: true, amount: true },
+    }),
+    /*
+      Waste and count differences, the only inventory figures that reach
+      profit (see inventory-ledger.ts). Purchases are deliberately absent: they
+      turn cash into stock, and the stock is costed when it is sold.
+    */
+    prisma.stockMovement.findMany({
+      where: {
+        restaurantId,
+        reason: { in: ["WASTE", "STOCKTAKE"] },
+        createdAt: { gte: from, lte: to },
+      },
+      select: { reason: true, deltaMilli: true, unitCost: true },
     }),
   ]);
 
@@ -493,15 +514,21 @@ export async function getFinanceSummary(
     );
   }
 
-  const netProfit = grossProfit - expenseTotal;
+  const losses = inventoryLosses(ledger);
+  const netProfit =
+    grossProfit - expenseTotal - losses.waste - losses.shortage + losses.surplus;
 
   return {
     revenue,
     cost,
     grossProfit,
     expenses: expenseTotal,
+    waste: losses.waste,
+    stockShortage: losses.shortage,
+    stockSurplus: losses.surplus,
     netProfit,
     margin: revenue > 0 ? netProfit / revenue : 0,
+    foodCost: revenue > 0 ? cost / revenue : null,
     expensesByCategory: [...byCategory.entries()]
       .map(([category, amount]) => ({ category, amount }))
       .sort((a, b) => b.amount - a.amount),

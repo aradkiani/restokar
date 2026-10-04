@@ -46,6 +46,7 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
     qr: t.dashboard.qr,
     analytics: t.dashboard.analytics,
     finance: t.dashboard.finance,
+    inventory: t.dashboard.inventory,
   };
 
   /** Who currently holds each exclusive tab, so the form can say so up front. */

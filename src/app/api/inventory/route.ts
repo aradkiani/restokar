@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/auth/guards";
 import { InventoryItemSchema } from "@/lib/validation";
 import { toMilli } from "@/lib/inventory";
-import { INVENTORY_ITEM_SELECT } from "@/lib/stock";
+import { catalogueItems, postMovements } from "@/lib/stock";
+import { unitCost } from "@/lib/costing";
+import { actorOf, assertSupplier } from "@/lib/inventory-server";
 
 export const runtime = "nodejs";
 
@@ -14,25 +16,19 @@ export const runtime = "nodejs";
  * business, and the tab lives in More Options alongside the pricing rules for
  * the same reason.
  *
- * Scoped to the session's tenant throughout — a chain's stock belongs to the
- * venue that owns the menu, because recipes hang off products and products
- * belong to the menu owner.
+ * Scoped to the session's tenant throughout — a chain's catalogue belongs to
+ * the venue that owns the menu, because recipes hang off products and products
+ * belong to the menu owner. The quantity shown is the owner's own site; each
+ * branch's shelves are read in the inventory section.
  */
 export const GET = route(async () => {
   const { restaurantId } = await requireOwner();
-
-  const items = await prisma.inventoryItem.findMany({
-    where: { restaurantId },
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
-    take: 500,
-    select: INVENTORY_ITEM_SELECT,
-  });
-
-  return ok(items);
+  // Archived items keep their history but leave the working list.
+  return ok(await catalogueItems(prisma, restaurantId, { isActive: true }));
 });
 
 export const POST = route(async (request: Request) => {
-  const { restaurantId } = await requireOwner();
+  const { user, restaurantId } = await requireOwner();
   const input = await parseBody(request, InventoryItemSchema);
 
   // Named per venue, so "آرد" is one shelf rather than three rows nobody can
@@ -51,24 +47,53 @@ export const POST = route(async (request: Request) => {
   // reading an owner who just chose "kilogram" above it means.
   const purchasePrice = input.purchasePrice ?? null;
   const priceUnit = purchasePrice === null ? null : (input.priceUnit ?? input.unit);
+  const supplierId = await assertSupplier(restaurantId, input.supplierId);
 
   try {
-    const created = await prisma.inventoryItem.create({
-      data: {
-        restaurantId,
-        name: input.name,
-        unit: input.unit,
-        quantityMilli: toMilli(input.quantity),
-        lowStockMilli: toMilli(input.lowStock),
-        purchasePrice,
-        priceUnit,
-        priceUpdatedAt: purchasePrice === null ? null : new Date(),
-      },
-      select: INVENTORY_ITEM_SELECT,
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.inventoryItem.create({
+        data: {
+          restaurantId,
+          name: input.name,
+          unit: input.unit,
+          lowStockMilli: toMilli(input.lowStock),
+          purchasePrice,
+          priceUnit,
+          priceUpdatedAt: purchasePrice === null ? null : new Date(),
+          categoryName: input.categoryName || null,
+          supplierId,
+        },
+        select: { id: true },
+      });
+      /*
+        What is on the shelf today is an OPENING row, valued at the price the
+        owner just typed, so the ledger sums to the shelf from the first day
+        and the average cost starts from something real.
+      */
+      const quantity = toMilli(input.quantity);
+      if (quantity > 0) {
+        await postMovements(tx, {
+          siteId: restaurantId,
+          actor: actorOf(user),
+          movements: [
+            {
+              itemId: item.id,
+              deltaMilli: quantity,
+              reason: "OPENING",
+              unitCost: unitCost({ unit: input.unit, purchasePrice, priceUnit }),
+            },
+          ],
+        });
+      }
+      const [row] = await catalogueItems(tx, restaurantId, { id: item.id });
+      return row;
     });
 
     return ok(created, { status: 201 });
-  } catch {
+  } catch (error) {
+    if (!(error instanceof Error) || !/Unique constraint|P2002/.test(error.message)) {
+      throw error;
+    }
     return fail(409, `«${input.name}» از قبل ثبت شده است`, "INVENTORY_ITEM_EXISTS");
   }
 });

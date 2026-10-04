@@ -12,6 +12,7 @@ import { MAX_BULK_PERCENT, MIN_BULK_PERCENT, PRICE_ROUNDING_STEPS } from "./bulk
 import { MAX_SCHEDULE_WINDOWS, parseTimeOfDay } from "./availability";
 import { FEATURED_LABELS, MAX_CUSTOM_LABEL_LENGTH } from "./featured";
 import { DISH_TAGS } from "./dish-tags";
+import { WASTE_REASONS } from "./inventory-ledger";
 import { UNIT_CODES, isUnitCode, sameDimension } from "./units";
 import { MAX_BROADCAST_TEXT_LENGTH, SMS_AUDIENCES } from "./sms-broadcast";
 import { MAX_BUNDLE_COMPONENTS } from "./bundles";
@@ -1057,6 +1058,10 @@ const inventoryFields = {
   lowStock: z.coerce.number().min(0, "سقف هشدار نمی‌تواند منفی باشد").max(1_000_000),
   purchasePrice,
   priceUnit: unitCode.nullable(),
+  /** Free-text grouping for the stock list; empty clears it. */
+  categoryName: z.string().trim().max(40).optional().or(z.literal("")),
+  /** The usual supplier; null clears it. */
+  supplierId: z.string().min(1).nullable().optional(),
 };
 
 /**
@@ -1120,8 +1125,106 @@ export const InventoryItemPatchSchema = z
     lowStock: inventoryFields.lowStock.optional(),
     purchasePrice: inventoryFields.purchasePrice.optional(),
     priceUnit: inventoryFields.priceUnit.optional(),
+    categoryName: inventoryFields.categoryName,
+    supplierId: inventoryFields.supplierId,
   })
   .superRefine(pricedConsistently);
+
+// ------------------------- stock operations --------------------------------
+
+/**
+ * Which site's shelves a request acts on. Honoured only for a chain owner;
+ * everyone else is pinned to their own site by `resolveStockScope`.
+ */
+const siteId = z.string().min(1).max(40).optional();
+
+/** An amount in some unit, as typed: 2.5 (kg), 300 (g), 24 (pieces). */
+const stockAmount = z.coerce
+  .number({ error: "مقدار باید عدد باشد" })
+  .positive("مقدار باید بیشتر از صفر باشد")
+  .max(1_000_000, "مقدار بیش از حد بزرگ است");
+
+export const SupplierSchema = z.object({
+  name: z.string().trim().min(1, "نام تأمین‌کننده را وارد کنید").max(80),
+  phone: z.string().trim().max(20).optional().or(z.literal("")),
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+  isActive: z.boolean().optional(),
+});
+
+export const PurchaseSchema = z.object({
+  siteId,
+  supplierId: z.string().min(1).nullable().optional(),
+  /** Defaults to now; an invoice can be booked a few days late. */
+  purchasedAt: z.coerce.date().optional(),
+  invoiceNumber: z.string().trim().max(40).optional().or(z.literal("")),
+  paid: z.boolean().default(true),
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+  updateReferencePrices: z.boolean().default(false),
+  lines: z
+    .array(
+      z.object({
+        itemId: z.string().min(1),
+        amount: stockAmount,
+        unit: unitCode.optional(),
+        lineTotal: money("مبلغ ردیف"),
+      }),
+    )
+    .min(1, "دست‌کم یک قلم وارد کنید")
+    .max(60, "حداکثر ۶۰ قلم در هر فاکتور")
+    .refine(
+      (lines) => new Set(lines.map((line) => line.itemId)).size === lines.length,
+      "هر قلم را یک بار وارد کنید",
+    ),
+});
+
+export const WasteSchema = z.object({
+  siteId,
+  itemId: z.string().min(1, "ماده را انتخاب کنید"),
+  amount: stockAmount,
+  unit: unitCode.optional(),
+  reason: z.enum(WASTE_REASONS, { error: "علت را انتخاب کنید" }),
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+});
+
+export const StocktakeSchema = z.object({
+  siteId,
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+  lines: z
+    .array(
+      z.object({
+        itemId: z.string().min(1),
+        /** In the item's own unit; zero is a real count ("none left"). */
+        counted: z.coerce
+          .number({ error: "مقدار شمارش باید عدد باشد" })
+          .min(0, "مقدار شمارش نمی‌تواند منفی باشد")
+          .max(1_000_000),
+      }),
+    )
+    .min(1, "دست‌کم یک قلم را شمارش کنید")
+    .max(1_000)
+    .refine(
+      (lines) => new Set(lines.map((line) => line.itemId)).size === lines.length,
+      "هر قلم را یک بار وارد کنید",
+    ),
+});
+
+export const MovementQuerySchema = z.object({
+  site: siteId,
+  item: z.string().min(1).max(40).optional(),
+  reason: z
+    .enum([
+      "ORDER_PLACED",
+      "ORDER_CANCELED",
+      "MANUAL_ADJUSTMENT",
+      "OPENING",
+      "PURCHASE",
+      "WASTE",
+      "STOCKTAKE",
+    ])
+    .optional(),
+  /** The last row of the previous page. */
+  after: z.string().min(1).max(40).optional(),
+});
 
 /**
  * A dish's whole recipe, replaced in one call.

@@ -120,6 +120,8 @@ export interface FinancialReport {
     cost: number;
     grossProfit: number;
     expenses: number;
+    /** Stock waste plus count shortage, less count surplus. From the ledger. */
+    stockLosses: number;
     netProfit: number;
     margin: number;
     orders: number;
@@ -280,6 +282,7 @@ export async function buildFinancialReport(
       cost: summary.cost,
       grossProfit: summary.grossProfit,
       expenses: finance.expenses,
+      stockLosses: finance.waste + finance.stockShortage - finance.stockSurplus,
       netProfit: finance.netProfit,
       margin: finance.margin,
       orders: summary.orders,

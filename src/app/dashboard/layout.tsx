@@ -77,6 +77,7 @@ export default async function DashboardLayout({
       theme={theme}
       labels={{
         overview: t.dashboard.overview,
+        inventory: t.dashboard.inventory,
         menu: t.dashboard.menu,
         design: t.dashboard.design,
         orders: t.dashboard.orders,

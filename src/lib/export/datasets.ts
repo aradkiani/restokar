@@ -12,13 +12,19 @@ import {
 import { rankPerformance } from "../profitability";
 import { getTableReport } from "../tables-server";
 import { listCustomers } from "../customers-server";
-import { fromMilli, isLowStock } from "../inventory";
+import { fromMilli } from "../inventory";
+import { siteScope, stockList } from "../inventory-server";
 import { zonedParts } from "../time";
 import type { ColumnKind, ExportColumn, ExportRow } from "./cells";
 import { type ExportDataset } from "./dataset-names";
 import type { Dictionary } from "../i18n/fa";
 
-export { EXPORT_DATASETS, SENSITIVE_DATASETS, type ExportDataset } from "./dataset-names";
+export {
+  EXPORT_DATASETS,
+  INVENTORY_DATASETS,
+  SENSITIVE_DATASETS,
+  type ExportDataset,
+} from "./dataset-names";
 
 /**
  * What each export actually contains.
@@ -436,38 +442,87 @@ async function inventoryDataset(
   _range: DateRange,
   t: Dictionary,
 ): Promise<ExportResult> {
-  const items = await prisma.inventoryItem.findMany({
-    where: { restaurantId },
-    orderBy: { name: "asc" },
-    select: {
-      name: true,
-      unit: true,
-      quantityMilli: true,
-      lowStockMilli: true,
-      isActive: true,
-    },
-  });
-
+  // The site's own shelves — a branch exports its branch — valued exactly as
+  // the stock screen values them, because it is the same function.
+  const rows = await stockList(await siteScope(restaurantId));
   const e = t.exports.columns;
 
   return {
     columns: [
       col(e.item, "text"),
+      col(e.category, "text"),
       col(e.unit, "text"),
       col(e.inStock, "quantity"),
       col(e.lowStockAt, "quantity"),
       col(e.isLow, "text"),
+      col(e.unitCost, "money"),
+      col(e.stockValue, "money"),
       col(e.active, "text"),
     ],
-    rows: items.map((item) => [
-      item.name,
+    rows: rows.map((row) => [
+      row.name,
+      row.categoryName ?? "",
       // The label in the reader's language, not the stored code.
-      t.costing.units[item.unit as keyof typeof t.costing.units] ?? item.unit,
-      fromMilli(item.quantityMilli),
-      fromMilli(item.lowStockMilli),
-      yesNo(isLowStock(item), t),
-      yesNo(item.isActive, t),
+      t.costing.units[row.unit as keyof typeof t.costing.units] ?? row.unit,
+      fromMilli(row.quantityMilli),
+      fromMilli(row.lowStockMilli),
+      yesNo(row.isLow, t),
+      row.unitCost === null ? "" : Math.round(row.unitCost),
+      row.value,
+      yesNo(row.isActive, t),
     ]),
+  };
+}
+
+/** Stock purchases at this site over the window, one row per invoice line. */
+async function purchasesDataset(
+  restaurantId: string,
+  range: DateRange,
+  t: Dictionary,
+): Promise<ExportResult> {
+  const { from, to } = resolveRange(range);
+  const purchases = await prisma.purchase.findMany({
+    where: { restaurantId, purchasedAt: { gte: from, lte: to } },
+    orderBy: { purchasedAt: "asc" },
+    select: {
+      purchasedAt: true,
+      invoiceNumber: true,
+      paymentStatus: true,
+      supplier: { select: { name: true } },
+      lines: {
+        select: {
+          quantityMilli: true,
+          lineTotal: true,
+          item: { select: { name: true, unit: true } },
+        },
+      },
+    },
+  });
+  const e = t.exports.columns;
+
+  return {
+    columns: [
+      col(e.date, "text"),
+      col(e.invoiceNumber, "text"),
+      col(e.supplier, "text"),
+      col(e.item, "text"),
+      col(e.quantity, "quantity"),
+      col(e.unit, "text"),
+      col(e.lineTotal, "money"),
+      col(e.paid, "text"),
+    ],
+    rows: purchases.flatMap((purchase) =>
+      purchase.lines.map((line) => [
+        dayKey(purchase.purchasedAt),
+        purchase.invoiceNumber ?? "",
+        purchase.supplier?.name ?? "",
+        line.item.name,
+        fromMilli(line.quantityMilli),
+        t.costing.units[line.item.unit as keyof typeof t.costing.units] ?? line.item.unit,
+        line.lineTotal,
+        yesNo(purchase.paymentStatus === "PAID", t),
+      ]),
+    ),
   };
 }
 
@@ -494,9 +549,15 @@ async function pnlDataset(
     [f.totalCost, finance.cost],
     [f.grossProfit, finance.grossProfit],
     [f.totalExpenses, finance.expenses],
+    [f.wasteLine, finance.waste],
+    [f.shortageLine, finance.stockShortage],
+    [f.surplusLine, finance.stockSurplus],
     [finance.netProfit < 0 ? f.netLoss : f.netProfit, finance.netProfit],
-    // The one line in the amount column that is not Toman.
+    // The lines in the amount column that are not Toman.
     [f.margin, { value: finance.margin, kind: "percent" }],
+    ...(finance.foodCost !== null
+      ? [[f.foodCost, { value: finance.foodCost, kind: "percent" as const }] as ExportRow]
+      : []),
   ];
 
   // The expense breakdown, attributed under its total by naming rather than by
@@ -591,6 +652,7 @@ const BUILDERS: Record<ExportDataset, Builder> = {
   categories: categoriesDataset,
   customers: customersDataset,
   inventory: inventoryDataset,
+  purchases: purchasesDataset,
   pnl: pnlDataset,
   tables: tablesDataset,
 };

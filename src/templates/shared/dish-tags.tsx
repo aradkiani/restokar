@@ -21,6 +21,10 @@ import { useMenu } from "./runtime";
 /**
  * Icons after a dish name, inline so they wrap and clamp with the name rather
  * than claiming a row of their own on a card that has no room for one.
+ *
+ * The glyphs are drawn by CSS rather than written into the text, so the
+ * heading's text is still exactly the dish name — for copying, for search and
+ * for anything that reads the page — while a screen reader hears the labels.
  */
 export function DishTagIcons({ tags }: { tags: readonly DishTag[] }) {
   const { t } = useMenu();
@@ -34,9 +38,12 @@ export function DishTagIcons({ tags }: { tags: readonly DishTag[] }) {
       className="ms-1.5 inline-flex gap-0.5 align-[0.05em] text-[0.85em] leading-none"
     >
       {tags.map((tag) => (
-        <span key={tag} aria-hidden>
-          {DISH_TAG_ICONS[tag]}
-        </span>
+        <span
+          key={tag}
+          aria-hidden
+          data-icon={DISH_TAG_ICONS[tag]}
+          className="before:content-[attr(data-icon)]"
+        />
       ))}
     </span>
   );

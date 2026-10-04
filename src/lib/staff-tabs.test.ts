@@ -120,6 +120,8 @@ describe("canAccessTab", () => {
     expect(canAccessTab(manager, "qr")).toBe(true);
     expect(canAccessTab(manager, "analytics")).toBe(true);
     expect(canAccessTab(manager, "finance")).toBe(true);
+    // Its own branch's shelves; the catalogue stays with the chain.
+    expect(canAccessTab(manager, "inventory")).toBe(true);
 
     expect(canAccessTab(manager, "menu")).toBe(false);
     expect(canAccessTab(manager, "design")).toBe(false);

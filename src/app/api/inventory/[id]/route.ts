@@ -14,7 +14,8 @@ import {
   repriceForIngredient,
   type RepricedProduct,
 } from "@/lib/costing-server";
-import { INVENTORY_ITEM_SELECT } from "@/lib/stock";
+import { catalogueItems, convertItemUnit, postMovements } from "@/lib/stock";
+import { actorOf, assertSupplier } from "@/lib/inventory-server";
 
 export const runtime = "nodejs";
 
@@ -27,14 +28,23 @@ async function assertOwned(restaurantId: string, id: string) {
       id: true,
       name: true,
       unit: true,
-      quantityMilli: true,
       lowStockMilli: true,
       purchasePrice: true,
       priceUnit: true,
+      levels: { select: { restaurantId: true, quantityMilli: true } },
+      _count: { select: { movements: true } },
     },
   });
   if (!existing) throw new HttpError(404, "Inventory item not found", "NOT_FOUND");
-  return existing;
+  const own = existing.levels.find((level) => level.restaurantId === restaurantId);
+  return {
+    ...existing,
+    /** The owner's own site — the figure this screen shows and edits. */
+    quantityMilli: own?.quantityMilli ?? 0,
+    /** Every site's stock, which a unit change has to convert too. */
+    largestMilli: Math.max(0, ...existing.levels.map((l) => Math.abs(l.quantityMilli))),
+    hasHistory: existing._count.movements > 0,
+  };
 }
 
 /**
@@ -61,6 +71,11 @@ export const PATCH = route(async (request: Request, context: unknown) => {
   const { id } = await (context as Context).params;
   const existing = await assertOwned(restaurantId, id);
   const input = await parseBody(request, InventoryItemPatchSchema);
+  const actor = actorOf(user);
+  const supplierId =
+    input.supplierId === undefined
+      ? undefined
+      : await assertSupplier(restaurantId, input.supplierId);
 
   const currentUnit: UnitCode = isUnitCode(existing.unit) ? existing.unit : "piece";
   const nextUnit: UnitCode = input.unit ?? currentUnit;
@@ -80,7 +95,7 @@ export const PATCH = route(async (request: Request, context: unknown) => {
       // depends on — typically one created with the wrong unit a moment ago.
       const untouched =
         usedBy.length === 0 &&
-        existing.quantityMilli === 0 &&
+        !existing.hasHistory &&
         existing.lowStockMilli === 0 &&
         existing.purchasePrice === null;
       if (!untouched) {
@@ -182,15 +197,15 @@ export const PATCH = route(async (request: Request, context: unknown) => {
         });
       }
 
-      // The ledger is history, but it is history *in this unit*: a movement
-      // of −230 means 230 thousandths of whatever the item is counted in.
-      // One statement, because a busy ingredient has a movement per order and
-      // updating them row by row would hold this transaction open for as long.
-      await tx.$executeRaw`
-        UPDATE "StockMovement"
-           SET "deltaMilli" = ROUND("deltaMilli" * ${factor}::float8)::int
-         WHERE "itemId" = ${id}
-      `;
+      // Every site's shelf, the ledger, invoices and counts, in one go.
+      if (scale(existing.largestMilli) > MAX_INT4) {
+        throw new HttpError(
+          409,
+          "An amount would be too large in that unit",
+          "INVENTORY_UNIT_OVERFLOW",
+        );
+      }
+      await convertItemUnit(tx, id, factor);
     }
 
     const convertedQuantity = scale(existing.quantityMilli);
@@ -207,19 +222,21 @@ export const PATCH = route(async (request: Request, context: unknown) => {
     const nextQuantity =
       input.quantity !== undefined ? toMilli(input.quantity) : convertedQuantity;
 
-    const item = await tx.inventoryItem.update({
+    await tx.inventoryItem.update({
       where: { id },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         unit: nextUnit,
-        quantityMilli: nextQuantity,
         lowStockMilli:
           input.lowStock !== undefined ? toMilli(input.lowStock) : convertedLow,
         purchasePrice: nextPrice,
         priceUnit: nextPriceUnit,
         ...(priceChanged ? { priceUpdatedAt: new Date() } : {}),
+        ...(input.categoryName !== undefined
+          ? { categoryName: input.categoryName || null }
+          : {}),
+        ...(supplierId !== undefined ? { supplierId } : {}),
       },
-      select: INVENTORY_ITEM_SELECT,
     });
 
     /*
@@ -231,10 +248,13 @@ export const PATCH = route(async (request: Request, context: unknown) => {
     */
     const delta = nextQuantity - convertedQuantity;
     if (input.quantity !== undefined && delta !== 0) {
-      await tx.stockMovement.create({
-        data: { itemId: id, deltaMilli: delta, reason: "MANUAL_ADJUSTMENT" },
+      await postMovements(tx, {
+        siteId: restaurantId,
+        actor,
+        movements: [{ itemId: id, deltaMilli: delta, reason: "MANUAL_ADJUSTMENT" }],
       });
     }
+    const [item] = await catalogueItems(tx, restaurantId, { id });
 
     // 3. Recompute cost from what is now stored.
     await refreshRecipeCosts(tx, restaurantId, usedBy);
@@ -290,20 +310,37 @@ export const PATCH = route(async (request: Request, context: unknown) => {
   });
 });
 
+/**
+ * Removing an ingredient.
+ *
+ * An item that ever moved is **archived**, not deleted: its ledger rows,
+ * invoices and counts are the venue's records and must outlive it. It leaves
+ * every recipe either way, so no dish keeps consuming something the owner has
+ * retired. Only an item with no history at all is really deleted.
+ */
 export const DELETE = route(async (_request: Request, context: unknown) => {
   const { restaurantId } = await requireOwner();
   const { id } = await (context as Context).params;
-  await assertOwned(restaurantId, id);
+  const existing = await assertOwned(restaurantId, id);
 
-  await prisma.$transaction(async (tx) => {
-    // Read before the delete: recipe lines cascade with the item, and the
-    // dishes that lose a line need their cost recomputed without it. Their
-    // price does not move — removing an ingredient from the books is not a
-    // change in what it costs.
+  const archived = await prisma.$transaction(async (tx) => {
+    // Read before the change: the dishes that lose a recipe line need their
+    // cost recomputed without it. Their price does not move — removing an
+    // ingredient from the books is not a change in what it costs.
     const usedBy = await productsUsing(tx, restaurantId, id);
-    await tx.inventoryItem.delete({ where: { id } });
+    const history =
+      existing.hasHistory ||
+      (await tx.purchaseLine.count({ where: { itemId: id } })) > 0 ||
+      (await tx.stocktakeLine.count({ where: { itemId: id } })) > 0;
+    if (history) {
+      await tx.productIngredient.deleteMany({ where: { itemId: id } });
+      await tx.inventoryItem.update({ where: { id }, data: { isActive: false } });
+    } else {
+      await tx.inventoryItem.delete({ where: { id } });
+    }
     await refreshRecipeCosts(tx, restaurantId, usedBy);
+    return history;
   });
 
-  return ok({ id });
+  return ok({ id, archived });
 });
