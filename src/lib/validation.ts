@@ -1009,6 +1009,9 @@ export const PricingOptionsSchema = z.object({
    * rather than merely hiding the input.
    */
   phoneCollectionEnabled: z.boolean().optional(),
+
+  /** Guests may choose takeaway at checkout (see `resolveService`). */
+  takeawayEnabled: z.boolean().optional(),
 });
 
 export type PricingOptionsInput = z.infer<typeof PricingOptionsSchema>;

@@ -34,6 +34,7 @@ export default async function MoreOptionsPage() {
         staffCallLabelEn: true,
         bilingualEnabled: true,
         phoneCollectionEnabled: true,
+        takeawayEnabled: true,
         menuPriceStep: true,
         autoRepriceFromCost: true,
         lowMarginPercent: true,
@@ -63,6 +64,7 @@ export default async function MoreOptionsPage() {
           staffCallLabelEn: restaurant.staffCallLabelEn ?? "",
           bilingualEnabled: restaurant.bilingualEnabled,
           phoneCollectionEnabled: restaurant.phoneCollectionEnabled,
+          takeawayEnabled: restaurant.takeawayEnabled,
         }}
       />
 

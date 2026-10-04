@@ -64,6 +64,7 @@ interface BoardRow {
   id: string;
   orderNumber: number;
   tableNumber: string | null;
+  serviceType: string;
   customerName: string;
   note: string | null;
   // The enum rather than `string`, so the board's own narrower Status union
@@ -94,6 +95,7 @@ export function toBoardOrder(order: BoardRow) {
     id: order.id,
     orderNumber: order.orderNumber,
     tableNumber: order.tableNumber,
+    takeaway: order.serviceType === "TAKEAWAY",
     customerName: order.customerName,
     note: order.note,
     status: order.status,

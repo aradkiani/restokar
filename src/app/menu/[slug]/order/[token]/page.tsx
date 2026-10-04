@@ -85,6 +85,19 @@ export default async function OrderStatusPage({
           ) : null}
         </header>
 
+        {/* Takeaway is collected by number, so the number leads the page. */}
+        {order.serviceType === "TAKEAWAY" && (
+          <section className="menu-surface mb-4 p-5 text-center">
+            <p className="text-xs font-bold opacity-70">
+              {t.publicMenu.takeaway} — {t.publicMenu.pickupNumber}
+            </p>
+            <p className="mt-1 text-5xl font-black tabular-nums">
+              {localizeDigits(order.orderNumber, locale)}
+            </p>
+            <p className="mt-2 text-xs opacity-70">{t.publicMenu.pickupHint}</p>
+          </section>
+        )}
+
         <OrderStatusTracker
           token={token}
           initialStatus={order.status}
@@ -168,8 +181,16 @@ export default async function OrderStatusPage({
 
         <dl className="mt-4 grid grid-cols-2 gap-3 text-center text-xs">
           <div className="menu-surface p-3">
-            <dt className="opacity-60">{t.kitchen.table}</dt>
-            <dd className="mt-1 text-base font-black">{order.tableNumber ?? "—"}</dd>
+            <dt className="opacity-60">
+              {order.serviceType === "TAKEAWAY" ? t.publicMenu.takeaway : t.kitchen.table}
+            </dt>
+            <dd className="mt-1 text-base font-black">
+              {order.serviceType === "TAKEAWAY"
+                ? `#${localizeDigits(order.orderNumber, locale)}`
+                : order.tableNumber
+                  ? localizeDigits(order.tableNumber, locale)
+                  : "—"}
+            </dd>
           </div>
           <div className="menu-surface p-3">
             <dt className="opacity-60">{t.orderStatus.placedAt}</dt>

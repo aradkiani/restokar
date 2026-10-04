@@ -47,6 +47,13 @@ export function CartDrawer() {
 
   const [step, setStep] = React.useState<Step>("cart");
   const [tableNumber, setTableNumber] = React.useState(presetTable ?? "");
+  /*
+    Eat in or takeaway. Asked only where the venue offers takeaway and the guest
+    did not arrive through a table's code — scanning a table is answer enough.
+  */
+  const offerTakeaway = data.restaurant.takeawayEnabled && !presetTable;
+  const [serviceType, setServiceType] = React.useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
+  const takeaway = offerTakeaway && serviceType === "TAKEAWAY";
   // The name typed last visit, until the guest types something else.
   const savedName = useStoredValue(preview ? null : GUEST_NAME_KEY);
   const [typedName, setCustomerName] = React.useState<string | null>(null);
@@ -234,8 +241,8 @@ export function CartDrawer() {
     setError(null);
 
     const name = customerName.trim();
-    const table = toEnglishDigits(tableNumber.trim());
-    if (!name || !table) {
+    const table = takeaway ? "" : toEnglishDigits(tableNumber.trim());
+    if (!name || (!takeaway && !table)) {
       setError(t.publicMenu.requiredFields);
       return;
     }
@@ -256,7 +263,8 @@ export function CartDrawer() {
     try {
       const order = {
         slug: data.restaurant.slug,
-        tableNumber: table,
+        serviceType: takeaway ? "TAKEAWAY" : "DINE_IN",
+        tableNumber: takeaway ? undefined : table,
         customerName: name,
         /*
             Sent only when the venue asks for it.
@@ -471,25 +479,70 @@ export function CartDrawer() {
               </ul>
             ) : (
               <div className="space-y-4 p-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="mb-1.5 block text-sm font-semibold">
-                      {t.publicMenu.tableNumber}
-                    </span>
-                    <input
-                      value={tableNumber}
-                      onChange={(e) => setTableNumber(e.target.value.slice(0, 20))}
-                      placeholder={t.publicMenu.tableNumberPlaceholder}
-                      inputMode="numeric"
-                      required
-                      className="h-11 w-full rounded-[var(--m-radius-sm)] border px-3 text-sm outline-none"
-                      style={{
-                        background: "var(--m-bg)",
-                        borderColor: "var(--m-border)",
-                        color: "var(--m-text)",
-                      }}
-                    />
-                  </label>
+                {offerTakeaway && (
+                  <fieldset>
+                    <legend className="mb-1.5 block text-sm font-semibold">
+                      {t.publicMenu.serviceQuestion}
+                    </legend>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["DINE_IN", "TAKEAWAY"] as const).map((value) => (
+                        <label
+                          key={value}
+                          className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-[var(--m-radius-sm)] border text-sm font-bold"
+                          style={{
+                            background:
+                              serviceType === value ? "var(--m-primary)" : "var(--m-bg)",
+                            color:
+                              serviceType === value
+                                ? "var(--m-primary-contrast)"
+                                : "var(--m-text)",
+                            borderColor:
+                              serviceType === value
+                                ? "var(--m-primary)"
+                                : "var(--m-border)",
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="service-type"
+                            value={value}
+                            checked={serviceType === value}
+                            onChange={() => setServiceType(value)}
+                            className="sr-only"
+                          />
+                          {value === "DINE_IN"
+                            ? t.publicMenu.dineIn
+                            : t.publicMenu.takeaway}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+                <div
+                  className={
+                    takeaway ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"
+                  }
+                >
+                  {!takeaway && (
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-semibold">
+                        {t.publicMenu.tableNumber}
+                      </span>
+                      <input
+                        value={tableNumber}
+                        onChange={(e) => setTableNumber(e.target.value.slice(0, 20))}
+                        placeholder={t.publicMenu.tableNumberPlaceholder}
+                        inputMode="numeric"
+                        required
+                        className="h-11 w-full rounded-[var(--m-radius-sm)] border px-3 text-sm outline-none"
+                        style={{
+                          background: "var(--m-bg)",
+                          borderColor: "var(--m-border)",
+                          color: "var(--m-text)",
+                        }}
+                      />
+                    </label>
+                  )}
                   <label className="block">
                     <span className="mb-1.5 block text-sm font-semibold">
                       {t.publicMenu.yourName}

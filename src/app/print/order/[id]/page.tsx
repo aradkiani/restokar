@@ -110,11 +110,18 @@ export default async function PrintOrderPage({
                 {formatDate(order.placedAt, locale)} {formatTime(order.placedAt, locale)}
               </span>
             </p>
-            {order.tableNumber && (
-              <p className="row">
-                <span>{copy.table}</span>
-                <span>{digits(order.tableNumber)}</span>
+            {order.serviceType === "TAKEAWAY" ? (
+              <p className="row total">
+                <span>{t.print.takeaway}</span>
+                <span>#{formatNumber(order.orderNumber, locale)}</span>
               </p>
+            ) : (
+              order.tableNumber && (
+                <p className="row">
+                  <span>{copy.table}</span>
+                  <span>{digits(order.tableNumber)}</span>
+                </p>
+              )
             )}
             <p className="row">
               <span>{copy.customer}</span>
@@ -194,10 +201,14 @@ export default async function PrintOrderPage({
             <header className="center">
               <p className="small">{t.print.ticket}</p>
               <p className="big">#{formatNumber(order.orderNumber, locale)}</p>
-              {order.tableNumber && (
-                <p className="venue">
-                  {copy.table} {digits(order.tableNumber)}
-                </p>
+              {order.serviceType === "TAKEAWAY" ? (
+                <p className="venue">{t.print.takeaway}</p>
+              ) : (
+                order.tableNumber && (
+                  <p className="venue">
+                    {copy.table} {digits(order.tableNumber)}
+                  </p>
+                )
               )}
               <p className="small">
                 {formatTime(order.placedAt, locale)} — {order.customerName}

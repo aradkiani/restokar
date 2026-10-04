@@ -243,6 +243,8 @@ interface VenueSpec {
   historyDays: number;
   onlineOrdering: boolean;
   onlinePayment: boolean;
+  /** Guests may order takeaway (fast food). */
+  takeaway?: boolean;
   tax: number;
   breakfastWindow?: boolean;
   branches?: BranchSpec[];
@@ -442,6 +444,7 @@ const VENUES: VenueSpec[] = [
     historyDays: 30,
     onlineOrdering: true,
     onlinePayment: true,
+    takeaway: true,
     tax: 0,
   },
   {
@@ -647,6 +650,7 @@ async function createVenue(spec: VenueSpec) {
       ownerId: owner.id,
       onlineOrderingEnabled: spec.onlineOrdering,
       onlinePaymentEnabled: spec.onlinePayment,
+      takeawayEnabled: spec.takeaway ?? false,
       taxEnabled: spec.tax > 0,
       taxPercent: spec.tax,
       tipEnabled: true,

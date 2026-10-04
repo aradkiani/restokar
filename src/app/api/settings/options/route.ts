@@ -54,6 +54,7 @@ export const PATCH = route(async (request: Request) => {
         staffCallLabelEn: input.staffCallLabelEn,
         bilingualEnabled: input.bilingualEnabled,
         phoneCollectionEnabled: input.phoneCollectionEnabled,
+        takeawayEnabled: input.takeawayEnabled,
         menuPriceStep: input.menuPriceStep,
         autoRepriceFromCost: input.autoRepriceFromCost,
         lowMarginPercent: input.lowMarginPercent,

@@ -240,6 +240,12 @@ export interface MenuRestaurant {
    */
   phoneCollectionEnabled: boolean;
 
+  /**
+   * Whether checkout offers takeaway. Shown only when the guest did not arrive
+   * through a table's QR code; the server re-checks it.
+   */
+  takeawayEnabled: boolean;
+
   /** "Call the waiter" button at the foot of every template. */
   staffCallEnabled: boolean;
   staffCallLabel: string;

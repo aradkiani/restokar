@@ -32,6 +32,7 @@ export interface OptionsValues {
   staffCallLabelEn: string;
   bilingualEnabled: boolean;
   phoneCollectionEnabled: boolean;
+  takeawayEnabled: boolean;
 }
 
 /** A round, plausible basket for the live preview. */
@@ -258,6 +259,12 @@ export function OptionsForm({
             onChange={(v) => setField("phoneCollectionEnabled", v)}
             label={t.options.phoneCollectionEnable}
             description={t.options.phoneCollectionDescription}
+          />
+          <Toggle
+            checked={form.takeawayEnabled}
+            onChange={(v) => setField("takeawayEnabled", v)}
+            label={t.options.takeawayEnable}
+            description={t.options.takeawayDescription}
           />
         </CardBody>
       </Card>

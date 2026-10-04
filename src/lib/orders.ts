@@ -57,11 +57,12 @@ export const CreateOrderInput = z.object({
   slug: z.string().min(1),
   // Guest-facing copy: these messages are read by a customer at a table, so
   // they name what to do rather than restating a schema bound.
-  tableNumber: z
-    .string()
-    .trim()
-    .min(1, "شماره میز را وارد کنید")
-    .max(20, "شماره میز بیش از حد بلند است"),
+  /**
+   * Required to eat in, absent for takeaway — enforced in `resolveService`,
+   * where the venue's takeaway setting is known.
+   */
+  tableNumber: z.string().trim().max(20, "شماره میز بیش از حد بلند است").optional(),
+  serviceType: z.enum(["DINE_IN", "TAKEAWAY"]).default("DINE_IN"),
   customerName: z
     .string()
     .trim()
@@ -394,6 +395,37 @@ export interface CreatedOrder {
 }
 
 /**
+ * Dine-in or takeaway, and the table that goes with it.
+ *
+ * Eating in needs a table number — it is how the food finds the guest.
+ * Takeaway has none (any number sent is dropped), and a guest may only choose
+ * it where the venue offers it; staff can always record a takeaway by hand,
+ * which is exactly the walk-in or phone order the manual pad exists for.
+ */
+export function resolveService(args: {
+  serviceType: "DINE_IN" | "TAKEAWAY";
+  tableNumber: string | undefined;
+  takeawayEnabled: boolean;
+  staffOrigin: boolean;
+}): { serviceType: "DINE_IN" | "TAKEAWAY"; tableNumber: string | null } {
+  if (args.serviceType === "TAKEAWAY") {
+    if (!args.takeawayEnabled && !args.staffOrigin) {
+      throw new HttpError(
+        422,
+        "This venue does not take takeaway orders",
+        "TAKEAWAY_DISABLED",
+      );
+    }
+    return { serviceType: "TAKEAWAY", tableNumber: null };
+  }
+  const table = args.tableNumber?.trim() ?? "";
+  if (!table) {
+    throw new HttpError(422, "شماره میز را وارد کنید", "TABLE_REQUIRED");
+  }
+  return { serviceType: "DINE_IN", tableNumber: table };
+}
+
+/**
  * The order an earlier, identical checkout attempt already placed, if any.
  *
  * Returned only to the same table and name: the key is random, but an order's
@@ -402,6 +434,8 @@ export interface CreatedOrder {
 async function replayedOrder(
   restaurantId: string,
   input: CreateOrderInput,
+  /** The table the order resolves to — null for takeaway. */
+  tableNumber: string | null,
 ): Promise<CreatedOrder | null> {
   if (!input.clientKey) return null;
   const existing = await prisma.order.findUnique({
@@ -419,7 +453,7 @@ async function replayedOrder(
   });
   if (!existing) return null;
   if (
-    existing.tableNumber !== input.tableNumber ||
+    existing.tableNumber !== tableNumber ||
     existing.customerName !== input.customerName
   ) {
     throw new HttpError(409, "این سفارش قبلاً ثبت شده است.", "ORDER_KEY_REUSED");
@@ -501,7 +535,9 @@ export async function createOrder(
         where: { slug: input.slug },
         select: { id: true },
       });
-      const replay = venue ? await replayedOrder(venue.id, input) : null;
+      const table =
+        input.serviceType === "TAKEAWAY" ? null : (input.tableNumber?.trim() ?? null);
+      const replay = venue ? await replayedOrder(venue.id, input, table) : null;
       if (replay) return replay;
     }
     throw error;
@@ -562,6 +598,9 @@ async function placeOrder(
     // owner, so whether guests are asked for a number is the chain's decision
     // and not something one branch can switch on for itself.
     phoneCollectionEnabled: true,
+    // Whether guests may order takeaway: the menu owner's choice, set with
+    // the other checkout options a branch manager cannot edit.
+    takeawayEnabled: true,
   } as const;
 
   const venue = await prisma.restaurant.findUnique({
@@ -608,10 +647,17 @@ async function placeOrder(
   // pricing rules come from whoever owns the menu.
   const restaurant = { ...venue, ...menuOwner, id: venue.id };
 
+  const service = resolveService({
+    serviceType: input.serviceType,
+    tableNumber: input.tableNumber,
+    takeawayEnabled: restaurant.takeawayEnabled,
+    staffOrigin,
+  });
+
   // A repeat of an attempt that already succeeded: answer with that order,
   // before anything below could refuse it (a dish sold out in between) or
   // place it a second time.
-  const replay = await replayedOrder(restaurant.id, input);
+  const replay = await replayedOrder(restaurant.id, input, service.tableNumber);
   if (replay) return replay;
 
   // Same reasoning as `isPublished` above: this switch decides whether *guests*
@@ -922,7 +968,8 @@ async function placeOrder(
         publicToken,
         isManual: options.isManual ?? false,
         clientKey: input.clientKey ?? null,
-        tableNumber: input.tableNumber,
+        serviceType: service.serviceType,
+        tableNumber: service.tableNumber,
         customerName: input.customerName,
         /*
           Stored in one canonical form rather than as typed.

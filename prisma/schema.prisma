@@ -59,6 +59,14 @@ enum PaymentMethod {
   ONLINE // پرداخت آنلاین
 }
 
+/// How the guest is served.
+enum ServiceType {
+  /// At a table — the order carries a table number.
+  DINE_IN
+  /// Taken away; collected at the counter by order number. No table.
+  TAKEAWAY
+}
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -470,6 +478,12 @@ model Restaurant {
   /// any number that arrives anyway, so a crafted request cannot start building
   /// a customer book the owner never asked for. See `createOrder`.
   phoneCollectionEnabled Boolean @default(false)
+
+  /// Whether guests may order takeaway from the menu. Off by default, so no
+  /// venue's checkout changes until its owner switches it on. Read from the
+  /// menu owner, like the other checkout options, so a chain decides once.
+  /// Staff can always record a takeaway order by hand.
+  takeawayEnabled Boolean @default(false)
 
   isActive    Boolean @default(true)
   isPublished Boolean @default(true)
@@ -1837,6 +1851,9 @@ model Order {
   /// reading "40% of orders came through the QR code" needs the other 60% not
   /// to be counted as scans that never happened.
   isManual Boolean @default(false)
+
+  /// Dine-in or takeaway. Every order before this existed was served at a table.
+  serviceType ServiceType @default(DINE_IN)
 
   /// A random key the guest's phone attaches to one checkout attempt. If the
   /// connection drops after the order is saved and the phone sends the same

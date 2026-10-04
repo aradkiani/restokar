@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { ImageIcon, LayoutGrid, List, Minus, Plus, Receipt, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field } from "@/components/ui/field";
+import { Field, Toggle } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useI18n } from "@/components/i18n-provider";
 import { api } from "@/lib/client-api";
+import { localizeApiError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { formatMoney, formatNumber } from "@/lib/format";
 import {
@@ -136,6 +137,8 @@ export function ManualOrderForm({
   const [customerName, setCustomerName] = React.useState("");
   const [customerPhone, setCustomerPhone] = React.useState("");
   const [tableNumber, setTableNumber] = React.useState("");
+  // A walk-in or phone order is often takeaway; staff can always record one.
+  const [takeaway, setTakeaway] = React.useState(false);
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -263,7 +266,8 @@ export function ManualOrderForm({
     const result = await api.post("/api/orders/manual", {
       customerName,
       customerPhone: customerPhone.trim() || undefined,
-      tableNumber,
+      serviceType: takeaway ? "TAKEAWAY" : "DINE_IN",
+      tableNumber: takeaway ? undefined : tableNumber,
       note: note.trim() || undefined,
       // A manual order is settled at the counter. It never opens a gateway, so
       // the «پرداخت آنلاین» it used to offer created an order nobody could
@@ -280,7 +284,7 @@ export function ManualOrderForm({
     setBusy(false);
 
     if (!result.ok) {
-      toast.error(result.error.message);
+      toast.error(localizeApiError(result.error, t));
       return;
     }
 
@@ -449,19 +453,27 @@ export function ManualOrderForm({
               />
             </Field>
 
-            <Field
-              label={t.manualOrder.tableNumber}
-              hint={t.manualOrder.tableHint}
-              htmlFor="mo-table"
-            >
-              <input
-                id="mo-table"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                required
-                className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-semibold"
-              />
-            </Field>
+            <Toggle
+              checked={takeaway}
+              onChange={setTakeaway}
+              label={t.publicMenu.takeaway}
+            />
+
+            {!takeaway && (
+              <Field
+                label={t.manualOrder.tableNumber}
+                hint={t.manualOrder.tableHint}
+                htmlFor="mo-table"
+              >
+                <input
+                  id="mo-table"
+                  value={tableNumber}
+                  onChange={(e) => setTableNumber(e.target.value)}
+                  required
+                  className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-semibold"
+                />
+              </Field>
+            )}
 
             <Field label={t.manualOrder.note} htmlFor="mo-note">
               <textarea

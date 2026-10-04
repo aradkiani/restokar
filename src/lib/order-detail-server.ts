@@ -25,6 +25,7 @@ export interface OrderDetail {
   paymentStatus: string;
 
   tableNumber: string | null;
+  serviceType: "DINE_IN" | "TAKEAWAY";
   customerName: string;
   customerPhone: string | null;
   note: string | null;
@@ -148,6 +149,7 @@ export async function getOrderDetail(
       paymentMethod: true,
       paymentStatus: true,
       tableNumber: true,
+      serviceType: true,
       customerName: true,
       customerPhone: true,
       customerId: true,
@@ -218,6 +220,7 @@ export async function getOrderDetail(
     paymentMethod: order.paymentMethod,
     paymentStatus: order.paymentStatus,
     tableNumber: order.tableNumber,
+    serviceType: order.serviceType,
     customerName: order.customerName,
     customerPhone: order.customerPhone,
     note: order.note,

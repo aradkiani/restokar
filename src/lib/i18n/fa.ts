@@ -518,6 +518,9 @@ export const fa = {
     phoneCollectionEnable: "پرسیدن شماره تماس هنگام سفارش",
     phoneCollectionDescription:
       "وارد کردنش برای مشتری اجباری نیست. تا وقتی خاموش است، هیچ شماره‌ای پرسیده و ذخیره نمی‌شود.",
+    takeawayEnable: "مهمان‌ها بتوانند بیرون‌بر سفارش دهند",
+    takeawayDescription:
+      "در صفحهٔ پرداخت، اگر مهمان از بارکد میز نیامده باشد، می‌پرسد «سرو در سالن یا بیرون‌بر؟». سفارش بیرون‌بر شماره میز نمی‌خواهد و با شمارهٔ سفارش تحویل داده می‌شود.",
 
     staffCallTitle: "صدا زدن پرسنل",
     staffCallHint:
@@ -1358,6 +1361,11 @@ export const fa = {
     discountCheckFailed: "بررسی کد ممکن نشد. دوباره تلاش کنید.",
     staffCallSend: "ارسال",
     requestBill: "درخواست صورتحساب",
+    serviceQuestion: "سرو در سالن یا بیرون‌بر؟",
+    dineIn: "سرو در سالن",
+    takeaway: "بیرون‌بر",
+    pickupNumber: "شمارهٔ سفارش شما",
+    pickupHint: "سفارش با این شماره در پیشخوان تحویل داده می‌شود.",
     billRequested: "درخواست صورتحساب فرستاده شد",
     staffCallSending: "در حال ارسال…",
     staffCallSent: "درخواست شما ثبت شد؛ همکاران ما در راه هستند.",
@@ -2234,6 +2242,8 @@ export const fa = {
       PRODUCT_NOT_FOUND: "این غذا پیدا نشد.",
       STAFF_CALL_DISABLED: "صدا زدن گارسون در این مجموعه فعال نیست.",
       TABLE_NOT_OPEN: "این میز سفارش پرداخت‌نشده‌ای ندارد.",
+      TABLE_REQUIRED: "شماره میز را وارد کنید.",
+      TAKEAWAY_DISABLED: "این مجموعه سفارش بیرون‌بر نمی‌پذیرد.",
       OTP_INVALID: "کد واردشده درست نیست یا منقضی شده است.",
       OTP_EXPIRED: "کد منقضی شده است. کد جدید بگیرید.",
       OTP_LOCKED: "تعداد تلاش‌های نادرست زیاد بود. کد جدید بگیرید.",

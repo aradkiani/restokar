@@ -340,6 +340,7 @@ function toPublicMenu(
         bilingualEnabled: restaurant.bilingualEnabled,
         featuredSectionEnabled: restaurant.featuredSectionEnabled,
         phoneCollectionEnabled: restaurant.phoneCollectionEnabled,
+        takeawayEnabled: restaurant.takeawayEnabled,
       },
       categories: visibleCategories.map(({ category, products }) => ({
         id: category.id,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CreateOrderInput, priceOrderLines, type PricedProduct } from "./orders";
+import {
+  CreateOrderInput,
+  priceOrderLines,
+  resolveService,
+  type PricedProduct,
+} from "./orders";
 import { HttpError } from "./auth/guards";
 
 /**
@@ -381,18 +386,16 @@ describe("CreateOrderInput", () => {
     }
   });
 
-  it("rejects a missing name and table number", () => {
-    const result = CreateOrderInput.safeParse({
-      ...valid,
-      customerName: "",
-      tableNumber: "",
-    });
+  it("rejects a missing name", () => {
+    const result = CreateOrderInput.safeParse({ ...valid, customerName: "" });
     expect(result.success).toBe(false);
     if (!result.success) {
-      const messages = result.error.issues.map((i) => i.message);
-      expect(messages).toContain("نام خود را وارد کنید");
-      expect(messages).toContain("شماره میز را وارد کنید");
+      expect(result.error.issues.map((i) => i.message)).toContain("نام خود را وارد کنید");
     }
+  });
+
+  it("defaults to eating in", () => {
+    expect(CreateOrderInput.parse(valid).serviceType).toBe("DINE_IN");
   });
 
   it("rejects zero, negative and fractional quantities", () => {
@@ -666,5 +669,46 @@ describe("priceOrderLines — featured attribution", () => {
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.items[0]!.fromFeatured).toBe(true);
+  });
+});
+
+describe("resolveService", () => {
+  const base = { takeawayEnabled: false, staffOrigin: false };
+
+  it("needs a table number to eat in", () => {
+    expect(
+      resolveService({ ...base, serviceType: "DINE_IN", tableNumber: " 12 " }),
+    ).toEqual({ serviceType: "DINE_IN", tableNumber: "12" });
+    expect(() =>
+      resolveService({ ...base, serviceType: "DINE_IN", tableNumber: "" }),
+    ).toThrow(expect.objectContaining({ code: "TABLE_REQUIRED" }));
+    expect(() =>
+      resolveService({ ...base, serviceType: "DINE_IN", tableNumber: undefined }),
+    ).toThrow(expect.objectContaining({ code: "TABLE_REQUIRED" }));
+  });
+
+  it("offers takeaway to guests only where the venue switched it on", () => {
+    expect(() =>
+      resolveService({ ...base, serviceType: "TAKEAWAY", tableNumber: undefined }),
+    ).toThrow(expect.objectContaining({ code: "TAKEAWAY_DISABLED" }));
+    expect(
+      resolveService({
+        ...base,
+        takeawayEnabled: true,
+        serviceType: "TAKEAWAY",
+        tableNumber: "5",
+      }),
+    ).toEqual({ serviceType: "TAKEAWAY", tableNumber: null });
+  });
+
+  it("lets staff record takeaway by hand whatever the guest setting", () => {
+    expect(
+      resolveService({
+        ...base,
+        staffOrigin: true,
+        serviceType: "TAKEAWAY",
+        tableNumber: undefined,
+      }).serviceType,
+    ).toBe("TAKEAWAY");
   });
 });

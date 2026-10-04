@@ -499,6 +499,9 @@ export const en: Dictionary = {
     phoneCollectionEnable: "Ask for a phone number at checkout",
     phoneCollectionDescription:
       "Never required of the customer. While this is off, no number is requested or stored.",
+    takeawayEnable: "Guests can order takeaway",
+    takeawayDescription:
+      "At checkout, a guest who did not scan a table's code is asked «eat in or takeaway?». Takeaway needs no table and is collected by order number.",
 
     staffCallTitle: "Call staff",
     staffCallHint:
@@ -1242,6 +1245,11 @@ export const en: Dictionary = {
     discountCheckFailed: "Could not check the code. Please try again.",
     staffCallSend: "Send",
     requestBill: "Ask for the bill",
+    serviceQuestion: "Eat in or takeaway?",
+    dineIn: "Eat in",
+    takeaway: "Takeaway",
+    pickupNumber: "Your order number",
+    pickupHint: "Collect your order at the counter with this number.",
     billRequested: "Your request for the bill was sent",
     staffCallSending: "Sending…",
     staffCallSent: "Your request has been sent — someone is on the way.",
@@ -2036,6 +2044,8 @@ export const en: Dictionary = {
       PRODUCT_NOT_FOUND: "This dish could not be found.",
       STAFF_CALL_DISABLED: "Calling staff is not available at this venue.",
       TABLE_NOT_OPEN: "This table has no unpaid orders.",
+      TABLE_REQUIRED: "Please enter your table number.",
+      TAKEAWAY_DISABLED: "This venue does not take takeaway orders.",
       OTP_INVALID: "That code is wrong or has expired.",
       OTP_EXPIRED: "That code has expired. Request a new one.",
       OTP_LOCKED: "Too many wrong attempts. Request a new code.",

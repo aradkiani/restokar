@@ -125,6 +125,62 @@ test.describe("diner at the table", () => {
     expect(other.status()).toBe(409);
   });
 
+  test("a guest without a table orders takeaway and gets a pickup number", async ({
+    page,
+  }) => {
+    const errors = watchForErrors(page);
+    // No ?table= — the counter's QR, not a table's.
+    await page.goto("/menu/fastfood-tond");
+    await page.getByText("نوشابه", { exact: true }).first().click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^افزودن/ })
+      .last()
+      .click();
+    const cart = page.getByRole("dialog");
+    await cart.getByRole("button", { name: "ثبت سفارش" }).click();
+    await expect(cart.getByText("سرو در سالن یا بیرون‌بر؟")).toBeVisible();
+    await cart.getByText("بیرون‌بر", { exact: true }).click();
+    await expect(cart.getByText("شماره میز", { exact: true })).toHaveCount(0);
+    await cart.getByLabel("نام شما").fill("مهمان بیرون‌بر");
+    await cart.getByRole("button", { name: "ثبت نهایی سفارش" }).click();
+    await page.waitForURL(/\/order\//);
+    await expect(page.getByText("شمارهٔ سفارش شما")).toBeVisible();
+
+    const token = new URL(page.url()).pathname.split("/").pop()!;
+    const order = await one<{ serviceType: string; tableNumber: string | null }>(
+      `SELECT "serviceType", "tableNumber" FROM "Order" WHERE "publicToken" = $1`,
+      [token],
+    );
+    expect(order).toEqual({ serviceType: "TAKEAWAY", tableNumber: null });
+    expect(errors).toEqual([]);
+  });
+
+  test("takeaway only where offered, and eating in needs a table", async ({
+    request,
+  }) => {
+    const dish = await one<{ id: string }>(
+      `SELECT p.id FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
+        WHERE r.slug = 'cafe-narenj' AND p."isAvailable"
+          AND NOT EXISTS (SELECT 1 FROM "ProductOptionGroup" g WHERE g."productId" = p.id)
+        ORDER BY p.price LIMIT 1`,
+    );
+    const base = {
+      slug: "cafe-narenj",
+      customerName: "آزمون",
+      items: [{ productId: dish.id, quantity: 1 }],
+    };
+    const takeaway = await request.post("/api/public/orders", {
+      data: { ...base, serviceType: "TAKEAWAY" },
+    });
+    expect(takeaway.status()).toBe(422);
+    expect((await takeaway.json()).error.code).toBe("TAKEAWAY_DISABLED");
+
+    const noTable = await request.post("/api/public/orders", { data: base });
+    expect(noTable.status()).toBe(422);
+    expect((await noTable.json()).error.code).toBe("TABLE_REQUIRED");
+  });
+
   test("an unavailable dish cannot be ordered", async ({ request }) => {
     const soldOut = await one<{ id: string }>(
       `SELECT p.id FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"

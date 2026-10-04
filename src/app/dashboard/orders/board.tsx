@@ -84,6 +84,8 @@ export interface KitchenOrder {
   id: string;
   orderNumber: number;
   tableNumber: string | null;
+  /** Collected at the counter by order number. */
+  takeaway: boolean;
   customerName: string;
   note: string | null;
   status: Status;
@@ -645,6 +647,11 @@ export function KitchenBoard({
                           <div className="min-w-0">
                             <p className="text-sm font-black text-ink-900">
                               #{formatNumber(order.orderNumber, locale)}
+                              {order.takeaway && (
+                                <span className="ms-2 rounded-md bg-amber-500 px-1.5 py-0.5 text-[11px] font-bold text-white">
+                                  {t.print.takeaway}
+                                </span>
+                              )}
                               {order.tableNumber && (
                                 // `text-ink-50`, not `text-white`: ink-900 is the
                                 // *inverting* end of the scale, so in dark mode it
