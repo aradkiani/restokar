@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Loader2, Phone, User } from "lucide-react";
+import { Loader2, Phone, Printer, User } from "lucide-react";
 import { Badge } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { api } from "@/lib/client-api";
@@ -110,6 +110,26 @@ export function OrderDetailDialog({
 
       {order && !loading && (
         <div className="space-y-5">
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`/print/order/${order.id}?kind=bill&auto=1`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-ink-300 px-3.5 text-xs font-bold text-ink-800 hover:border-ink-400"
+            >
+              <Printer className="size-4" aria-hidden />
+              {t.print.printBill}
+            </a>
+            <a
+              href={`/print/order/${order.id}?kind=ticket&auto=1`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-ink-300 px-3.5 text-xs font-bold text-ink-800 hover:border-ink-400"
+            >
+              <Printer className="size-4" aria-hidden />
+              {t.print.printTicket}
+            </a>
+          </div>
           <Summary order={order} copy={copy} t={t} locale={locale} />
 
           <Section title={copy.items}>

@@ -126,6 +126,26 @@ test.describe("staff and branch roles", () => {
     }
   });
 
+  test("the bill and the kitchen ticket print for staff on the orders board", async ({
+    page,
+  }) => {
+    const order = await one<{ id: string; orderNumber: number }>(
+      `SELECT o.id, o."orderNumber" FROM "Order" o JOIN "Restaurant" r ON r.id = o."restaurantId"
+        WHERE r.slug = 'cafe-narenj' ORDER BY o."placedAt" DESC LIMIT 1`,
+    );
+    await signInWithApi(page.request, PHONES.narenjBarista);
+    await page.goto(`/print/order/${order.id}?kind=bill`);
+    await expect(page.locator("main")).toContainText("مبلغ قابل پرداخت");
+    await page.goto(`/print/order/${order.id}?kind=ticket`);
+    await expect(page.locator("main")).toContainText("فیش آشپزخانه");
+    await expect(page.locator("main")).not.toContainText("تومان");
+
+    // Without the orders section there is nothing to print.
+    await signInWithApi(page.request, PHONES.narenjMenuStaff);
+    await page.goto(`/print/order/${order.id}?kind=bill`);
+    await expect(page.locator("main")).not.toContainText("مبلغ قابل پرداخت");
+  });
+
   test("a branch manager cannot edit the chain's menu", async ({ page }) => {
     await signInWithApi(page.request, PHONES.vanakManager);
     const response = await page.request.post("/api/products", {

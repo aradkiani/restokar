@@ -10,6 +10,7 @@ import {
   Clock,
   HandCoins,
   Info,
+  Printer,
   Radio,
   Volume2,
   VolumeX,
@@ -39,6 +40,28 @@ import {
 import { isRetired } from "@/lib/order-retirement";
 import { NEXT_STATUS } from "@/lib/order-flow";
 import { SoldOutButton } from "./sold-out-dialog";
+import { useStoredValue, writeStoredValue } from "@/lib/use-stored-value";
+
+/** This device prints a kitchen ticket for every new order (kitchen PC only). */
+const AUTO_PRINT_KEY = "restokar:board:auto-print";
+
+/**
+ * Prints one order's kitchen ticket without leaving the board: the print page
+ * loads in a hidden frame and opens the print dialog itself. Browsers allow
+ * this without a click; Chrome started with --kiosk-printing skips the dialog.
+ */
+function printTicketInBackground(orderId: string) {
+  const frame = document.createElement("iframe");
+  frame.style.position = "fixed";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  frame.setAttribute("aria-hidden", "true");
+  frame.src = `/print/order/${encodeURIComponent(orderId)}?kind=ticket&auto=1`;
+  document.body.appendChild(frame);
+  // Long enough for the dialog to be answered; the frame is useless after.
+  setTimeout(() => frame.remove(), 120_000);
+}
 import { OrderDetailDialog } from "./order-detail";
 import type { Locale } from "@/lib/i18n";
 import { useNow } from "@/lib/use-now";
@@ -124,6 +147,14 @@ export function KitchenBoard({
    * concurrent rendering, and the listener only ever reads this asynchronously
    * (on an incoming event), long after commit.
    */
+  const savedAutoPrint = useStoredValue(AUTO_PRINT_KEY);
+  const [autoPrintChoice, setAutoPrintChoice] = React.useState<boolean | null>(null);
+  const autoPrint = autoPrintChoice ?? savedAutoPrint === "1";
+  const autoPrintRef = React.useRef(autoPrint);
+  React.useEffect(() => {
+    autoPrintRef.current = autoPrint;
+  }, [autoPrint]);
+
   const soundRef = React.useRef(soundOn);
   React.useEffect(() => {
     soundRef.current = soundOn;
@@ -162,8 +193,18 @@ export function KitchenBoard({
   React.useEffect(() => {
     const source = new EventSource("/api/orders/stream");
 
-    source.addEventListener("created", () => {
+    source.addEventListener("created", (event) => {
       if (soundRef.current) playChime();
+      if (autoPrintRef.current) {
+        try {
+          const { orderId } = JSON.parse((event as MessageEvent).data) as {
+            orderId?: string;
+          };
+          if (orderId) printTicketInBackground(orderId);
+        } catch {
+          /* a malformed frame prints nothing */
+        }
+      }
       void refresh();
     });
     source.addEventListener("updated", () => void refresh());
@@ -334,6 +375,25 @@ export function KitchenBoard({
 
         <div className="flex flex-wrap items-center gap-2">
           <SoldOutButton initialCount={soldOutCount} />
+          <button
+            type="button"
+            onClick={() => {
+              const next = !autoPrint;
+              setAutoPrintChoice(next);
+              writeStoredValue(AUTO_PRINT_KEY, next ? "1" : "0");
+            }}
+            aria-pressed={autoPrint}
+            title={t.print.autoPrintHint}
+            className={cn(
+              "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-bold",
+              autoPrint
+                ? "border-brand-400 bg-brand-50 text-brand-800"
+                : "border-ink-300 bg-surface text-ink-800 hover:border-ink-400",
+            )}
+          >
+            <Printer className="size-4" />
+            {t.print.autoPrint}
+          </button>
           <button
             type="button"
             onClick={() => setSoundOn((v) => !v)}
@@ -567,6 +627,16 @@ export function KitchenBoard({
                           >
                             <Info className="size-4" aria-hidden />
                           </button>
+                          <a
+                            href={`/print/order/${order.id}?kind=ticket&auto=1`}
+                            target="_blank"
+                            rel="noopener"
+                            aria-label={`${t.print.printTicket} #${order.orderNumber}`}
+                            title={t.print.printTicket}
+                            className="tap-safe rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
+                          >
+                            <Printer className="size-4" aria-hidden />
+                          </a>
                         </div>
                       </div>
 

@@ -1329,6 +1329,26 @@ export const en: Dictionary = {
     customerNotFound:
       "No customer matches this phone number. The record may have been removed.",
   },
+  print: {
+    bill: "Bill",
+    ticket: "Kitchen ticket",
+    printBill: "Print bill",
+    printTicket: "Print kitchen ticket",
+    print: "Print",
+    order: "Order",
+    paper80: "80 mm paper",
+    paper58: "58 mm paper",
+    paid: "Paid",
+    unpaid: "Unpaid",
+    canceled: "Canceled",
+    thanks: "Thank you for your visit",
+    takeaway: "Takeaway",
+    reprint: "Reprint",
+    autoPrint: "Print tickets for new orders automatically",
+    autoPrintHint:
+      "Leave this on on the kitchen computer. To print without the confirm dialog, start Chrome with --kiosk-printing.",
+    notFound: "This order could not be found.",
+  },
   orderStatus: {
     title: "Order status",
     orderNumber: "Order number",
