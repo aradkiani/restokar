@@ -40,6 +40,7 @@ import { isRetired } from "@/lib/order-retirement";
 import { NEXT_STATUS } from "@/lib/order-flow";
 import { OrderDetailDialog } from "./order-detail";
 import type { Locale } from "@/lib/i18n";
+import { useNow } from "@/lib/use-now";
 
 type Status = "RECEIVED" | "PREPARING" | "READY" | "DELIVERED" | "CANCELED";
 
@@ -102,13 +103,15 @@ export function KitchenBoard({
   const [busyId, setBusyId] = React.useState<string | null>(null);
   /** The order whose full detail is open, if any. */
   const [detailId, setDetailId] = React.useState<string | null>(null);
-  // Re-render on a timer so the "5 minutes ago" ages and cards turn urgent
-  // without needing a data refetch. Holding the clock reading in state rather
-  // than calling Date.now() while rendering keeps the render pure and gives the
-  // delivered-order cutoff below something stable to compare against.
-  // Starts at 0 so the server and the first client render agree; the effect
-  // fills in the real time immediately after mount.
-  const [now, setNow] = React.useState(0);
+  /*
+    The clock, re-read on a timer so "5 minutes ago" ages and cards turn urgent
+    without a data refetch. One shared reading keeps the render pure and gives
+    the delivered-order cutoff and the refund gate below something stable to
+    compare against. It is 0 during the server render and hydration (so both
+    agree) and the real time immediately after — never a stale 0 for a whole
+    tick, which once left every refund button looking permanently disabled.
+  */
+  const now = useNow(ORDER_POLL_MS);
 
   /**
    * Mirrors `soundOn` for the SSE listener below, which is subscribed once and
@@ -186,35 +189,6 @@ export function KitchenBoard({
     const interval = setInterval(() => void refreshCalls(), ORDER_POLL_MS);
     return () => clearInterval(interval);
   }, [refreshCalls]);
-
-  /*
-    The clock is read once on mount, then kept fresh by the interval.
-
-    It used to be set only by the interval. That was fine for ageing delivered
-    cards off the board — the server already returns just the ones inside the
-    window, so starting a tick late costs nothing — but the refund gate below
-    also reads `now`, and there a zero is not "slightly stale", it is wrong:
-    `canClear` is false and the countdown computes against 0, so every refund
-    button rendered disabled reading a full 60 minutes however long ago the
-    order was cancelled. That held for `ORDER_POLL_MS` — half a minute in which
-    an order cancelled days earlier looked permanently unclearable, which is
-    long enough for an owner to open the page, read a dead button and conclude
-    the refund can never be cleared.
-
-    `now` still starts at 0 rather than `Date.now()` so the server render and
-    the first client render agree; seeding it in an initialiser would differ
-    across that boundary and trip hydration. Reading the clock in the effect is
-    the part that has to happen on the client, so it happens here.
-
-    A deliberate `set-state-in-effect` site, commented per the convention: the
-    value is the wall clock, which cannot be known during render without
-    breaking hydration.
-  */
-  React.useEffect(() => {
-    setNow(Date.now());
-    const interval = setInterval(() => setNow(Date.now()), ORDER_POLL_MS);
-    return () => clearInterval(interval);
-  }, []);
 
   /**
    * Clears a refunded order off the queue.

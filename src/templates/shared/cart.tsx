@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { MenuOptionChoice, MenuProduct } from "../types";
+import { useStoredValue, writeStoredValue } from "@/lib/use-stored-value";
 
 /** A chosen option, kept on the line so the cart can show and re-price it. */
 export interface CartLineOption {
@@ -129,36 +130,35 @@ export function CartProvider({
   preview?: boolean;
   children: React.ReactNode;
 }) {
-  const [lines, setLines] = React.useState<CartLine[]>([]);
+  /*
+    The basket a guest left on this phone, read without an effect: empty while
+    the server renders, the saved lines once the browser takes over. `edited`
+    holds the guest's changes from then on and is what gets saved back — so an
+    untouched basket is never overwritten before it has been read.
+  */
+  const savedRaw = useStoredValue(preview ? null : storageKey(slug));
+  const saved = React.useMemo(() => parseCartLines(savedRaw), [savedRaw]);
+  const [edited, setEdited] = React.useState<CartLine[] | null>(null);
+  // Another venue's menu opened in the same tab: its basket, not this one.
+  const [editedFor, setEditedFor] = React.useState(slug);
+  if (editedFor !== slug) {
+    setEditedFor(slug);
+    setEdited(null);
+  }
+  const lines = edited ?? saved;
   const [isOpen, setIsOpen] = React.useState(false);
-  const [hydrated, setHydrated] = React.useState(false);
+
+  // Every change starts from what is on screen, saved basket included.
+  const setLines = React.useCallback(
+    (update: (prev: CartLine[]) => CartLine[]) =>
+      setEdited((prev) => update(prev ?? saved)),
+    [saved],
+  );
 
   React.useEffect(() => {
-    if (preview) {
-      setHydrated(true);
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem(storageKey(slug));
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed))
-          setLines(parsed.map(reviveCartLine).filter(Boolean) as CartLine[]);
-      }
-    } catch {
-      // Corrupt or unavailable storage must not stop the menu rendering.
-    }
-    setHydrated(true);
-  }, [slug, preview]);
-
-  React.useEffect(() => {
-    if (!hydrated || preview) return;
-    try {
-      window.localStorage.setItem(storageKey(slug), JSON.stringify(lines));
-    } catch {
-      // Quota or private-mode failures are non-fatal.
-    }
-  }, [lines, slug, hydrated, preview]);
+    if (edited === null || preview) return;
+    writeStoredValue(storageKey(slug), JSON.stringify(edited));
+  }, [edited, slug, preview]);
 
   const add = React.useCallback(
     (
@@ -228,26 +228,35 @@ export function CartProvider({
         ];
       });
     },
-    [],
+    [setLines],
   );
 
-  const setQuantity = React.useCallback((lineId: string, quantity: number) => {
-    setLines((prev) =>
-      quantity <= 0
-        ? prev.filter((l) => l.lineId !== lineId)
-        : prev.map((l) => (l.lineId === lineId ? { ...l, quantity } : l)),
-    );
-  }, []);
+  const setQuantity = React.useCallback(
+    (lineId: string, quantity: number) => {
+      setLines((prev) =>
+        quantity <= 0
+          ? prev.filter((l) => l.lineId !== lineId)
+          : prev.map((l) => (l.lineId === lineId ? { ...l, quantity } : l)),
+      );
+    },
+    [setLines],
+  );
 
-  const setNote = React.useCallback((lineId: string, note: string) => {
-    setLines((prev) => prev.map((l) => (l.lineId === lineId ? { ...l, note } : l)));
-  }, []);
+  const setNote = React.useCallback(
+    (lineId: string, note: string) => {
+      setLines((prev) => prev.map((l) => (l.lineId === lineId ? { ...l, note } : l)));
+    },
+    [setLines],
+  );
 
-  const remove = React.useCallback((lineId: string) => {
-    setLines((prev) => prev.filter((l) => l.lineId !== lineId));
-  }, []);
+  const remove = React.useCallback(
+    (lineId: string) => {
+      setLines((prev) => prev.filter((l) => l.lineId !== lineId));
+    },
+    [setLines],
+  );
 
-  const clear = React.useCallback(() => setLines([]), []);
+  const clear = React.useCallback(() => setEdited([]), []);
 
   const [suggestedProductIds, setSuggested] = React.useState<string[]>([]);
   const markSuggested = React.useCallback((ids: readonly string[]) => {
@@ -293,6 +302,19 @@ export function CartProvider({
   ]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+}
+
+/** The saved basket, or an empty one when nothing (valid) is stored. */
+function parseCartLines(raw: string | null): CartLine[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(reviveCartLine).filter((line): line is CartLine => line !== null);
+  } catch {
+    // Corrupt storage must not stop the menu rendering.
+    return [];
+  }
 }
 
 /**

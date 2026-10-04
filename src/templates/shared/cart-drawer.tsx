@@ -18,6 +18,7 @@ import { PriceTag, ProductImage, QuantityStepper } from "./pieces";
 import { RecommendationStrip } from "./recommendations";
 import { formatMoney, localizeDigits, toEnglishDigits } from "@/lib/format";
 import { calculatePrice } from "@/lib/pricing";
+import { useStoredValue, writeStoredValue } from "@/lib/use-stored-value";
 
 type Step = "cart" | "details";
 
@@ -25,6 +26,9 @@ type Step = "cart" | "details";
  * Cart + checkout in one sheet. Kept to two steps because a guest sitting at a
  * table with a phone in one hand will abandon anything longer.
  */
+/** Remembers the guest's name between visits; the table comes from the QR. */
+const GUEST_NAME_KEY = "restokar:guest-name";
+
 /** A random key for one checkout attempt (see `attempt` in CartDrawer). */
 function newAttemptKey(): string {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -42,7 +46,10 @@ export function CartDrawer() {
 
   const [step, setStep] = React.useState<Step>("cart");
   const [tableNumber, setTableNumber] = React.useState(presetTable ?? "");
-  const [customerName, setCustomerName] = React.useState("");
+  // The name typed last visit, until the guest types something else.
+  const savedName = useStoredValue(preview ? null : GUEST_NAME_KEY);
+  const [typedName, setCustomerName] = React.useState<string | null>(null);
+  const customerName = typedName ?? savedName ?? "";
   const [customerPhone, setCustomerPhone] = React.useState("");
   const [note, setNote] = React.useState("");
   const [paymentMethod, setPaymentMethod] = React.useState<"CASH_ON_SITE" | "ONLINE">(
@@ -93,11 +100,18 @@ export function CartDrawer() {
     if (!dialog) return;
     if (cart.isOpen && !dialog.open) dialog.showModal();
     if (!cart.isOpen && dialog.open) dialog.close();
+  }, [cart.isOpen]);
+
+  // Closing the drawer starts the next visit to it from the basket, with no
+  // leftover error — reset during render rather than one render late.
+  const [wasOpen, setWasOpen] = React.useState(cart.isOpen);
+  if (wasOpen !== cart.isOpen) {
+    setWasOpen(cart.isOpen);
     if (!cart.isOpen) {
       setStep("cart");
       setError(null);
     }
-  }, [cart.isOpen]);
+  }
 
   React.useEffect(() => {
     if (!cart.isOpen) return;
@@ -108,19 +122,13 @@ export function CartDrawer() {
     };
   }, [cart.isOpen]);
 
-  // Remember the guest's name between visits; the table comes from the QR code.
-  React.useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem("restokar:guest-name");
-      if (saved) setCustomerName(saved);
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
-
-  React.useEffect(() => {
+  // A new table in the link (the guest scanned another table's code) replaces
+  // the number in the form.
+  const [tableFromLink, setTableFromLink] = React.useState(presetTable);
+  if (tableFromLink !== presetTable) {
+    setTableFromLink(presetTable);
     if (presetTable) setTableNumber(presetTable);
-  }, [presetTable]);
+  }
 
   const fmt = (n: number) => formatMoney(n, locale);
 
@@ -302,11 +310,7 @@ export function CartDrawer() {
         return;
       }
 
-      try {
-        window.localStorage.setItem("restokar:guest-name", name);
-      } catch {
-        /* non-fatal */
-      }
+      writeStoredValue(GUEST_NAME_KEY, name);
 
       cart.clear();
       cart.close();

@@ -64,7 +64,7 @@ export default async function HomePage() {
     // Headline counts exclude demos so the numbers describe real adoption.
     prisma.$transaction([
       prisma.restaurant.count({ where: { isDemo: false } }),
-      prisma.order.count(),
+      prisma.order.count({ where: { restaurant: { isDemo: false } } }),
     ]),
   ]);
 

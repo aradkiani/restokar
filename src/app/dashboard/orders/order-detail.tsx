@@ -46,9 +46,20 @@ export function OrderDetailDialog({
   t: Dictionary;
 }) {
   const copy = t.orderDetail;
-  const [order, setOrder] = React.useState<OrderDetail | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  /*
+    Each response is stored with the id it answers. Whatever is on screen is
+    derived from that: a different id means "still loading", so opening another
+    order can never flash the previous one's details.
+  */
+  const [fetched, setFetched] = React.useState<{
+    id: string;
+    order: OrderDetail | null;
+    error: string | null;
+  } | null>(null);
+  const shown = fetched && fetched.id === orderId ? fetched : null;
+  const loading = orderId !== null && shown === null;
+  const order = shown?.order ?? null;
+  const error = shown?.error ?? null;
 
   React.useEffect(() => {
     if (!orderId) return;
@@ -59,15 +70,14 @@ export function OrderDetailDialog({
       land last and show the wrong order.
     */
     let current = true;
-    setLoading(true);
-    setError(null);
-    setOrder(null);
 
     void api.get<OrderDetail>(`/api/orders/${orderId}`).then((result) => {
       if (!current) return;
-      if (result.ok) setOrder(result.data);
-      else setError(result.error.message || t.common.error);
-      setLoading(false);
+      setFetched(
+        result.ok
+          ? { id: orderId, order: result.data, error: null }
+          : { id: orderId, order: null, error: result.error.message || t.common.error },
+      );
     });
 
     return () => {

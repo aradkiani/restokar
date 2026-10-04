@@ -37,17 +37,19 @@ export function ProductSheet({
   const [showErrors, setShowErrors] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
 
-  // Reset the draft whenever a different product is opened.
-  React.useEffect(() => {
+  // Reset the draft whenever a different product is opened — during render, so
+  // the sheet never paints the previous dish's quantity or choices. Only a new
+  // product resets it; a cart change while it is open must not stomp the
+  // guest's in-progress edits.
+  const [draftFor, setDraftFor] = React.useState<MenuProduct | null>(null);
+  if (draftFor !== product) {
+    setDraftFor(product);
     if (product) {
       setQuantity(Math.max(1, cart.quantityOf(product.id) || 1));
       setSelected(defaultSelection(product.optionGroups));
       setShowErrors(false);
     }
-    // Reading cart here would re-run the effect on every cart change and stomp
-    // the user's in-progress edits, so it is deliberately not a dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product]);
+  }
 
   React.useEffect(() => {
     const dialog = dialogRef.current;

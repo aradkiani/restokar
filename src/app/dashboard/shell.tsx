@@ -210,9 +210,12 @@ export function DashboardShell({
     .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   // Close the drawer on navigation — otherwise it stays over the new page.
-  React.useEffect(() => {
+  // Adjusted during render, so the new page never paints under an open drawer.
+  const [drawerPath, setDrawerPath] = React.useState(pathname);
+  if (drawerPath !== pathname) {
+    setDrawerPath(pathname);
     setMobileOpen(false);
-  }, [pathname]);
+  }
 
   async function handleLogout() {
     await api.post("/api/auth/logout");

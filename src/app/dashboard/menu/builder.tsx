@@ -154,9 +154,21 @@ export function MenuBuilder({
   } | null>(null);
   const [deleting, setDeleting] = React.useState(false);
 
-  // Keep the server copy authoritative after every mutation.
-  React.useEffect(() => setCategories(initialCategories), [initialCategories]);
-  React.useEffect(() => setProducts(initialProducts), [initialProducts]);
+  // Keep the server copy authoritative after every mutation: a refresh hands
+  // in new arrays, and the local copies are replaced during that same render.
+  const [serverCopy, setServerCopy] = React.useState({
+    initialCategories,
+    initialProducts,
+  });
+  if (
+    serverCopy.initialCategories !== initialCategories ||
+    serverCopy.initialProducts !== initialProducts
+  ) {
+    setServerCopy({ initialCategories, initialProducts });
+    if (serverCopy.initialCategories !== initialCategories)
+      setCategories(initialCategories);
+    if (serverCopy.initialProducts !== initialProducts) setProducts(initialProducts);
+  }
 
   /**
    * Moves a category one place up or down the rail.

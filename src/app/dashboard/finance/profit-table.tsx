@@ -14,6 +14,7 @@ export interface ProfitRow {
   margin: number;
   quantitySold: number;
   totalProfit: number;
+  realisedUnitProfit: number | null;
   hasCost: boolean;
 }
 
@@ -80,6 +81,16 @@ export function ProfitTable({ rows, locale }: { rows: ProfitRow[]; locale: Local
                 }`}
               >
                 {formatMoney(row.totalProfit, locale)}
+                {/* Today's price minus today's cost can differ from what the
+                    sales actually earned; both are shown so neither misleads. */}
+                {row.realisedUnitProfit !== null && (
+                  <span className="mt-0.5 block text-xs font-normal text-ink-500">
+                    {t.finance.realisedPerUnit.replace(
+                      "{amount}",
+                      formatMoney(row.realisedUnitProfit, locale),
+                    )}
+                  </span>
+                )}
               </td>
             </tr>
           ))}

@@ -10,7 +10,7 @@ import type { MenuCategory } from "../types";
  * them nothing and costs the schema nothing.
  *
  * Any template that does not care simply renders the category inline like any
- * other, so nothing here can break the other five.
+ * other, so nothing here can break the other templates.
  */
 
 /**

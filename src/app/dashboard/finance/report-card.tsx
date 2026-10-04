@@ -99,11 +99,14 @@ export function FinancialReportCard({ locale }: { locale: Locale }) {
     return search.toString();
   }, [preset, from, to, year, month, calendar]);
 
-  // A changed period invalidates the figures on screen.
-  React.useEffect(() => {
+  // A changed period invalidates the figures on screen. Done during render,
+  // like the calendar switch above, so stale figures never paint at all.
+  const [previewFor, setPreviewFor] = React.useState(params);
+  if (previewFor !== params) {
+    setPreviewFor(params);
     setPreview(null);
     setError(null);
-  }, [params]);
+  }
 
   async function loadPreview() {
     setLoading(true);

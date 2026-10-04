@@ -48,24 +48,16 @@ const config = [
       eqeqeq: ["error", "always", { null: "ignore" }],
 
       /**
-       * Advisory rather than blocking.
+       * Blocking. Every former site was rewritten in the forms React prescribes:
        *
-       * This React Compiler rule fires on several patterns React's own
-       * documentation still prescribes, and which this app genuinely needs:
-       *
-       *  - reading localStorage after mount (it cannot be read while
-       *    server-rendering) — cart contents, remembered guest name
-       *  - driving a native <dialog> via showModal/close, an external system
-       *  - resetting a draft when a different product sheet is opened
-       *  - closing the mobile drawer in response to navigation
-       *
-       * Each remaining site is deliberate and commented. Leaving this at
-       * "error" would mean nine scattered disable comments; deleting it would
-       * lose the signal for genuinely accidental cascades. Warning keeps it
-       * visible without blocking. The one site that was reducible to derived
-       * state — the menu builder's active category — was fixed instead.
+       *  - values saved in the browser are read through `useStoredValue`
+       *    (useSyncExternalStore), never copied into state after mount;
+       *  - the wall clock comes from `useNow`, likewise;
+       *  - state that must reset when a prop changes is adjusted during render
+       *    (the "previous value" pattern), not one render late in an effect;
+       *  - native <dialog> open/close stays in effects — that sets no state.
        */
-      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/set-state-in-effect": "error",
     },
   },
 

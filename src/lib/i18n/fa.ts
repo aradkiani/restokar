@@ -1720,9 +1720,10 @@ export const fa = {
     productProfit: "سود محصولات",
     productProfitHint:
       "برای محاسبه دقیق، بهای تمام‌شده هر محصول را در بخش منو وارد کنید.",
-    unitProfit: "سود هر واحد",
+    unitProfit: "سود هر واحد (قیمت فعلی)",
     sold: "فروش‌رفته",
-    profitContribution: "سهم از سود",
+    profitContribution: "سود واقعی فروش",
+    realisedPerUnit: "{amount} در هر واحدِ فروخته‌شده",
     missingCost: "بهای تمام‌شده وارد نشده",
     categories: {
       rent: "اجاره",

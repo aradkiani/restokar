@@ -13,8 +13,12 @@ test.describe("staff and branch roles", () => {
       await start.click();
       await expect(page.getByRole("button", { name: "آماده شد" }).first()).toBeVisible();
     }
-    const finance = await page.goto("/dashboard/finance");
-    expect(finance?.url()).not.toContain("/dashboard/finance");
+    // The panel streams a loading skeleton first, so the refusal arrives as a
+    // redirect inside the response: check where the barista ends up, not the
+    // first response's address.
+    await page.goto("/dashboard/finance");
+    await expect(page).not.toHaveURL(/\/dashboard\/finance/);
+    await expect(page.getByText("سود خالص")).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 

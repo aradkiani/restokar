@@ -1530,9 +1530,10 @@ export const en: Dictionary = {
     productProfit: "Product profitability",
     productProfitHint:
       "Enter a cost price per product in the menu section for exact figures.",
-    unitProfit: "Profit per unit",
+    unitProfit: "Profit per unit (current price)",
     sold: "Sold",
-    profitContribution: "Profit contribution",
+    profitContribution: "Realised profit",
+    realisedPerUnit: "{amount} per unit sold",
     missingCost: "No cost entered",
     categories: {
       rent: "Rent",

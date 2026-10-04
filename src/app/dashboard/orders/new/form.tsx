@@ -19,6 +19,7 @@ import {
   toggleChoice,
   type OptionSelection,
 } from "@/lib/order-options";
+import { useStoredValue, writeStoredValue } from "@/lib/use-stored-value";
 
 interface ChoiceRow {
   id: string;
@@ -122,7 +123,12 @@ export function ManualOrderForm({
   const toast = useToast();
   const router = useRouter();
 
-  const [mode, setMode] = React.useState<BrowseMode>("list");
+  // The last-used view, kept on this device rather than on the venue: which
+  // view suits you is a property of the person and the screen they are on.
+  const savedMode = useStoredValue(MODE_STORAGE_KEY);
+  const [chosenMode, setMode] = React.useState<BrowseMode | null>(null);
+  const mode: BrowseMode =
+    chosenMode ?? (savedMode === "menu" || savedMode === "list" ? savedMode : "list");
   const [lines, setLines] = React.useState<OrderLine[]>([]);
   /** The dish whose options are being chosen, if any. */
   const [picking, setPicking] = React.useState<ProductRow | null>(null);
@@ -133,25 +139,9 @@ export function ManualOrderForm({
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
-  // Restore the last-used mode. Read once on mount rather than stored on the
-  // venue: which view suits you is a property of the person and the screen
-  // they are on, not of the restaurant.
-  React.useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
-      if (saved === "menu" || saved === "list") setMode(saved);
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
-
   function chooseMode(next: BrowseMode) {
     setMode(next);
-    try {
-      window.localStorage.setItem(MODE_STORAGE_KEY, next);
-    } catch {
-      /* storage unavailable */
-    }
+    writeStoredValue(MODE_STORAGE_KEY, next);
   }
 
   const byId = React.useMemo(() => {

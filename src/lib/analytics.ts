@@ -516,6 +516,10 @@ export async function getProductProfitability(
       margin: product.price > 0 ? unitProfit / product.price : 0,
       quantitySold: stats?.quantity ?? 0,
       totalProfit: stats?.profit ?? 0,
+      // What each unit actually earned, at the prices and costs recorded when
+      // it was sold. Differs from unitProfit when either has changed since.
+      realisedUnitProfit:
+        stats && stats.quantity > 0 ? Math.round(stats.profit / stats.quantity) : null,
       hasCost: product.costPrice > 0,
     };
   });
