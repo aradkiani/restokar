@@ -114,10 +114,14 @@ const TABLE_ORDER = [
  * `SoldOutProduct` marks dishes run out of until the next morning; a restore
  * is never the same service day, and the kitchen marks them again in a tap.
  * (A restore's TRUNCATE … CASCADE clears it along with the products.)
+ * `ErrorEvent` is the platform's diagnostic log: it is pruned after 30 days,
+ * describes the software rather than the business, and a restore that brought
+ * back last month's errors would only bury today's.
  * `_prisma_migrations` describes the schema, which is part of the core project
  * and comes back with the code.
  */
 const EXCLUDED_TABLES = new Set([
+  "ErrorEvent",
   "Session",
   "OtpChallenge",
   "RateLimit",

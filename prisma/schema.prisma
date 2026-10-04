@@ -2499,3 +2499,39 @@ model PlatformSetting {
 
   updatedAt DateTime @updatedAt
 }
+
+// ------------------------------ diagnostics --------------------------------
+
+enum ErrorSource {
+  SERVER
+  CLIENT
+}
+
+/// Something that broke, grouped: one row per distinct error, counted.
+///
+/// For the platform admin, not for venues. Deliberately thin — no request
+/// bodies, cookies, headers or query strings, and long path segments (order
+/// tokens, ids) are masked before storing — because an error log is the
+/// place personal data leaks into by accident. See src/lib/error-log.ts.
+model ErrorEvent {
+  id          String      @id @default(cuid())
+  /// Hash of source + message + where, so a repeat increments a counter.
+  fingerprint String      @unique
+  source      ErrorSource
+  message     String
+  stack       String?
+  /// Masked path, without the query string.
+  path        String?
+  method      String?
+  /// render | route | action | proxy | browser
+  context     String?
+  digest      String?
+  userAgent   String?
+  count       Int         @default(1)
+  firstSeenAt DateTime    @default(now())
+  lastSeenAt  DateTime    @default(now())
+  /// Cleared again if the error comes back after being marked resolved.
+  resolvedAt  DateTime?
+
+  @@index([lastSeenAt])
+}

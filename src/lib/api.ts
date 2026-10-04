@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { HttpError } from "./auth/guards";
 import { env, isProd } from "./env";
+import { recordError } from "./error-log";
 
 /** Methods that change state and therefore need a cross-site origin check. */
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -87,7 +88,17 @@ export function route<Args extends unknown[]>(
       // `redirect()` and `notFound()` signal control flow via throw — rethrow.
       if (isNextControlFlow(error)) throw error;
 
-      console.error("[api] unhandled error", error);
+      // Recorded for the admin's error log (which also writes the process log).
+      const request = args[0] instanceof Request ? args[0] : null;
+      await recordError({
+        source: "SERVER",
+        message: String((error as Error)?.message ?? error),
+        stack: (error as Error)?.stack ?? null,
+        path: request ? new URL(request.url).pathname : null,
+        method: request?.method ?? null,
+        context: "route",
+        userAgent: request?.headers.get("user-agent") ?? null,
+      });
       return fail(
         500,
         isProd ? "Internal server error" : String((error as Error)?.message ?? error),

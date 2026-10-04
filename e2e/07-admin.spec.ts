@@ -15,6 +15,7 @@ const ADMIN_PAGES = [
   "/admin/content",
   "/admin/content/page-terms",
   "/admin/audit",
+  "/admin/errors",
   "/admin/settings",
 ];
 
@@ -200,6 +201,13 @@ test.describe("platform admin", () => {
     expect(
       (await page.request.patch("/api/admin/plans/anything", { data: {} })).status(),
     ).toBe(403);
+    expect(
+      (
+        await page.request.patch("/api/admin/errors/anything", {
+          data: { resolved: true },
+        })
+      ).status(),
+    ).toBe(403);
     expect((await page.request.post("/api/admin/content/site/publish")).status()).toBe(
       403,
     );
@@ -209,5 +217,37 @@ test.describe("platform admin", () => {
       maxRedirects: 0,
     });
     expect(preview.status()).toBe(403);
+  });
+
+  test("a browser error reaches the admin's log, grouped and with personal data removed", async ({
+    page,
+    request,
+  }, testInfo) => {
+    // Letters only: long digit runs are blanked by the log, by design.
+    const marker = `e2e-${testInfo.project.name}-${Math.random()
+      .toString(36)
+      .replace(/[^a-z]/g, "")}`;
+    await db.query(`DELETE FROM "ErrorEvent" WHERE message LIKE 'TypeError: e2e-%'`);
+    for (const token of ["Xk3pQ9vLm2Rt7Yw1zAbc", "Yk3pQ9vLm2Rt7Yw1zAbc"]) {
+      const sent = await request.post("/api/client-errors", {
+        data: {
+          message: `TypeError: ${marker} for 09121234567`,
+          path: `/menu/cafe-narenj/order/${token}?secret=1`,
+        },
+      });
+      expect(sent.ok()).toBeTruthy();
+    }
+
+    await signInWithApi(page.request, PHONES.admin);
+    await page.goto("/admin/errors");
+    const entry = page.getByRole("listitem").filter({ hasText: marker });
+    await expect(entry).toHaveCount(1);
+    await expect(entry).toContainText("۲ بار");
+    await expect(entry).toContainText("/menu/cafe-narenj/order/:id");
+    await expect(entry).not.toContainText("09121234567");
+    await expect(entry).not.toContainText("secret");
+
+    await entry.getByRole("button", { name: "رفع شد" }).click();
+    await expect(page.getByRole("listitem").filter({ hasText: marker })).toHaveCount(0);
   });
 });

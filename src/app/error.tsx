@@ -3,6 +3,7 @@
 import * as React from "react";
 import { TriangleAlert } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
+import { reportClientError } from "@/components/error-reporter";
 
 export default function GlobalError({
   error,
@@ -17,6 +18,9 @@ export default function GlobalError({
     // The digest is the only safe correlation handle to surface — the message
     // itself may carry internal detail.
     console.error("[app] render error", error.digest ?? error.message);
+    // A render that crashed in the browser reaches the admin's error log; one
+    // that crashed on the server is already there under the same digest.
+    reportClientError(error, error.digest);
   }, [error]);
 
   return (

@@ -4,6 +4,7 @@ import { getContent } from "@/lib/cms/content-server";
 import { siteInfo } from "@/lib/cms/site-info";
 import { I18nProvider } from "@/components/i18n-provider";
 import { ToastProvider } from "@/components/ui/toast";
+import { ErrorReporter } from "@/components/error-reporter";
 import { env } from "@/lib/env";
 import "./globals.css";
 
@@ -76,6 +77,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <I18nProvider locale={locale}>
           <ToastProvider>{children}</ToastProvider>
         </I18nProvider>
+        <ErrorReporter />
       </body>
     </html>
   );

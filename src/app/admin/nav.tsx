@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Bug,
   Building2,
   Clock,
   FileText,
@@ -40,6 +41,7 @@ export function AdminNav() {
     { href: "/admin/site", label: t.admin.siteSettings, icon: Globe },
     { href: "/admin/content", label: t.admin.siteContent, icon: FileText },
     { href: "/admin/audit", label: t.admin.auditLog, icon: History },
+    { href: "/admin/errors", label: t.admin.errorLog, icon: Bug },
     { href: "/admin/settings", label: t.admin.settings, icon: Settings },
   ];
 
