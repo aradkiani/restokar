@@ -26,8 +26,16 @@ import { env } from "../env";
  * the URL is what makes this a storage change rather than a data migration.
  */
 
-/** Absolute root of the customer-data directory. */
-export const DATA_ROOT = path.resolve(process.cwd(), env.DATA_DIR);
+/**
+ * Absolute root of the customer-data directory.
+ *
+ * Marked for the bundler to skip: it lives outside the code (DATA_DIR) and is
+ * only known at runtime, so tracing it made the build follow the whole project.
+ */
+export const DATA_ROOT = path.resolve(
+  /*turbopackIgnore: true*/ process.cwd(),
+  env.DATA_DIR,
+);
 
 /** Customer-uploaded images, one directory per tenant. */
 export const UPLOADS_ROOT = path.join(DATA_ROOT, "uploads");

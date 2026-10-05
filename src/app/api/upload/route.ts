@@ -34,7 +34,8 @@ export const POST = route(async (request: Request) => {
   const dir = tenantUploadDir(restaurantId);
 
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, filename), accepted.bytes);
+  // Under DATA_DIR, outside the code: nothing for the bundler to trace.
+  await writeFile(path.join(/*turbopackIgnore: true*/ dir, filename), accepted.bytes);
 
   return ok({ url: uploadUrl(restaurantId, filename) }, { status: 201 });
 });

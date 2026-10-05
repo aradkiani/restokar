@@ -30,7 +30,8 @@ export const POST = route(async (request: Request) => {
   const filename = `${randomToken(16)}.${accepted.ext}`;
   const dir = siteUploadDir();
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, filename), accepted.bytes);
+  // Under DATA_DIR, outside the code: nothing for the bundler to trace.
+  await writeFile(path.join(/*turbopackIgnore: true*/ dir, filename), accepted.bytes);
 
   return ok({ url: siteUploadUrl(filename) }, { status: 201 });
 });
