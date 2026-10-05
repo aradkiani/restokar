@@ -275,8 +275,11 @@ carries a comment explaining why.
   object storage; behind several instances, local disk will not do.
 - Menu slugs can't be changed from the dashboard by design — a live slug is
   printed on every table's QR code, so changing one is a support operation.
-- `CONTACT` in `src/lib/constants.ts` holds placeholder details for the
-  marketing site. Replace before launch.
+- The marketing site's phone, address, legal details and trust seal are site
+  settings at `/admin/site`; fill them in before launch.
+- Stock is per site; cost of goods on orders uses the ingredient reference
+  prices, so keep those current (see `docs/ARCHITECTURE.md`).
+- Server and browser errors are listed at `/admin/errors`.
 
 Deployment — VPS, Nginx, systemd, HTTPS, and the Vercel caveats — is covered in
 [DEPLOY.md](DEPLOY.md).
