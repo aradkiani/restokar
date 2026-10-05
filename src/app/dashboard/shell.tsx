@@ -26,6 +26,7 @@ import {
   UtensilsCrossed,
   Wallet,
   X,
+  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/client-api";
@@ -305,6 +306,15 @@ export function DashboardShell({
           <span className="text-sm font-bold text-sidebar-fg">{labels.appearance}</span>
           <ThemeToggle value={theme} tone="onDark" />
         </div>
+
+        <Link
+          href="/dashboard/account"
+          aria-current={pathname === "/dashboard/account" ? "page" : undefined}
+          className="flex items-center gap-3 rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-bold text-sidebar-fg transition-colors hover:bg-white/10"
+        >
+          <UserRound className="size-4.5 shrink-0" />
+          {labels.account}
+        </Link>
 
         <button
           type="button"

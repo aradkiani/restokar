@@ -7,6 +7,7 @@ import { subscriptionEndFromDays } from "@/lib/onboarding";
 import { recordAudit } from "@/lib/audit";
 import { DEFAULT_TEMPLATE_ID } from "@/templates/registry";
 import { snapshotLimits } from "@/lib/plan-terms";
+import { hashPassword } from "@/lib/auth/password";
 
 export const runtime = "nodejs";
 
@@ -49,13 +50,19 @@ export const POST = route(async (request: Request) => {
 
   const currentPeriodEnd = subscriptionEndFromDays(input.durationDays, new Date());
 
+  const ownerPasswordHash = input.ownerPassword
+    ? await hashPassword(input.ownerPassword)
+    : null;
+
   let created;
   try {
     created = await prisma.$transaction(async (tx) => {
       const owner = await tx.user.create({
         data: {
-          // Not yet proved: the owner's first sign-in code, sent here, is.
+          // With a first password from platform staff, or none — then the owner
+          // activates the account with one code and picks their own.
           phone: input.ownerPhone,
+          passwordHash: ownerPasswordHash,
           name: input.ownerName,
           role: "OWNER",
         },

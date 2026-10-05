@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PASSWORD_MAX, PASSWORD_MESSAGES, passwordProblem } from "./auth/password-rules";
 import { ThemeSchema } from "./theme";
 import {
   MAX_EXTENSION_DAYS,
@@ -51,6 +52,32 @@ export const mobileSchema = z
   .transform((value) => normalisePhone(value) ?? "")
   .refine((value) => /^09\d{9}$/.test(value), "شماره موبایل معتبر نیست");
 
+/**
+ * A password as typed into a sign-in form: only bounded, never judged — the
+ * rules apply when a password is chosen, not when an existing one is entered.
+ */
+export const passwordInputSchema = z
+  .string({ error: "رمز عبور را وارد کنید" })
+  .min(1, "رمز عبور را وارد کنید")
+  .max(PASSWORD_MAX * 2, "رمز عبور بیش از حد بلند است");
+
+/**
+ * A password being chosen, checked against the shared rules in
+ * auth/password-rules.ts. The phone it belongs to is passed in so the number
+ * itself is refused as a password.
+ */
+export function checkNewPassword(
+  password: string | undefined,
+  phone: string | null | undefined,
+  ctx: z.RefinementCtx,
+  path: string[] = ["password"],
+): void {
+  if (!password) return;
+  const problem = passwordProblem(password, { phone });
+  if (problem)
+    ctx.addIssue({ code: "custom", path, message: PASSWORD_MESSAGES[problem] });
+}
+
 /** A one-time code as typed: Persian or Latin digits, spaces ignored. */
 export const otpCodeSchema = z
   .string({ error: "کد تأیید را وارد کنید" })
@@ -60,7 +87,11 @@ export const otpCodeSchema = z
 /** Which public flow a code is asked for. A phone change has its own route. */
 export const OtpRequestSchema = z.object({
   phone: mobileSchema,
-  purpose: z.enum(["LOGIN", "SIGNUP"]),
+  /**
+   * SIGNUP proves a new number; ACTIVATE proves the number of an account that
+   * has no password yet. Sign-in itself never uses a code.
+   */
+  purpose: z.enum(["SIGNUP", "ACTIVATE"]),
   /**
    * Sign-up only: the menu address the person chose, checked before a code is
    * sent so a taken address is reported now rather than after they have typed
@@ -128,8 +159,14 @@ export const RegisterDetailsSchema = z.object({
   slug: slugSchema,
 });
 
-/** Sign-up completes with the code that proves the number. */
-export const RegisterSchema = RegisterDetailsSchema.extend({ code: otpCodeSchema });
+/**
+ * Sign-up completes with the code that proves the number — the only time a
+ * code is needed — and the password every later sign-in uses.
+ */
+export const RegisterSchema = RegisterDetailsSchema.extend({
+  code: otpCodeSchema,
+  password: passwordInputSchema,
+}).superRefine((value, ctx) => checkNewPassword(value.password, value.phone, ctx));
 
 /**
  * A new branch, plus the account that will run it.
@@ -138,20 +175,46 @@ export const RegisterSchema = RegisterDetailsSchema.extend({ code: otpCodeSchema
  * manager is a menu address nobody can take an order from, and creating the two
  * separately invites exactly that half-finished state.
  */
-export const BranchSchema = z.object({
-  name: z.string().trim().min(2, "نام شعبه را وارد کنید").max(80),
-  slug: slugSchema,
-  managerName: z.string().trim().min(2, "نام مدیر شعبه را وارد کنید").max(80),
-  /** The manager signs in with this number; their first code proves it. */
-  managerPhone: mobileSchema,
-  address: z.string().trim().max(200).optional().or(z.literal("")),
-  phone: z.string().trim().max(20).optional().or(z.literal("")),
-  tableCount: z.number().int().min(0).max(200).optional(),
-});
+export const BranchSchema = z
+  .object({
+    name: z.string().trim().min(2, "نام شعبه را وارد کنید").max(80),
+    slug: slugSchema,
+    managerName: z.string().trim().min(2, "نام مدیر شعبه را وارد کنید").max(80),
+    /** The manager signs in with this number. */
+    managerPhone: mobileSchema,
+    /** Optional first password for the manager; empty means they activate it. */
+    managerPassword: z
+      .string()
+      .max(PASSWORD_MAX * 2)
+      .optional()
+      .or(z.literal("")),
+    address: z.string().trim().max(200).optional().or(z.literal("")),
+    phone: z.string().trim().max(20).optional().or(z.literal("")),
+    tableCount: z.number().int().min(0).max(200).optional(),
+  })
+  .superRefine((value, ctx) =>
+    checkNewPassword(value.managerPassword, value.managerPhone, ctx, ["managerPassword"]),
+  );
 
+/** Signing in: phone and password, no code. */
 export const LoginSchema = z.object({
   phone: mobileSchema,
-  code: otpCodeSchema,
+  password: passwordInputSchema,
+});
+
+/**
+ * Activating an account someone else created (a staff member, a branch
+ * manager, an owner onboarded by platform staff) or one from before passwords:
+ * one code proves the number, once, and a password is chosen.
+ */
+export const ActivateSchema = z
+  .object({ phone: mobileSchema, code: otpCodeSchema, password: passwordInputSchema })
+  .superRefine((value, ctx) => checkNewPassword(value.password, value.phone, ctx));
+
+/** Changing one's own password; the phone check happens in the route. */
+export const PasswordChangeSchema = z.object({
+  currentPassword: passwordInputSchema,
+  newPassword: passwordInputSchema,
 });
 
 /** Asking for a code to the number an account is moving to. */
@@ -807,32 +870,42 @@ export const PlatformSettingsSchema = z.object({
   backupEmail: z.union([emailSchema, z.literal("")]),
 });
 
-export const AdminAccountSchema = z.object({
-  /** The owner signs in with this number; their first code proves it. */
-  ownerPhone: mobileSchema,
-  ownerName: z
-    .string()
-    .trim()
-    .min(2, "نام مالک باید حداقل ۲ کاراکتر باشد")
-    .max(80, "نام مالک بیش از حد بلند است"),
-  restaurantName: z
-    .string()
-    .trim()
-    .min(2, "نام رستوران باید حداقل ۲ کاراکتر باشد")
-    .max(80, "نام رستوران بیش از حد بلند است"),
-  slug: slugSchema,
-  planCode: z.string().trim().min(1, "پلن را انتخاب کنید"),
-  /**
-   * Whole days only. A fractional duration is rejected rather than rounded,
-   * because "1.5" here is always a typo and rounding it silently would hand the
-   * customer a period neither side agreed to.
-   */
-  durationDays: z.coerce
-    .number()
-    .int("مدت اشتراک باید عدد صحیح باشد")
-    .min(MIN_ONBOARDING_DAYS, "مدت اشتراک باید حداقل یک روز باشد")
-    .max(MAX_ONBOARDING_DAYS, "مدت اشتراک بیش از حد طولانی است"),
-});
+export const AdminAccountSchema = z
+  .object({
+    /** The owner signs in with this number. */
+    ownerPhone: mobileSchema,
+    /** Optional first password; empty means the owner activates the account. */
+    ownerPassword: z
+      .string()
+      .max(PASSWORD_MAX * 2)
+      .optional()
+      .or(z.literal("")),
+    ownerName: z
+      .string()
+      .trim()
+      .min(2, "نام مالک باید حداقل ۲ کاراکتر باشد")
+      .max(80, "نام مالک بیش از حد بلند است"),
+    restaurantName: z
+      .string()
+      .trim()
+      .min(2, "نام رستوران باید حداقل ۲ کاراکتر باشد")
+      .max(80, "نام رستوران بیش از حد بلند است"),
+    slug: slugSchema,
+    planCode: z.string().trim().min(1, "پلن را انتخاب کنید"),
+    /**
+     * Whole days only. A fractional duration is rejected rather than rounded,
+     * because "1.5" here is always a typo and rounding it silently would hand the
+     * customer a period neither side agreed to.
+     */
+    durationDays: z.coerce
+      .number()
+      .int("مدت اشتراک باید عدد صحیح باشد")
+      .min(MIN_ONBOARDING_DAYS, "مدت اشتراک باید حداقل یک روز باشد")
+      .max(MAX_ONBOARDING_DAYS, "مدت اشتراک بیش از حد طولانی است"),
+  })
+  .superRefine((value, ctx) =>
+    checkNewPassword(value.ownerPassword, value.ownerPhone, ctx, ["ownerPassword"]),
+  );
 
 // ----------------------------- settings ------------------------------------
 
@@ -1264,12 +1337,24 @@ export const ProductRecipeSchema = z.object({
  * is dropped rather than rejected. Refusing would tell a caller which keys
  * exist; dropping stores exactly the access that was actually granted.
  */
-export const StaffSchema = z.object({
-  name: z.string().trim().min(2, "نام را وارد کنید").max(80),
-  /** The staff member signs in with this number; their first code proves it. */
-  phone: mobileSchema,
-  tabs: z.array(z.string().max(40)).max(20).default([]),
-});
+export const StaffSchema = z
+  .object({
+    name: z.string().trim().min(2, "نام را وارد کنید").max(80),
+    /** The staff member signs in with this number. */
+    phone: mobileSchema,
+    tabs: z.array(z.string().max(40)).max(20).default([]),
+    /**
+     * Optional first password, set by the owner and handed over in person.
+     * Empty means the staff member activates the account with one code and
+     * chooses their own.
+     */
+    password: z
+      .string()
+      .max(PASSWORD_MAX * 2)
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((value, ctx) => checkNewPassword(value.password, value.phone, ctx));
 
 /** Editing an existing account: access only. */
 export const StaffAccessSchema = z.object({

@@ -35,6 +35,7 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
   const [staff, setStaff] = React.useState<StaffRow[]>(initialStaff);
   const [name, setName] = React.useState("");
   const [phone, setPhone] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [tabs, setTabs] = React.useState<StaffTab[]>([]);
   const [busy, setBusy] = React.useState(false);
 
@@ -62,18 +63,24 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
   async function create(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
-    const result = await api.post("/api/staff", { name, phone, tabs });
+    const result = await api.post("/api/staff", { name, phone, tabs, password });
     setBusy(false);
 
     if (!result.ok) {
       const fields = localizeFieldErrors(result.error.details, t);
-      toast.error(fields.phone ?? fields.name ?? localizeApiError(result.error, t));
+      toast.error(
+        fields.phone ??
+          fields.name ??
+          fields.password ??
+          localizeApiError(result.error, t),
+      );
       return;
     }
 
     setStaff((current) => [...current, result.data as StaffRow]);
     setName("");
     setPhone("");
+    setPassword("");
     setTabs([]);
   }
 
@@ -146,6 +153,23 @@ export function StaffManager({ initialStaff }: { initialStaff: StaffRow[] }) {
                   onChange={(e) => setPhone(e.target.value)}
                   required
                   placeholder={t.auth.phonePlaceholder}
+                  className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-semibold"
+                />
+              </Field>
+
+              <Field
+                label={t.auth.initialPassword}
+                hint={t.auth.initialPasswordHint}
+                htmlFor="staff-password"
+                className="sm:col-span-3"
+              >
+                <input
+                  id="staff-password"
+                  type="text"
+                  dir="ltr"
+                  autoComplete="off"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-surface px-3 text-sm font-semibold"
                 />
               </Field>

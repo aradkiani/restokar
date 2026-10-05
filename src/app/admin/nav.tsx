@@ -16,6 +16,7 @@ import {
   MessageSquareText,
   Settings,
   UserPlus,
+  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/i18n-provider";
@@ -43,6 +44,7 @@ export function AdminNav() {
     { href: "/admin/audit", label: t.admin.auditLog, icon: History },
     { href: "/admin/errors", label: t.admin.errorLog, icon: Bug },
     { href: "/admin/settings", label: t.admin.settings, icon: Settings },
+    { href: "/admin/account", label: t.account.title, icon: UserRound },
   ];
 
   return (

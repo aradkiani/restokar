@@ -12,6 +12,7 @@ import { api } from "@/lib/client-api";
 import { localizeApiError, localizeFieldErrors } from "@/lib/api-error";
 import { RegisterDetailsSchema } from "@/lib/validation";
 import { slugify } from "@/lib/utils";
+import { PasswordField, newPasswordErrors } from "@/components/auth/password-field";
 
 type Details = { name: string; phone: string; restaurantName: string; slug: string };
 
@@ -20,7 +21,9 @@ type Step =
   | { kind: "code"; details: Details; codeLength: number; cooldownSeconds: number };
 
 /**
- * Sign-up: who you are and your venue, then the code that proves the number.
+ * Sign-up: who you are, your venue and a password, then the code that proves
+ * the number — the only code the account ever needs; every later sign-in is
+ * phone and password.
  *
  * The account is only created once the code is entered, so a number nobody can
  * receive texts on never becomes an account. If the menu address was taken in
@@ -37,6 +40,8 @@ export function RegisterForm({ origin }: { origin: string }) {
     restaurantName: "",
     slug: "",
   });
+  const [password, setPassword] = React.useState("");
+  const [confirm, setConfirm] = React.useState("");
   const [slugTouched, setSlugTouched] = React.useState(false);
   const [step, setStep] = React.useState<Step>({ kind: "details" });
   const [error, setError] = React.useState<string | null>(null);
@@ -58,12 +63,20 @@ export function RegisterForm({ origin }: { origin: string }) {
     setFieldErrors({});
 
     const parsed = RegisterDetailsSchema.safeParse(form);
+    const fields: Record<string, string> = {};
     if (!parsed.success) {
-      const fields: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const key = String(issue.path[0] ?? "");
         if (key && !fields[key]) fields[key] = issue.message;
       }
+    }
+    Object.assign(
+      fields,
+      newPasswordErrors(password, confirm, parsed.success ? parsed.data.phone : null, {
+        differ: t.auth.passwordsDiffer,
+      }),
+    );
+    if (!parsed.success || Object.keys(fields).length > 0) {
       setFieldErrors(fields);
       return;
     }
@@ -99,6 +112,7 @@ export function RegisterForm({ origin }: { origin: string }) {
     const result = await api.post<{ redirectTo: string }>("/api/auth/register", {
       ...details,
       code,
+      password,
     });
 
     if (!result.ok) {
@@ -109,6 +123,12 @@ export function RegisterForm({ origin }: { origin: string }) {
         return null;
       }
       const fields = localizeFieldErrors(result.error.details, t);
+      if (fields.password) {
+        // Back to the details with the password marked; the code is unspent.
+        setStep({ kind: "details" });
+        setFieldErrors({ password: fields.password });
+        return null;
+      }
       return fields.code ?? localizeApiError(result.error, t);
     }
 
@@ -178,6 +198,27 @@ export function RegisterForm({ origin }: { origin: string }) {
           />
         </Field>
       </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <PasswordField
+          id="password"
+          label={t.auth.password}
+          hint={t.auth.passwordRules}
+          value={password}
+          onChange={setPassword}
+          error={fieldErrors.password}
+          autoComplete="new-password"
+        />
+        <PasswordField
+          id="confirm"
+          label={t.auth.passwordConfirm}
+          value={confirm}
+          onChange={setConfirm}
+          error={fieldErrors.confirm}
+          autoComplete="new-password"
+        />
+      </div>
+      <p className="-mt-2 text-xs text-ink-500">{t.auth.registerPasswordHint}</p>
 
       <hr className="!my-6 border-ink-200" />
 

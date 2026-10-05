@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { HttpError, requireChainOwner } from "@/lib/auth/guards";
 import { BranchSchema } from "@/lib/validation";
 import { recordAudit } from "@/lib/audit";
+import { hashPassword } from "@/lib/auth/password";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,11 @@ export const POST = route(async (request: Request) => {
     },
   });
 
+  // Hashed before the transaction opens, so it holds no lock while scrypt runs.
+  const managerPasswordHash = input.managerPassword
+    ? await hashPassword(input.managerPassword)
+    : null;
+
   /*
     One transaction: a branch row without its manager account is a menu address
     nobody can operate, and a manager without a branch is an account that cannot
@@ -110,8 +116,10 @@ export const POST = route(async (request: Request) => {
 
     await tx.user.create({
       data: {
-        // Not yet proved: the manager's first sign-in code, sent here, is.
+        // With a first password from the owner, or none — then the manager
+        // activates the account with one code and picks their own.
         phone: input.managerPhone,
+        passwordHash: managerPasswordHash,
         name: input.managerName,
         role: "BRANCH_MANAGER",
         restaurantId: created.id,

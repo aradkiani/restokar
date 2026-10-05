@@ -2,6 +2,7 @@ import { fail, ok, parseBody, route } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { RegisterSchema } from "@/lib/validation";
 import { createSession } from "@/lib/auth/session";
+import { hashPassword } from "@/lib/auth/password";
 import {
   otpVerifyFailure,
   verifyOtp,
@@ -26,6 +27,8 @@ class CodeRejected extends Error {
 /**
  * Creates the owner, their restaurant and a trial subscription in one
  * transaction — with the code that proves the phone number consumed inside it.
+ * This is the one time a code is needed: the password chosen here is what
+ * every later sign-in uses.
  *
  * Consuming the code in the same transaction is what makes a late failure
  * recoverable: if the menu address was taken a moment ago, everything rolls
@@ -67,6 +70,9 @@ export const POST = route(async (request: Request) => {
   const site = await getContent("site");
   const trialDays = typeof site.trialDays === "number" ? site.trialDays : TRIAL_DAYS;
 
+  // Hashed before the transaction opens, so it holds no lock while scrypt runs.
+  const passwordHash = await hashPassword(input.password);
+
   let user: { id: string; role: "OWNER"; restaurantId: string };
 
   try {
@@ -84,6 +90,7 @@ export const POST = route(async (request: Request) => {
         data: {
           phone: input.phone,
           phoneVerifiedAt: new Date(),
+          passwordHash,
           name: input.name,
           role: "OWNER",
         },

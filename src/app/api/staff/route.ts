@@ -5,6 +5,7 @@ import { recordAudit } from "@/lib/audit";
 import { clientIp } from "@/lib/rate-limit";
 import { StaffSchema } from "@/lib/validation";
 import { exclusiveConflicts, sanitiseTabs } from "@/lib/staff-tabs";
+import { hashPassword } from "@/lib/auth/password";
 
 export const runtime = "nodejs";
 
@@ -83,8 +84,10 @@ export const POST = route(async (request: Request) => {
   const created = await prisma.user.create({
     data: {
       name: input.name,
-      // Not yet proved: their first sign-in code, sent to this number, is.
+      // A first password from the owner, handed over in person; without one
+      // the staff member activates the account with one code and picks theirs.
       phone: input.phone,
+      passwordHash: input.password ? await hashPassword(input.password) : null,
       role: "STAFF",
       restaurantId,
       staffTabs: tabs,

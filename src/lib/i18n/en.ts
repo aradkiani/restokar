@@ -125,8 +125,35 @@ export const en: Dictionary = {
     brandText: "Your logo, colors and fonts — a menu that looks like your brand.",
   },
   auth: {
+    password: "Password",
+    passwordNew: "New password",
+    passwordConfirm: "Repeat password",
+    passwordRules: "At least 8 characters, with a letter and a digit",
+    passwordsDiffer: "The two passwords do not match",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
+    loginFailed: "Wrong phone number or password",
+    loginLocked:
+      "Too many wrong attempts; sign-in with this number is paused for {minutes} minutes.",
+    noPasswordYet: "Account created for you, with no password yet?",
+    activateLink: "Activate your account",
+    activateTitle: "Activate your account",
+    activateSubtitle:
+      "Confirm your mobile number once with a texted code and choose a password. From then on you sign in with that password.",
+    activateCodeHint:
+      "A code is only sent to an account that has no password yet. If you have one, sign in instead.",
+    submitActivate: "Activate and sign in",
+    initialPassword: "First password (optional)",
+    initialPasswordHint:
+      "If set, hand it over in person so they can sign in at once and change it under My account. If left empty, they activate the account with one texted code and choose their own.",
+    forgotPassword: "Forgot your password?",
+    forgotPasswordHint:
+      "Staff and branch managers: ask the venue owner. Owners: contact Restokar support.",
+    registerPasswordHint:
+      "From now on you sign in with your mobile number and this password.",
     loginTitle: "Sign in",
-    loginSubtitle: "Sign in to your restaurant dashboard with your mobile number",
+    loginSubtitle:
+      "Sign in to your venue's dashboard with your mobile number and password",
     registerTitle: "Create your account",
     registerSubtitle: "Register your restaurant and build a digital menu",
     name: "Full name",
@@ -154,6 +181,15 @@ export const en: Dictionary = {
     registrationClosedTitle: "Registration is by request",
     registrationClosedBody:
       "Online sign-up is currently unavailable. Contact support to have your account created with your own mobile number — you will sign in with that number.",
+  },
+  account: {
+    title: "My account",
+    subtitle: "Password and sign-in number",
+    changePassword: "Change password",
+    currentPassword: "Current password",
+    savePassword: "Save new password",
+    passwordChanged: "Password changed. Your other devices were signed out.",
+    signedInAs: "Signed in as",
   },
   dashboard: {
     firstStepsTitle: "First steps",
@@ -351,7 +387,7 @@ export const en: Dictionary = {
     branchSlugHint: "This branch's menu will be at:",
     managerName: "Branch manager name",
     managerPhone: "Branch manager's mobile number",
-    managerPhoneHint: "The branch manager signs in with this number and a texted code.",
+    managerPhoneHint: "The branch manager signs in with this number and a password.",
     create: "Create branch",
     created: "Branch created",
     empty: "No branches yet",
@@ -407,8 +443,7 @@ export const en: Dictionary = {
       "Create an account per person and choose which sections they can open. Orders can be given to only one person, so two people never move the same ticket at once.",
     staffName: "Name",
     staffPhone: "Mobile number",
-    staffPhoneHint:
-      "They sign in with this number and a texted code; their first sign-in confirms the number.",
+    staffPhoneHint: "They sign in with this number and a password.",
     staffAccess: "Access",
     staffAdd: "Create account",
     noStaff: "No staff accounts yet",
@@ -2128,10 +2163,9 @@ export const en: Dictionary = {
     backupStatusTooLarge: "Archive too large to email",
     newAccount: "Create customer account",
     newAccountHint:
-      "While the payment gateway is disconnected, create customer accounts here: enter the owner's mobile number and the subscription length. The owner signs in with that number and a texted code.",
+      "While the payment gateway is disconnected, create customer accounts here: enter the owner's mobile number and the subscription length. The owner signs in with that number and a password.",
     accountCreated: "Account created",
-    ownerPhoneHint:
-      "The owner signs in with this number; the first code they enter confirms it.",
+    ownerPhoneHint: "The owner signs in with this number and a password.",
     durationDays: "Subscription length (days)",
     monthlyRevenue: "Revenue this month",
     totalPlatformRevenue: "Total platform revenue",
@@ -2204,6 +2238,8 @@ export const en: Dictionary = {
     network: "Couldn't reach the server. Check your connection.",
     badResponse: "Invalid response from the server",
     codes: {
+      LOGIN_FAILED: "Wrong phone number or password",
+      LOGIN_LOCKED: "Too many wrong attempts; sign-in is paused for a few minutes",
       ITEM_NOT_FOUND:
         "An item in your cart is no longer on the menu. Please check your cart.",
       ITEM_UNAVAILABLE:

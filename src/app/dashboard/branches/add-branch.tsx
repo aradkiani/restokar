@@ -27,6 +27,7 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
   const [slug, setSlug] = React.useState("");
   const [managerName, setManagerName] = React.useState("");
   const [managerPhone, setManagerPhone] = React.useState("");
+  const [managerPassword, setManagerPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   async function submit(event: React.FormEvent) {
@@ -38,6 +39,7 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
       slug,
       managerName,
       managerPhone,
+      managerPassword,
       tableCount: 8,
     });
 
@@ -47,6 +49,7 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
       const fields = localizeFieldErrors(result.error.details, t);
       toast.error(
         fields.managerPhone ??
+          fields.managerPassword ??
           Object.values(fields)[0] ??
           localizeApiError(result.error, t),
       );
@@ -58,6 +61,7 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
     setSlug("");
     setManagerName("");
     setManagerPhone("");
+    setManagerPassword("");
     router.refresh();
   }
 
@@ -127,6 +131,21 @@ export function AddBranchForm({ baseUrl }: { baseUrl: string }) {
                 onChange={(e) => setManagerPhone(e.target.value)}
                 placeholder={t.auth.phonePlaceholder}
                 required
+              />
+            </Field>
+
+            <Field
+              label={t.auth.initialPassword}
+              hint={t.auth.initialPasswordHint}
+              htmlFor="managerPassword"
+            >
+              <Input
+                id="managerPassword"
+                type="text"
+                dir="ltr"
+                autoComplete="off"
+                value={managerPassword}
+                onChange={(e) => setManagerPassword(e.target.value)}
               />
             </Field>
           </div>

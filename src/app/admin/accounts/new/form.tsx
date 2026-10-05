@@ -33,6 +33,7 @@ export function NewAccountForm({
   const [form, setForm] = React.useState({
     ownerName: "",
     ownerPhone: "",
+    ownerPassword: "",
     restaurantName: "",
     slug: "",
     planCode: plans[0]?.code ?? "",
@@ -115,6 +116,20 @@ export function NewAccountForm({
                   value={form.ownerPhone}
                   onChange={(e) => setField("ownerPhone", e.target.value)}
                   placeholder={t.auth.phonePlaceholder}
+                />
+              </Field>
+              <Field
+                label={t.auth.initialPassword}
+                hint={t.auth.initialPasswordHint}
+                htmlFor="a-password"
+              >
+                <Input
+                  id="a-password"
+                  type="text"
+                  dir="ltr"
+                  autoComplete="off"
+                  value={form.ownerPassword}
+                  onChange={(e) => setField("ownerPassword", e.target.value)}
                 />
               </Field>
             </div>

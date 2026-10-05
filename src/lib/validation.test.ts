@@ -123,6 +123,7 @@ describe("RegisterSchema", () => {
     name: "نیما رستگار",
     phone: "0912 123 4567",
     code: "۱۲۳۴۵",
+    password: "nabsh1405",
     restaurantName: "کافه نبش",
     slug: "cafe-nabsh-2",
   };
@@ -133,11 +134,19 @@ describe("RegisterSchema", () => {
     expect(parsed.code).toBe("12345");
   });
 
-  /** Email and password are gone from sign-up; sending them changes nothing. */
-  it("needs no email or password", () => {
-    const parsed = RegisterSchema.parse({ ...valid, email: "a@b.ir", password: "x" });
+  /** Sign-up is where the password is chosen, under the shared rules. */
+  it("requires a password that meets the rules, and ignores an email", () => {
+    const parsed = RegisterSchema.parse({ ...valid, email: "a@b.ir" });
     expect(parsed).not.toHaveProperty("email");
-    expect(parsed).not.toHaveProperty("password");
+    expect(parsed.password).toBe("nabsh1405");
+    const { password: _password, ...withoutPassword } = valid;
+    expect(RegisterSchema.safeParse(withoutPassword).success).toBe(false);
+    expect(RegisterSchema.safeParse({ ...valid, password: "short1" }).success).toBe(
+      false,
+    );
+    expect(RegisterSchema.safeParse({ ...valid, password: "09121234567a" }).success).toBe(
+      false,
+    );
   });
 
   it("requires the code", () => {
@@ -147,11 +156,13 @@ describe("RegisterSchema", () => {
 });
 
 describe("LoginSchema", () => {
-  it("signs in with a phone and a code, nothing else", () => {
-    expect(LoginSchema.safeParse({ phone: "09121234567", code: "12345" }).success).toBe(
+  it("signs in with a phone and a password — no code, no email", () => {
+    expect(LoginSchema.safeParse({ phone: "09121234567", password: "x" }).success).toBe(
       true,
     );
-    expect(LoginSchema.safeParse({ phone: "09121234567" }).success).toBe(false);
+    expect(LoginSchema.safeParse({ phone: "09121234567", code: "12345" }).success).toBe(
+      false,
+    );
     expect(LoginSchema.safeParse({ email: "a@b.ir", password: "x" }).success).toBe(false);
   });
 });
