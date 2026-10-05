@@ -162,6 +162,11 @@ further — see [Take a backup](#take-a-backup).
 
 ## Read the logs
 
+**Start with `/admin/errors`.** Server errors and guests' browser errors are
+recorded there, grouped and counted, with personal data removed — usually the
+fastest way to see what broke and how often. Mark an entry resolved once fixed;
+it reopens itself if the error comes back.
+
 **Application** — everything the app prints, including startup errors and
 crashes:
 

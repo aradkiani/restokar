@@ -613,15 +613,16 @@ That is the point.
 
 ## 15. When something is wrong
 
-| Symptom            | Command                                            |
-| ------------------ | -------------------------------------------------- |
-| Site is down       | `sudo systemctl status restokar`                   |
-| Why did it crash   | `sudo journalctl -u restokar -n 100 --no-pager`    |
-| nginx complains    | `sudo nginx -t`                                    |
-| Database reachable | `sudo -u postgres psql -d restokar -c "\dt"`       |
-| Backup failed      | `cat /var/lib/restokar/logs/backup.log`            |
-| Disk filling up    | `df -h` then `du -sh /var/lib/restokar/*`          |
-| Restart everything | `sudo systemctl restart restokar nginx postgresql` |
+| Symptom             | Command                                            |
+| ------------------- | -------------------------------------------------- |
+| Site is down        | `sudo systemctl status restokar`                   |
+| Why did it crash    | `sudo journalctl -u restokar -n 100 --no-pager`    |
+| nginx complains     | `sudo nginx -t`                                    |
+| Database reachable  | `sudo -u postgres psql -d restokar -c "\dt"`       |
+| Backup failed       | `cat /var/lib/restokar/logs/backup.log`            |
+| Disk filling up     | `df -h` then `du -sh /var/lib/restokar/*`          |
+| Restart everything  | `sudo systemctl restart restokar nginx postgresql` |
+| What broke, grouped | Open `/admin/errors` in the admin console          |
 
 **"It won't start in production"** is usually deliberate. The app refuses to boot
 when `AUTH_SECRET` is still the example value, when `NEXT_PUBLIC_APP_URL` is a
@@ -680,10 +681,23 @@ interface; nothing reaches a blocked network.
 replication and no automated restore verification — rehearse a restore yourself
 before relying on it, as the checklist below requires.
 
-**Known operational gaps.** Images are served at full size with no `srcset`, so a
-menu scan costs more bandwidth than it needs to. The plan's `maxDailyViews` is
-displayed but not enforced. Stock is allowed to go negative rather than blocking
-a real sale. The kitchen board polls every 30 seconds in addition to its live
+**Payment receipts, not tax invoices.** Each paid subscription has a printable
+receipt (`/print/receipt/…`, linked from the subscription page). Fill in the
+legal name, national ID, economic code and postal code under `/admin/site` so
+they print on it. It is not an official invoice of the tax system (سامانهٔ
+مؤدیان); registering for that is a business step outside the software.
+
+**Inventory is per site.** Each branch keeps its own stock; purchases, waste and
+counts are recorded in the «انبار» section and waste and count differences
+appear on the profit and loss. Cost of goods on each order still uses the
+ingredient reference prices the owner maintains — keep those current (the
+purchase form can update them) or food-cost figures drift from what stock
+actually cost.
+
+**Known operational gaps.** Uploaded images are shrunk to WebP in the browser
+(at most 1600px) but there is no separate small thumbnail, so a card downloads
+the full image. The plan's `maxDailyViews` is displayed but not enforced. Stock
+is allowed to go negative rather than blocking a real sale. The kitchen board polls every 30 seconds in addition to its live
 connection. Merchandising conversion rates mix guest sessions with order lines
 and are capped at 100%, with the raw counts shown beside them. None of these
 blocks a launch; all of them are worth revisiting once real traffic exists.

@@ -49,7 +49,9 @@ const LINES: Record<string, Line[]> = {
     (d) => d.subscription.sharedMenu,
     (d) => d.subscription.branchAccounts,
     (d) => d.subscription.perBranchRevenue,
-    (d) => d.subscription.customDomain,
+    // No custom-domain line: serving a menu on a venue's own domain is not
+    // built (it needs per-venue DNS, certificates and host routing), and a
+    // pricing page must not sell what the product cannot do.
   ],
 };
 

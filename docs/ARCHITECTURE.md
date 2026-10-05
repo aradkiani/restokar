@@ -99,14 +99,15 @@ Break these and something important breaks quietly.
 **Tenant isolation.** One database, one schema, `restaurantId` on every
 tenant-owned table. **A tenant id may only come from the session** — never from
 a body, query string or route param. Enforced by `src/lib/auth/guards.ts`.
-Three test files assert it against the source text so an _unscoped_ query
-cannot be added unnoticed: `analytics-isolation`, `customers-isolation`,
-`tables-isolation`.
+Test files assert it against the source text so an _unscoped_ query cannot be
+added unnoticed: `analytics-isolation`, `customers-isolation`,
+`tables-isolation`, `inventory-isolation`.
 
 **Permissions.** Four roles: `SUPER_ADMIN` (no tenant), `OWNER`,
 `BRANCH_MANAGER`, `STAFF`. Access to grantable sections is decided by **one
-function** — `canAccessTab` in `staff-tabs.ts`. Six grantable tabs: `orders`,
-`menu`, `design`, `qr`, `analytics`, `finance`. Settings, subscription,
+function** — `canAccessTab` in `staff-tabs.ts`. Seven grantable tabs: `orders`,
+`menu`, `design`, `qr`, `analytics`, `finance`, `inventory`. A branch manager
+holds `orders`, `qr`, `analytics`, `finance` and `inventory` by role. Settings, subscription,
 customers, campaigns and reviews are deliberately absent from that list, which
 means they _cannot_ be granted rather than being granted-then-refused.
 
@@ -151,6 +152,25 @@ invent profit.
 `menuOwnerId()` in `menu.ts` is the _only_ place that distinction is resolved.
 Menu content, pricing rules and customers come from the menu owner; orders,
 tables, menu-view counts and reviews stay with the branch.
+
+**Stock is per site, the catalogue per owner.** Items, units, reference prices,
+recipes and suppliers belong to the menu owner; `StockLevel` (quantity and
+weighted average cost), purchases, waste, stock counts and the `StockMovement`
+ledger belong to the site — a branch keeps its own shelves, and an order is
+taken off the ordering site's. `postMovements` in `stock.ts` is the **only**
+writer of stock: it locks the site's level rows, appends to the ledger and moves
+the level in one transaction, so a site's movements always sum to its level
+(`inventory-isolation.test.ts` fails if anything else writes either). A request
+may name a site only through `resolveStockScope`, which honours it for a chain
+owner choosing among their own sites and ignores it for everyone else. An item
+with any history is archived, never deleted.
+
+**What stock reaches profit.** Purchases are not expenses — they turn cash into
+stock. Cost of goods stays the per-order snapshot (`Order.costTotal`, at the
+reference prices that drive menu pricing). Waste and count differences, valued
+at the site's average cost and read from the ledger, are subtracted after gross
+profit (`inventoryLosses` in `inventory-ledger.ts`) — never entered as expense
+rows, so nothing is counted twice.
 
 ---
 
@@ -298,6 +318,17 @@ and keep the mock working.
 
 ---
 
+### Errors
+
+There is no outside error service. Server errors reach `recordError` in
+`error-log.ts` from Next's `onRequestError` hook (`src/instrumentation.ts`)
+and from the `route()` wrapper's 500 path; browser errors arrive through
+`ErrorReporter` and the error boundary at `POST /api/client-errors`
+(same-origin, rate-limited). Rows are grouped by fingerprint and counted, paths
+lose their query string and have tokens masked, long digit runs are blanked,
+and rows idle for 30 days are pruned. The admin reads them at `/admin/errors`.
+Swapping in a hosted service later means changing `error-log.ts` only.
+
 ## Environment
 
 `src/lib/env.ts` validates configuration at boot and refuses to start on
@@ -393,6 +424,10 @@ was bought, and enforcement reads that first.
 | Change subscription behaviour   | `plans.ts`, `plan-terms.ts` (price in force, limit snapshots), `subscription/`                          |
 | Add an editable text or page    | `cms/schema.ts` — a field with a default; then read it with `getContent` on the page                    |
 | Add UI copy                     | `i18n/fa.ts` first — it defines the type, so a missing English key is a compile error                   |
+| Move stock                      | `postMovements` in `stock.ts` — the only writer; arithmetic in `inventory-ledger.ts`                    |
+| Change who may act on a site    | `resolveStockScope` in `inventory-server.ts`                                                            |
+| See what broke in production    | `/admin/errors` — written by `error-log.ts` (server hook, API wrapper, browser reporter)                |
+| Change the payment receipt      | `app/print/receipt/[id]`; the seller's legal details are site settings (`cms/schema.ts`)                |
 
 ---
 

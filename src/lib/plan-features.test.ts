@@ -10,7 +10,13 @@ describe("plan card lines", () => {
       fa.features.kitchenTitle,
       fa.dashboard.analytics,
     ]);
-    expect(builtInFeatures("tier-chain")).toHaveLength(6);
+    expect(builtInFeatures("tier-chain")).toHaveLength(5);
+    // A custom domain is not built, so no plan may advertise one.
+    for (const code of ["tier-small", "tier-medium", "tier-large", "tier-chain"]) {
+      expect(builtInFeatures(code).map((line) => line.fa)).not.toContain(
+        fa.subscription.customDomain,
+      );
+    }
     expect(builtInFeatures("retired-plan")).toEqual([]);
   });
 

@@ -232,7 +232,12 @@ test.describe("staff and branch roles", () => {
           WHERE r.slug = 'cafe-narenj' AND o."paymentMethod" = 'CASH_ON_SITE'
             AND o."paymentStatus" = 'PAID'
             AND (o.status <> 'CANCELED' OR o."refundedAt" IS NULL)
-            AND o."placedAt" >= date_trunc('day', now() AT TIME ZONE 'Asia/Tehran') AT TIME ZONE 'Asia/Tehran'`,
+            -- "placedAt" holds UTC wall-clock time without a zone, so today's
+            -- Tehran midnight is converted back to UTC before comparing. Left
+            -- as a zoned value it was read in the session's Tehran zone, and
+            -- for three and a half hours after midnight missed real orders.
+            AND o."placedAt" >= (date_trunc('day', now() AT TIME ZONE 'Asia/Tehran')
+                                 AT TIME ZONE 'Asia/Tehran') AT TIME ZONE 'UTC'`,
       );
       // 1,000 Toman short.
       const counted = Math.max(0, Number(expected.expected) - 1000);
