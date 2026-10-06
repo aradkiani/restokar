@@ -2,6 +2,8 @@ import "server-only";
 import type { Prisma, StockMovementReason } from "@/generated/prisma/client";
 import { consumptionFor } from "./inventory";
 import { effectiveUnitCost, weightedAverage } from "./inventory-ledger";
+import { businessDateKey, dbDate } from "./business-day";
+import { getSiteHours } from "./business-day-server";
 
 /**
  * Moving stock, as part of whatever transaction is already open.
@@ -157,6 +159,10 @@ export async function postMovements(
   const itemById = new Map(items.map((item) => [item.id, item]));
 
   const locked = await lockLevels(tx, args.siteId, itemIds);
+  // Filed under the site's business day, like the orders around it.
+  const businessDate = dbDate(
+    businessDateKey(args.at ?? new Date(), await getSiteHours(args.siteId)),
+  );
   const state = new Map(locked.map((level) => [level.itemId, { ...level }]));
 
   const recordedCost = new Map<MovementInput, number | null>();
@@ -197,6 +203,7 @@ export async function postMovements(
       stocktakeId: movement.stocktakeId ?? null,
       userId: args.actor?.userId ?? null,
       actorLabel: args.actor?.label ?? null,
+      businessDate,
       ...(args.at ? { createdAt: args.at } : {}),
     });
   }

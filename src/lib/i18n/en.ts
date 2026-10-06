@@ -671,6 +671,25 @@ export const en: Dictionary = {
     specialToday: "Today's special",
     limitedTime: "Limited time",
   },
+  businessDay: {
+    title: "Business hours and business day",
+    hint: "All sales, the till and every report are grouped by business day. If you stay open past midnight, set your hours so late orders count in the same night.",
+    calendarDay: "Calendar day (midnight to midnight)",
+    sameAsMain: "Same as the main venue",
+    start: "Opens at",
+    end: "Closes at",
+    explain:
+      "The business day runs {start}–{end}. It changes at {cutoff} (the middle of the closed hours); an order before {cutoff} counts in the previous business day.",
+    allDayExplain: "Open around the clock: the business day changes at {cutoff}.",
+    calendarExplain:
+      "The business day is the calendar day and changes at 00:00; orders after midnight count in the next day.",
+    pastKept:
+      "A change applies to orders from now on. Every order keeps the business day it was filed under, so past days never move.",
+    save: "Save business hours",
+    saved: "Business hours saved",
+    branchesTitle: "Branch business hours",
+    branchesHint: "Each branch can have its own hours or follow the main venue.",
+  },
   receipt: {
     title: "Subscription payment receipt",
     number: "Receipt no.",
@@ -1536,6 +1555,9 @@ export const en: Dictionary = {
     tips: "Tips",
     tax: "Tax",
     serviceCharge: "Service charge",
+    openingCash: "Opening float (Toman)",
+    openingHint:
+      "The cash the business day started with. Leave 0 if the till is emptied every night.",
     expectedCash: "Cash that should be in the till",
     counted: "Cash counted (Toman)",
     countHint: "Count the cash in the till and enter the amount.",

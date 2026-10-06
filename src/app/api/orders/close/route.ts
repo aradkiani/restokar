@@ -4,11 +4,13 @@ import { requireTab } from "@/lib/auth/guards";
 import { clientIp } from "@/lib/rate-limit";
 import { dayStart } from "@/lib/cash-close";
 import { closeDay } from "@/lib/cash-close-server";
+import { businessTodayStart } from "@/lib/business-day-server";
 
 export const runtime = "nodejs";
 
 const CloseInput = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  openingCash: z.number().int().min(0).max(100_000_000_000).default(0),
   countedCash: z.number().int().min(0).max(100_000_000_000),
   note: z.string().trim().max(500).optional(),
 });
@@ -24,7 +26,8 @@ export const POST = route(async (request: Request) => {
   return ok(
     await closeDay({
       siteId: restaurantId,
-      start: dayStart(input.day),
+      start: dayStart(input.day, new Date(), await businessTodayStart(restaurantId)),
+      openingCash: input.openingCash,
       countedCash: input.countedCash,
       note: input.note || null,
       user,

@@ -1,18 +1,20 @@
 import "server-only";
 import { prisma } from "../prisma";
 import {
+  businessDateFilter,
   dayKey,
   getCategoryBreakdown,
   getFinanceSummary,
   getProductSales,
   getRangeSummary,
-  resolveRange,
+  siteRange,
   type DateRange,
 } from "../analytics";
 import { rankPerformance } from "../profitability";
 import { getTableReport } from "../tables-server";
 import { listCustomers } from "../customers-server";
 import { fromMilli } from "../inventory";
+import { keyOfDbDate } from "../business-day";
 import { siteScope, stockList } from "../inventory-server";
 import { zonedParts } from "../time";
 import type { ColumnKind, ExportColumn, ExportRow } from "./cells";
@@ -159,9 +161,10 @@ async function ordersDataset(
   t: Dictionary,
 ): Promise<ExportResult> {
   const orders = await prisma.order.findMany({
-    where: { restaurantId, placedAt: { gte: range.from, lte: range.to } },
+    where: { restaurantId, businessDate: businessDateFilter(range) },
     orderBy: { placedAt: "asc" },
     select: {
+      businessDate: true,
       orderNumber: true,
       placedAt: true,
       status: true,
@@ -202,7 +205,9 @@ async function ordersDataset(
     ],
     rows: orders.map((order) => [
       order.orderNumber,
-      isoDay(order.placedAt),
+      // The business day it was filed under; the clock time beside it is when
+      // it was actually placed, so an order at 01:30 reads as last evening's.
+      keyOfDbDate(order.businessDate),
       clockTime(order.placedAt),
       order.restaurant.name,
       order.tableNumber,
@@ -237,7 +242,7 @@ async function orderItemsDataset(
 ): Promise<ExportResult> {
   const items = await prisma.orderItem.findMany({
     where: {
-      order: { restaurantId, placedAt: { gte: range.from, lte: range.to } },
+      order: { restaurantId, businessDate: businessDateFilter(range) },
     },
     orderBy: [{ order: { placedAt: "asc" } }, { id: "asc" }],
     select: {
@@ -247,7 +252,7 @@ async function orderItemsDataset(
       quantity: true,
       note: true,
       order: {
-        select: { orderNumber: true, placedAt: true, status: true },
+        select: { orderNumber: true, placedAt: true, businessDate: true, status: true },
       },
       product: { select: { category: { select: { name: true } } } },
       options: {
@@ -275,7 +280,7 @@ async function orderItemsDataset(
     ],
     rows: items.map((item) => [
       item.order.orderNumber,
-      isoDay(item.order.placedAt),
+      keyOfDbDate(item.order.businessDate),
       t.orderStatus[item.order.status],
       item.nameSnapshot,
       // Null once the product is deleted — the line keeps its own name, but the
@@ -480,7 +485,8 @@ async function purchasesDataset(
   range: DateRange,
   t: Dictionary,
 ): Promise<ExportResult> {
-  const { from, to } = resolveRange(range);
+  // Already resolved by buildExport.
+  const { from, to } = range;
   const purchases = await prisma.purchase.findMany({
     where: { restaurantId, purchasedAt: { gte: from, lte: to } },
     orderBy: { purchasedAt: "asc" },
@@ -674,7 +680,8 @@ export async function buildExport(
   window: number | DateRange,
   t: Dictionary,
 ): Promise<ExportResult> {
-  return BUILDERS[dataset](restaurantId, resolveRange(window), t);
+  // Rolling windows end on the site's business today, like every screen.
+  return BUILDERS[dataset](restaurantId, await siteRange(restaurantId, window), t);
 }
 
 /** The day an export was taken, for its filename. Venue time, not host time. */

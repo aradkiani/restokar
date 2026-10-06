@@ -2,16 +2,18 @@ import "server-only";
 import { prisma } from "./prisma";
 import { recordAudit } from "./audit";
 import { formatMoney } from "./format";
-import { startOfDayInZone } from "./time";
+import { dbDate } from "./business-day";
 import { dayKey, summariseDay, type DaySummary } from "./cash-close";
 import { Prisma } from "@/generated/prisma/client";
 import type { SessionUser } from "./auth/session";
 
-/** The day's figures for one site, from its orders placed that day. */
+/**
+ * The business day's figures for one site, from the orders filed under that
+ * business date — including the ones placed after midnight in a late venue.
+ */
 export async function daySummary(siteId: string, start: Date): Promise<DaySummary> {
-  const end = startOfDayInZone(new Date(start.getTime() + 12 * 3_600_000), 1);
   const orders = await prisma.order.findMany({
-    where: { restaurantId: siteId, placedAt: { gte: start, lt: end } },
+    where: { restaurantId: siteId, businessDate: dbDate(dayKey(start)) },
     select: {
       status: true,
       paymentMethod: true,
@@ -29,6 +31,9 @@ export async function daySummary(siteId: string, start: Date): Promise<DaySummar
 
 export interface CloseRecord {
   day: string;
+  /** The float in the drawer when the day opened. */
+  openingCash: number;
+  /** Opening float plus the cash taken: what the drawer should hold. */
   expectedCash: number;
   countedCash: number;
   difference: number;
@@ -40,6 +45,7 @@ export interface CloseRecord {
 
 function toRecord(row: {
   day: Date;
+  openingCash: number;
   expectedCash: number;
   countedCash: number;
   difference: number;
@@ -50,6 +56,7 @@ function toRecord(row: {
 }): CloseRecord {
   return {
     day: dayKey(row.day),
+    openingCash: row.openingCash,
     expectedCash: row.expectedCash,
     countedCash: row.countedCash,
     difference: row.difference,
@@ -62,6 +69,7 @@ function toRecord(row: {
 
 const closeSelect = {
   day: true,
+  openingCash: true,
   expectedCash: true,
   countedCash: true,
   difference: true,
@@ -98,16 +106,20 @@ export async function recentCloses(siteId: string, take = 30): Promise<CloseReco
 export async function closeDay(args: {
   siteId: string;
   start: Date;
+  openingCash: number;
   countedCash: number;
   note: string | null;
   user: SessionUser;
   ip: string | null;
 }): Promise<CloseRecord> {
   const summary = await daySummary(args.siteId, args.start);
-  const difference = args.countedCash - summary.expectedCash;
+  // The drawer should hold the opening float plus every cash payment taken.
+  const expectedCash = args.openingCash + summary.expectedCash;
+  const difference = args.countedCash - expectedCash;
   const data = {
     summary: summary as unknown as Prisma.InputJsonValue,
-    expectedCash: summary.expectedCash,
+    openingCash: args.openingCash,
+    expectedCash,
     countedCash: args.countedCash,
     difference,
     note: args.note,
@@ -127,11 +139,12 @@ export async function closeDay(args: {
     actor: args.user,
     restaurantId: args.siteId,
     action: "DAY_CLOSED",
-    summary: `بستن صندوق ${dayKey(args.start)}: شمارش ${formatMoney(args.countedCash)}، انتظار ${formatMoney(summary.expectedCash)}، اختلاف ${formatMoney(Math.abs(difference))} تومان${sign}`,
+    summary: `بستن صندوق ${dayKey(args.start)}: شمارش ${formatMoney(args.countedCash)}، انتظار ${formatMoney(expectedCash)}، اختلاف ${formatMoney(Math.abs(difference))} تومان${sign}`,
     entityType: "DailyClose",
     entityId: dayKey(args.start),
     metadata: {
-      expectedCash: summary.expectedCash,
+      openingCash: args.openingCash,
+      expectedCash,
       countedCash: args.countedCash,
       difference,
     },

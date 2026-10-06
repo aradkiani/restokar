@@ -25,6 +25,7 @@ import {
   type SeedCategory,
   SEED_DISH_TAGS,
 } from "./menu-data";
+import { CALENDAR_DAY, businessDateKey, dbDate } from "../src/lib/business-day";
 
 try {
   process.loadEnvFile(".env");
@@ -858,6 +859,8 @@ async function seedOrders(
           total: subtotal,
           costTotal,
           placedAt,
+          // Calendar-day venue: the business date is the Tehran date.
+          businessDate: dbDate(businessDateKey(placedAt, CALENDAR_DAY)),
           createdAt: placedAt,
           canceledAt,
           deliveredAt:

@@ -7,6 +7,7 @@ import { getClose } from "@/lib/cash-close-server";
 import { formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { printCss } from "../shared";
 import { AutoPrint } from "../table/auto-print";
+import { businessTodayStart } from "@/lib/business-day-server";
 
 export const metadata: Metadata = { title: "چاپ", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export default async function PrintClosePage({
   const query = await searchParams;
   const paper = query.paper === "58" ? "58" : "80";
   const { restaurantId } = await requirePageTab("orders", "/dashboard/orders/close");
-  const start = dayStart(query.day);
+  const start = dayStart(query.day, new Date(), await businessTodayStart(restaurantId));
   const [{ t, locale }, close, site] = await Promise.all([
     getI18n(),
     getClose(restaurantId, start),
@@ -73,6 +74,10 @@ export default async function PrintClosePage({
           </p>
         ))}
         <hr />
+        <p className="row total">
+          <span>{copy.openingCash}</span>
+          <span>{money(close.openingCash)}</span>
+        </p>
         <p className="row total">
           <span>{copy.expectedCash}</span>
           <span>{money(close.expectedCash)}</span>

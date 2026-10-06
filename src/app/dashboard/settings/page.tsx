@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { SocialLinksSchema } from "@/lib/validation";
 import { PAYMENTS_ENABLED } from "@/lib/features";
 import { SettingsForm } from "./form";
+import { BusinessHoursCard } from "@/components/business-hours-card";
 
 export const metadata: Metadata = { title: "تنظیمات" };
 export const dynamic = "force-dynamic";
@@ -35,6 +36,8 @@ export default async function SettingsPage() {
         featuredSectionEnabled: true,
         isPublished: true,
         defaultLocale: true,
+        businessDayStart: true,
+        businessDayEnd: true,
       },
     }),
     getPlanLimits(restaurantId),
@@ -43,33 +46,44 @@ export default async function SettingsPage() {
   if (!restaurant) return null;
 
   return (
-    <SettingsForm
-      baseUrl={env.NEXT_PUBLIC_APP_URL}
-      accountPhone={user.phone}
-      allowsOnlinePay={limits.allowsOnlinePay}
-      paymentsEnabled={PAYMENTS_ENABLED}
-      initial={{
-        name: restaurant.name,
-        nameEn: restaurant.nameEn ?? "",
-        tagline: restaurant.tagline ?? "",
-        description: restaurant.description ?? "",
-        logoUrl: restaurant.logoUrl ?? "",
-        coverUrl: restaurant.coverUrl ?? "",
-        phone: restaurant.phone ?? "",
-        phoneSecondary: restaurant.phoneSecondary ?? "",
-        address: restaurant.address ?? "",
-        instagram: restaurant.instagram ?? "",
-        // Parsed rather than cast: the column is JSON, so a value written
-        // before the current shape existed must not reach the form as garbage.
-        socialLinks: SocialLinksSchema.safeParse(restaurant.socialLinks).data ?? [],
-        slug: restaurant.slug,
-        onlineOrderingEnabled: restaurant.onlineOrderingEnabled,
-        onlinePaymentEnabled: restaurant.onlinePaymentEnabled,
-        showPrices: restaurant.showPrices,
-        featuredSectionEnabled: restaurant.featuredSectionEnabled,
-        isPublished: restaurant.isPublished,
-        defaultLocale: restaurant.defaultLocale as "fa" | "en",
-      }}
-    />
+    <div className="space-y-5">
+      <SettingsForm
+        baseUrl={env.NEXT_PUBLIC_APP_URL}
+        accountPhone={user.phone}
+        allowsOnlinePay={limits.allowsOnlinePay}
+        paymentsEnabled={PAYMENTS_ENABLED}
+        initial={{
+          name: restaurant.name,
+          nameEn: restaurant.nameEn ?? "",
+          tagline: restaurant.tagline ?? "",
+          description: restaurant.description ?? "",
+          logoUrl: restaurant.logoUrl ?? "",
+          coverUrl: restaurant.coverUrl ?? "",
+          phone: restaurant.phone ?? "",
+          phoneSecondary: restaurant.phoneSecondary ?? "",
+          address: restaurant.address ?? "",
+          instagram: restaurant.instagram ?? "",
+          // Parsed rather than cast: the column is JSON, so a value written
+          // before the current shape existed must not reach the form as garbage.
+          socialLinks: SocialLinksSchema.safeParse(restaurant.socialLinks).data ?? [],
+          slug: restaurant.slug,
+          onlineOrderingEnabled: restaurant.onlineOrderingEnabled,
+          onlinePaymentEnabled: restaurant.onlinePaymentEnabled,
+          showPrices: restaurant.showPrices,
+          featuredSectionEnabled: restaurant.featuredSectionEnabled,
+          isPublished: restaurant.isPublished,
+          defaultLocale: restaurant.defaultLocale as "fa" | "en",
+        }}
+      />
+      <div className="mx-auto max-w-3xl">
+        <BusinessHoursCard
+          initial={
+            restaurant.businessDayStart !== null && restaurant.businessDayEnd !== null
+              ? { start: restaurant.businessDayStart, end: restaurant.businessDayEnd }
+              : null
+          }
+        />
+      </div>
+    </div>
   );
 }

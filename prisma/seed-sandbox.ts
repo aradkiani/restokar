@@ -22,6 +22,7 @@ import {
   SEED_DISH_TAGS,
   type SeedCategory,
 } from "./menu-data";
+import { CALENDAR_DAY, businessDateKey, dbDate } from "../src/lib/business-day";
 
 // Prisma 7 no longer auto-loads .env; the other seeders do the same.
 try {
@@ -265,6 +266,8 @@ async function createOrders(
           total: subtotal,
           costTotal,
           placedAt,
+          // Calendar-day venue: the business date is the Tehran date.
+          businessDate: dbDate(businessDateKey(placedAt, CALENDAR_DAY)),
           createdAt: placedAt,
           deliveredAt:
             status === "DELIVERED" ? new Date(placedAt.getTime() + 20 * 60_000) : null,

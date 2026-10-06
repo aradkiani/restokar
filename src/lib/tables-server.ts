@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { netRevenue, type DateRange } from "./analytics";
+import { netRevenue, type DateRange, businessDateFilter } from "./analytics";
 import { COUNTED_ORDER } from "./order-status";
 import { ratioDelta } from "./sales-insights";
 import { NO_TABLE, tableViews } from "./menu-views";
@@ -59,7 +59,7 @@ export async function getTableOrderTotals(
     where: {
       restaurantId,
       ...COUNTED_ORDER,
-      placedAt: { gte: range.from, lte: range.to },
+      businessDate: businessDateFilter(range),
       tableNumber: { not: null },
     },
     _count: { _all: true },

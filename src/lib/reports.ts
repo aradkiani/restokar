@@ -6,7 +6,7 @@ import {
   getRangeSummary,
   getTopProducts,
   rangeLengthInDays,
-  resolveRange,
+  siteRange,
   type DateRange,
   type DayPoint,
 } from "./analytics";
@@ -208,7 +208,7 @@ export async function buildFinancialReport(
   preset: ReportPreset,
   locale: string,
 ): Promise<FinancialReport> {
-  const range = resolveRange(window);
+  const range = await siteRange(restaurantId, window);
 
   const [restaurant, summary, finance, topProducts, categories, expenseRows] =
     await Promise.all([

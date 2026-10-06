@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { netRevenue, resolveRange } from "./analytics";
+import { businessDateFilter, netRevenue, siteRange } from "./analytics";
 import { COUNTED_ORDER } from "./order-status";
 
 /**
@@ -44,9 +44,10 @@ export async function getChainSummary(
   parentRestaurantId: string,
   days = 30,
 ): Promise<ChainSummary> {
-  // The same zone-anchored trading-day window as each site's own finance
-  // page, so the two pages agree on which orders and expenses fall inside it.
-  const { from, to } = resolveRange(days);
+  // The same business-day window as each site's own finance page, so the two
+  // pages agree on which orders and expenses fall inside it. Each branch's
+  // orders are filed under that branch's own business date.
+  const { from, to } = await siteRange(parentRestaurantId, days);
 
   const venues = await prisma.restaurant.findMany({
     where: {
@@ -81,7 +82,7 @@ export async function getChainSummary(
       where: {
         restaurantId: { in: ids },
         ...COUNTED_ORDER,
-        placedAt: { gte: from, lte: to },
+        businessDate: businessDateFilter({ from, to }),
       },
       select: {
         restaurantId: true,

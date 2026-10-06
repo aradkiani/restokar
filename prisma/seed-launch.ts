@@ -47,6 +47,7 @@ import {
   SEED_DISH_TAGS,
 } from "./menu-data";
 import { unitCost } from "../src/lib/costing";
+import { CALENDAR_DAY, businessDateKey, dbDate } from "../src/lib/business-day";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL as string });
 const prisma = new PrismaClient({ adapter });
@@ -1104,6 +1105,8 @@ async function createHistory(
           total,
           costTotal,
           placedAt,
+          // Calendar-day venue: the business date is the Tehran date.
+          businessDate: dbDate(businessDateKey(placedAt, CALENDAR_DAY)),
           createdAt: placedAt,
           preparingAt: reached >= 0 ? minutes(2) : null,
           readyAt: reached >= 1 ? minutes(14 + Math.floor(rand() * 10)) : null,

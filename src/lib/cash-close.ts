@@ -117,8 +117,14 @@ export function dayKey(instant: Date): string {
  * or malformed. A day in the future is pulled back to today: there is nothing
  * to close there yet.
  */
-export function dayStart(value: string | undefined, now: Date = new Date()): Date {
-  const today = startOfDayInZone(now);
+export function dayStart(
+  value: string | undefined,
+  now: Date = new Date(),
+  businessToday?: Date,
+): Date {
+  // The site's business today when known: at 01:00 in a café open until 03:00
+  // the day to close is still this evening's.
+  const today = businessToday ?? startOfDayInZone(now);
   const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return today;
   const start = zonedMidnight(Number(match[1]), Number(match[2]), Number(match[3]));

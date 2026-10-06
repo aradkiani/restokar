@@ -20,11 +20,15 @@ import { cn } from "@/lib/utils";
  */
 export function CloseForm({
   day,
-  expectedCash,
+  cashTaken,
+  openingCash: savedOpening,
   existing,
 }: {
   day: string;
-  expectedCash: number;
+  /** Cash payments taken on the day's orders. */
+  cashTaken: number;
+  /** The float recorded with an earlier close of this day, else 0. */
+  openingCash: number;
   existing: { countedCash: number; note: string | null; closedBy: string } | null;
 }) {
   const { t, locale } = useI18n();
@@ -34,9 +38,12 @@ export function CloseForm({
   const [counted, setCounted] = React.useState<number | null>(
     existing?.countedCash ?? null,
   );
+  const [opening, setOpening] = React.useState<number | null>(savedOpening);
   const [note, setNote] = React.useState(existing?.note ?? "");
   const [busy, setBusy] = React.useState(false);
 
+  // The drawer should hold the opening float plus the cash taken today.
+  const expectedCash = (opening ?? 0) + cashTaken;
   const difference = counted === null ? null : counted - expectedCash;
   const money = (value: number) => `${formatMoney(value, locale)} ${t.common.toman}`;
 
@@ -46,6 +53,7 @@ export function CloseForm({
     setBusy(true);
     const result = await api.post("/api/orders/close", {
       day,
+      openingCash: opening ?? 0,
       countedCash: counted,
       note: note.trim() || undefined,
     });
@@ -62,6 +70,15 @@ export function CloseForm({
     <Card>
       <CardBody>
         <form onSubmit={submit} className="space-y-4">
+          <Field label={copy.openingCash} hint={copy.openingHint} htmlFor="close-opening">
+            <MoneyInput
+              id="close-opening"
+              value={opening}
+              onValueChange={setOpening}
+              placeholder="0"
+            />
+          </Field>
+
           <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-[var(--radius-md)] bg-ink-50 px-4 py-3">
             <span className="text-sm font-bold text-ink-700">{copy.expectedCash}</span>
             <span className="text-lg font-black text-ink-900 tabular-nums">

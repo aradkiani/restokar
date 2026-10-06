@@ -9,7 +9,7 @@ import {
   getKitchenSpeed,
   getRangeSummary,
   getTopProducts,
-  resolveRange,
+  siteRange,
 } from "@/lib/analytics";
 import { getRecommendationPerformance } from "@/lib/recommendations-server";
 import { getFeaturedPerformance } from "@/lib/featured-server";
@@ -94,10 +94,10 @@ export default async function AnalyticsPage({
     // The same window every other figure on this page uses, so the upsell
     // numbers can be read against the sales they are part of.
     ownsItsMenu
-      ? getRecommendationPerformance(restaurantId, resolveRange(days))
+      ? getRecommendationPerformance(restaurantId, await siteRange(restaurantId, days))
       : Promise.resolve([]),
     ownsItsMenu
-      ? getFeaturedPerformance(restaurantId, resolveRange(days))
+      ? getFeaturedPerformance(restaurantId, await siteRange(restaurantId, days))
       : Promise.resolve([]),
     // Its own window, chosen separately: the tile deltas describe the chart's
     // range, while the insights answer "what changed lately?".

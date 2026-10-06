@@ -6,6 +6,8 @@ import { env } from "@/lib/env";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddBranchForm } from "./add-branch";
+import { BusinessHoursCard } from "@/components/business-hours-card";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "شعبه‌ها" };
 
@@ -19,10 +21,27 @@ export const metadata: Metadata = { title: "شعبه‌ها" };
  */
 export default async function BranchesPage() {
   const { restaurantId } = await requirePageChainOwner("/dashboard/branches");
-  const [{ t, locale }, summary] = await Promise.all([
+  const [{ t, locale }, summary, sites] = await Promise.all([
     getI18n(),
     getChainSummary(restaurantId),
+    prisma.restaurant.findMany({
+      where: { OR: [{ id: restaurantId }, { parentRestaurantId: restaurantId }] },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        parentRestaurantId: true,
+        businessDayStart: true,
+        businessDayEnd: true,
+      },
+    }),
   ]);
+  const own = (s: { businessDayStart: number | null; businessDayEnd: number | null }) =>
+    s.businessDayStart !== null && s.businessDayEnd !== null
+      ? { start: s.businessDayStart, end: s.businessDayEnd }
+      : null;
+  const head = sites.find((s) => s.id === restaurantId);
+  const headHours = head ? own(head) : null;
 
   const money = (value: number) => formatMoney(value, locale);
 
@@ -123,6 +142,29 @@ export default async function BranchesPage() {
           )}
         </CardBody>
       </Card>
+
+      {sites.some((s) => s.parentRestaurantId) && (
+        <section className="space-y-3" aria-label={t.businessDay.branchesTitle}>
+          <h2 className="text-base font-black text-ink-900">
+            {t.businessDay.branchesTitle}
+          </h2>
+          <p className="text-sm text-ink-600">{t.businessDay.branchesHint}</p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {sites
+              .filter((s) => s.parentRestaurantId)
+              .map((branch) => (
+                <BusinessHoursCard
+                  key={branch.id}
+                  siteId={branch.id}
+                  title={branch.name}
+                  initial={own(branch)}
+                  inherited={headHours}
+                  inheritLabel={t.businessDay.sameAsMain}
+                />
+              ))}
+          </div>
+        </section>
+      )}
 
       <AddBranchForm baseUrl={env.NEXT_PUBLIC_APP_URL} />
     </div>

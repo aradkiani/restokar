@@ -1,12 +1,14 @@
 import "server-only";
 import { prisma } from "./prisma";
 import {
+  dayKey,
   getCategoryBreakdown,
   getProductSales,
   getRangeSummary,
   getTopProducts,
   type DateRange,
 } from "./analytics";
+import { businessNow } from "./business-day-server";
 import {
   assessCostCoverage,
   menuConcentration,
@@ -88,6 +90,9 @@ async function getCustomerActivity(
   restaurantId: string,
   range: DateRange,
 ): Promise<CustomerActivity> {
+  // Business dates as plain `YYYY-MM-DD` text, cast to date in SQL.
+  const from = dayKey(range.from);
+  const to = dayKey(range.to);
   const rows = await prisma.$queryRaw<{ identified: number; returning: number }[]>`
     WITH period AS (
       SELECT o."customerId", COUNT(*)::int AS orders
@@ -95,12 +100,12 @@ async function getCustomerActivity(
        WHERE o."restaurantId" = ${restaurantId}
          AND ${countedOrderSql("o")}
          AND o."customerId" IS NOT NULL
-         AND o."placedAt" >= ${range.from}
-         AND o."placedAt" <= ${range.to}
+         AND o."businessDate" >= ${from}::date
+         AND o."businessDate" <= ${to}::date
        GROUP BY o."customerId"
     ),
     firsts AS (
-      SELECT o."customerId", MIN(o."placedAt") AS first_at
+      SELECT o."customerId", MIN(o."businessDate") AS first_at
         FROM "Order" o
        WHERE o."restaurantId" = ${restaurantId}
          AND ${countedOrderSql("o")}
@@ -108,7 +113,7 @@ async function getCustomerActivity(
        GROUP BY o."customerId"
     )
     SELECT COALESCE(SUM(p.orders), 0)::int AS identified,
-           COALESCE(SUM(p.orders) FILTER (WHERE f.first_at < ${range.from}), 0)::int
+           COALESCE(SUM(p.orders) FILTER (WHERE f.first_at < ${from}::date), 0)::int
              AS returning
       FROM period p
       JOIN firsts f ON f."customerId" = p."customerId"
@@ -188,7 +193,9 @@ export async function getSalesInsights(
   preset: ComparisonPreset,
   now: Date = new Date(),
 ): Promise<SalesInsightResult> {
-  const windows = resolveComparison(preset, now);
+  // Calendar presets read from the site's business date: at 01:00 in a café
+  // open until 03:00, "today" is still this evening.
+  const windows = resolveComparison(preset, await businessNow(restaurantId, now));
 
   /*
     Merchandising telemetry is filed against the menu owner while the attributed

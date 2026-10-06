@@ -9,6 +9,7 @@ import { formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/for
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { CloseForm } from "./close-form";
+import { businessTodayStart } from "@/lib/business-day-server";
 
 export const metadata: Metadata = { title: "بستن صندوق" };
 export const dynamic = "force-dynamic";
@@ -26,9 +27,12 @@ export default async function CashClosePage({
   const { t, locale } = await getI18n();
   const { day } = await searchParams;
 
-  const start = dayStart(day);
+  // The business day still running is "today": after midnight in a late
+  // café that is the evening that has not been closed yet.
+  const today = await businessTodayStart(restaurantId);
+  const start = dayStart(day, new Date(), today);
   const key = dayKey(start);
-  const isToday = key === dayKey(new Date());
+  const isToday = key === dayKey(today);
   const [summary, existing, history] = await Promise.all([
     daySummary(restaurantId, start),
     getClose(restaurantId, start),
@@ -130,7 +134,8 @@ export default async function CashClosePage({
       <CloseForm
         key={key}
         day={key}
-        expectedCash={summary.expectedCash}
+        cashTaken={summary.expectedCash}
+        openingCash={existing?.openingCash ?? 0}
         existing={
           existing
             ? {

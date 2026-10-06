@@ -5,6 +5,8 @@ import { recordAudit } from "./audit";
 import { HttpError } from "./auth/guards";
 import { menuOwnerId } from "./menu";
 import { soldOutUntil } from "./sold-out";
+import { CALENDAR_DAY, sameHours } from "./business-day";
+import { businessDayEndsAt, getSiteHours } from "./business-day-server";
 import type { SessionUser } from "./auth/session";
 
 /**
@@ -104,7 +106,12 @@ export async function setSoldOut(args: {
 
   let until: Date | null = null;
   if (args.soldOut) {
-    until = soldOutUntil(new Date());
+    // Until this site's business day ends when it has hours; otherwise the
+    // next 05:00, the old rule for a calendar-day venue open past midnight.
+    const hours = await getSiteHours(site.id);
+    until = sameHours(hours, CALENDAR_DAY)
+      ? soldOutUntil(new Date())
+      : await businessDayEndsAt(site.id);
     await prisma.soldOutProduct.upsert({
       where: { restaurantId_productId: { restaurantId: site.id, productId: product.id } },
       create: {

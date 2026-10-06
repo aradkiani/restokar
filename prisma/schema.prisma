@@ -445,6 +445,15 @@ model Restaurant {
   /// so a healthy dish sits far above this.
   lowMarginPercent Int @default(30)
 
+  /// Business day: opening and closing time, minutes after midnight in
+  /// APP_TIME_ZONE. A closing time earlier than the opening runs past midnight
+  /// (17:00–03:00). Both null = inherit: a branch takes its chain's hours, a
+  /// venue without hours uses the calendar day. Every order is filed under a
+  /// business date when placed (Order.businessDate), so changing these later
+  /// never moves a past order. Rules in src/lib/business-day.ts.
+  businessDayStart Int?
+  businessDayEnd   Int?
+
   /// Rejects baskets below this subtotal. 0 means no minimum.
   minimumOrderAmount Int @default(0)
 
@@ -1745,13 +1754,16 @@ model StockMovement {
   /// Toman per one item unit at the moment of the movement: the purchase cost
   /// for a purchase, the site's weighted average for everything else. Null
   /// when nothing about the item's cost was known.
-  unitCost    Float?
+  unitCost     Float?
   /// Who did it, where a person did. Orders are moved by the system.
-  userId      String?
-  actorLabel  String?
-  note        String?
+  userId       String?
+  actorLabel   String?
+  note         String?
   /// Why stock was thrown away: a key from WASTE_REASONS in inventory-ledger.ts.
-  wasteReason String?
+  wasteReason  String?
+  /// The site's business date when the movement happened, so waste and count
+  /// differences land in the same day as the sales around them.
+  businessDate DateTime? @db.Date
 
   purchaseId  String?
   purchase    Purchase?  @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
@@ -2097,11 +2109,17 @@ model Order {
   events   OrderEvent[]
   payments Payment[]
 
-  placedAt    DateTime  @default(now())
-  preparingAt DateTime?
-  readyAt     DateTime?
-  deliveredAt DateTime?
-  canceledAt  DateTime?
+  placedAt     DateTime  @default(now())
+  /// The business day this order belongs to, fixed when it is placed from the
+  /// ordering site's hours (src/lib/business-day.ts). Every report groups by
+  /// this, never by `placedAt`'s calendar date: an order at 01:30 in a café
+  /// open until 03:00 is the previous evening's. Stored rather than derived so
+  /// that changing the hours later cannot move a closed day's orders.
+  businessDate DateTime  @db.Date
+  preparingAt  DateTime?
+  readyAt      DateTime?
+  deliveredAt  DateTime?
+  canceledAt   DateTime?
 
   /// When the money actually arrived.
   ///
@@ -2134,6 +2152,7 @@ model Order {
   @@unique([restaurantId, clientKey])
   @@index([restaurantId, status])
   @@index([restaurantId, placedAt])
+  @@index([restaurantId, businessDate])
   /// Backs the customer aggregation: every per-customer figure groups on this
   /// column, filtered by status, so the pair is what the report actually reads.
   @@index([customerId, status])
@@ -2448,6 +2467,8 @@ model DailyClose {
   summary       Json
   /// Whole Toman, like every money column.
   expectedCash  Int
+  /// What was in the drawer when the day opened (the float).
+  openingCash   Int        @default(0)
   countedCash   Int
   /// counted − expected: positive is a surplus, negative a shortfall.
   difference    Int

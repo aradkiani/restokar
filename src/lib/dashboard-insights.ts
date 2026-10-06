@@ -1,6 +1,8 @@
 import "server-only";
 import { prisma } from "./prisma";
-import { netRevenue, startOfDay } from "./analytics";
+import { netRevenue } from "./analytics";
+import { dbDate, shiftDateKey } from "./business-day";
+import { businessTodayKey } from "./business-day-server";
 import { zonedParts } from "./time";
 import { DAY_MS, staffCallVisibleSince } from "./constants";
 import { COUNTED_ORDER } from "./order-status";
@@ -45,17 +47,16 @@ export async function getTodayComparison(restaurantId: string): Promise<{
   revenue: Comparison;
   orders: Comparison;
 }> {
-  const todayStart = startOfDay(new Date());
+  // Today is the business day running now; a week ago is the same business
+  // day of last week, cut at the same moment so a comparison made at 11pm is
+  // against last week's 11pm rather than against its whole evening.
   const now = new Date();
-
-  // The same slice of the day a week ago, so a comparison made at 11am is
-  // against last week's 11am rather than against its whole day.
-  const lastWeekStart = new Date(todayStart.getTime() - 7 * DAY_MS);
+  const todayKey = await businessTodayKey(restaurantId, now);
   const lastWeekCutoff = new Date(now.getTime() - 7 * DAY_MS);
 
   const [today, lastWeek] = await Promise.all([
     prisma.order.aggregate({
-      where: { restaurantId, ...COUNTED, placedAt: { gte: todayStart } },
+      where: { restaurantId, ...COUNTED, businessDate: dbDate(todayKey) },
       _sum: { total: true, tax: true, tip: true },
       _count: true,
     }),
@@ -63,7 +64,8 @@ export async function getTodayComparison(restaurantId: string): Promise<{
       where: {
         restaurantId,
         ...COUNTED,
-        placedAt: { gte: lastWeekStart, lte: lastWeekCutoff },
+        businessDate: dbDate(shiftDateKey(todayKey, -7)),
+        placedAt: { lte: lastWeekCutoff },
       },
       _sum: { total: true, tax: true, tip: true },
       _count: true,
@@ -189,10 +191,10 @@ export async function getPeakHours(
   restaurantId: string,
   take = 3,
 ): Promise<{ hour: number; orders: number; share: number }[]> {
-  const from = new Date(startOfDay(new Date()).getTime() - 28 * DAY_MS);
+  const from = dbDate(shiftDateKey(await businessTodayKey(restaurantId), -28));
 
   const orders = await prisma.order.findMany({
-    where: { restaurantId, ...COUNTED, placedAt: { gte: from } },
+    where: { restaurantId, ...COUNTED, businessDate: { gte: from } },
     select: { placedAt: true },
   });
 

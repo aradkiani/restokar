@@ -11,6 +11,7 @@ import {
 } from "@/lib/insight-periods";
 import { dayKey } from "@/lib/analytics";
 import { getTableReport } from "@/lib/tables-server";
+import { businessNow } from "@/lib/business-day-server";
 import { assessTableConcentration, TABLE_THRESHOLDS } from "@/lib/tables";
 import { buildTableInsights } from "@/lib/sales-insights";
 import { ExportButton } from "@/components/export-button";
@@ -58,7 +59,8 @@ export default async function TableIntelligencePage({
 
   // The same windows the sales insights compare against, so a table's movement
   // and the venue's movement always describe the same two periods.
-  const windows = resolveComparison(preset);
+  // Read from the site's business date, like the sales insights.
+  const windows = resolveComparison(preset, await businessNow(restaurantId));
   const report = await getTableReport(restaurantId, windows);
 
   const insights = buildTableInsights({

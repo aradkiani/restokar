@@ -6,6 +6,8 @@ import { COUNTED_ORDER } from "./order-status";
 import { summariseKitchenSpeed, type KitchenSpeed } from "./kitchen-speed";
 import { inventoryLosses } from "./inventory-ledger";
 import { menuOwnerId } from "./menu";
+import { dbDate, keyOfDbDate } from "./business-day";
+import { businessTodayKey, businessTodayStart } from "./business-day-server";
 
 /**
  * Reporting for a single tenant. Every function takes `restaurantId` as its
@@ -73,14 +75,38 @@ export interface DateRange {
  * and the on-screen dashboards are guaranteed to agree — the same code produces
  * both, so they cannot drift apart.
  */
-export function resolveRange(window: number | DateRange): DateRange {
+export function resolveRange(window: number | DateRange, today?: Date): DateRange {
   if (typeof window !== "number") {
     return { from: startOfDay(window.from), to: endOfDay(window.to) };
   }
   // Counted back in whole zone days rather than by mutating the date, so a
-  // rolling window lands on the same wall-clock midnight on every host.
-  const now = new Date();
-  return { from: startOfDayInZone(now, -(window - 1)), to: endOfDay(now) };
+  // rolling window lands on the same wall-clock midnight on every host. Anchored
+  // on the site's *business* today when given: at 01:00 in a café open until
+  // 03:00, "the last 7 days" still ends with this evening.
+  const anchor = today ?? new Date();
+  return { from: startOfDayInZone(anchor, -(window - 1)), to: endOfDay(anchor) };
+}
+
+/**
+ * A report window for one site: rolling windows end on its current business
+ * date rather than the calendar one.
+ */
+export async function siteRange(
+  restaurantId: string,
+  window: number | DateRange,
+): Promise<DateRange> {
+  return resolveRange(window, await businessTodayStart(restaurantId));
+}
+
+/**
+ * The window as a filter on `Order.businessDate`.
+ *
+ * Every report selects orders by the business date they were filed under, not
+ * by `placedAt`: the window's ends are dates, and an order at 01:30 that
+ * belongs to the previous evening must be counted there.
+ */
+export function businessDateFilter(range: DateRange): { gte: Date; lte: Date } {
+  return { gte: dbDate(dayKey(range.from)), lte: dbDate(dayKey(range.to)) };
 }
 
 /**
@@ -115,9 +141,16 @@ const loadOrders = cache(async (restaurantId: string, fromMs: number, toMs: numb
     where: {
       restaurantId,
       ...COUNTED,
-      placedAt: { gte: new Date(fromMs), lte: new Date(toMs) },
+      businessDate: businessDateFilter({ from: new Date(fromMs), to: new Date(toMs) }),
     },
-    select: { placedAt: true, total: true, costTotal: true, tax: true, tip: true },
+    select: {
+      placedAt: true,
+      businessDate: true,
+      total: true,
+      costTotal: true,
+      tax: true,
+      tip: true,
+    },
   }),
 );
 
@@ -141,7 +174,7 @@ const loadOrderItems = cache(async (restaurantId: string, fromMs: number, toMs: 
       order: {
         restaurantId,
         ...COUNTED,
-        placedAt: { gte: new Date(fromMs), lte: new Date(toMs) },
+        businessDate: businessDateFilter({ from: new Date(fromMs), to: new Date(toMs) }),
       },
     },
     select: {
@@ -181,7 +214,7 @@ export async function getRangeSummary(
   restaurantId: string,
   window: number | DateRange,
 ): Promise<RangeSummary> {
-  const { from, to } = resolveRange(window);
+  const { from, to } = await siteRange(restaurantId, window);
   const days = rangeLengthInDays({ from, to });
 
   const orders = await loadOrders(restaurantId, from.getTime(), to.getTime());
@@ -198,7 +231,9 @@ export async function getRangeSummary(
   }
 
   for (const order of orders) {
-    const bucket = buckets.get(dayKey(order.placedAt));
+    // Filed under its business date: an order after midnight in a late café
+    // belongs to the evening it was part of.
+    const bucket = buckets.get(keyOfDbDate(order.businessDate));
     if (!bucket) continue;
     bucket.revenue += netRevenue(order);
     bucket.cost += order.costTotal;
@@ -233,7 +268,7 @@ export async function getTopProducts(
   window: number | DateRange,
   limit = 8,
 ): Promise<TopProduct[]> {
-  const { from, to } = resolveRange(window);
+  const { from, to } = await siteRange(restaurantId, window);
 
   const items = await loadOrderItems(restaurantId, from.getTime(), to.getTime());
 
@@ -295,7 +330,7 @@ export async function getProductSales(
   restaurantId: string,
   window: number | DateRange,
 ): Promise<ProductSalesRow[]> {
-  const { from, to } = resolveRange(window);
+  const { from, to } = await siteRange(restaurantId, window);
 
   const items = await loadOrderItems(restaurantId, from.getTime(), to.getTime());
 
@@ -337,7 +372,7 @@ export async function getCategoryBreakdown(
   restaurantId: string,
   window: number | DateRange,
 ): Promise<CategorySlice[]> {
-  const { from, to } = resolveRange(window);
+  const { from, to } = await siteRange(restaurantId, window);
 
   const items = await loadOrderItems(restaurantId, from.getTime(), to.getTime());
 
@@ -366,7 +401,7 @@ export async function getHourlyDistribution(
   restaurantId: string,
   window: number | DateRange,
 ): Promise<{ hour: number; orders: number }[]> {
-  const { from, to } = resolveRange(window);
+  const { from, to } = await siteRange(restaurantId, window);
 
   const orders = await loadOrders(restaurantId, from.getTime(), to.getTime());
 
@@ -386,12 +421,12 @@ export async function getKitchenSpeed(
   restaurantId: string,
   window: number | DateRange,
 ): Promise<KitchenSpeed> {
-  const { from, to } = resolveRange(window);
+  const { from, to } = await siteRange(restaurantId, window);
   const orders = await prisma.order.findMany({
     where: {
       restaurantId,
       ...COUNTED,
-      placedAt: { gte: from, lte: to },
+      businessDate: businessDateFilter({ from, to }),
       readyAt: { not: null },
     },
     select: { placedAt: true, readyAt: true, serviceType: true },
@@ -414,13 +449,13 @@ export interface TodayStats {
 }
 
 export async function getTodayStats(restaurantId: string): Promise<TodayStats> {
-  // Deliberately open-ended: "today" runs from midnight to now, and an order
-  // placed a second from now still belongs to today's takings.
-  const from = startOfDay(new Date());
+  // "Today" is the business day running now: at 01:00 in a café open until
+  // 03:00 that is still this evening, not the new calendar date.
+  const today = dbDate(await businessTodayKey(restaurantId));
 
   const [aggregate, openOrders] = await Promise.all([
     prisma.order.aggregate({
-      where: { restaurantId, ...COUNTED, placedAt: { gte: from } },
+      where: { restaurantId, ...COUNTED, businessDate: today },
       _sum: { total: true, tax: true, tip: true },
       _count: true,
     }),
@@ -470,13 +505,14 @@ export async function getFinanceSummary(
   restaurantId: string,
   window: number | DateRange,
 ): Promise<FinanceSummary> {
-  const { from, to } = resolveRange(window);
+  const { from, to } = await siteRange(restaurantId, window);
 
   const [orders, expenses, ledger] = await Promise.all([
     prisma.order.aggregate({
-      where: { restaurantId, ...COUNTED, placedAt: { gte: from, lte: to } },
+      where: { restaurantId, ...COUNTED, businessDate: businessDateFilter({ from, to }) },
       _sum: { total: true, costTotal: true, tax: true, tip: true },
     }),
+    // An expense is dated by the day the owner picked, which is its business day.
     prisma.expense.findMany({
       where: { restaurantId, occurredAt: { gte: from, lte: to } },
       select: { category: true, amount: true },
@@ -490,7 +526,7 @@ export async function getFinanceSummary(
       where: {
         restaurantId,
         reason: { in: ["WASTE", "STOCKTAKE"] },
-        createdAt: { gte: from, lte: to },
+        businessDate: businessDateFilter({ from, to }),
       },
       select: { reason: true, deltaMilli: true, unitCost: true },
     }),

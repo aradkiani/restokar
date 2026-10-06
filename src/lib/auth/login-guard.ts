@@ -32,7 +32,9 @@ export async function loginLockedFor(phone: string, ip: string): Promise<number>
   let wait = 0;
   for (const row of rows) {
     const limit =
-      row.key === phoneKey(phone) ? LOGIN_LIMITS.perPhone.limit : LOGIN_LIMITS.perIp.limit;
+      row.key === phoneKey(phone)
+        ? LOGIN_LIMITS.perPhone.limit
+        : LOGIN_LIMITS.perIp.limit;
     if (row.count >= limit) {
       wait = Math.max(wait, Math.ceil((row.resetAt.getTime() - Date.now()) / 1000));
     }

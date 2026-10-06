@@ -12,6 +12,7 @@ import { isFeaturedNow } from "./featured";
 import { linkCustomer } from "./customers-server";
 import { zonedMoment, type ZonedMoment } from "./time";
 import { deductStock, restoreStockForOrder } from "./stock";
+import { businessDateKey, dbDate, effectiveHours } from "./business-day";
 import { randomToken } from "./utils";
 import { MAX_INT4, ONLINE_PAYMENT_WINDOW_MINUTES } from "./constants";
 import { PAYMENTS_ENABLED } from "./features";
@@ -612,6 +613,8 @@ async function placeOrder(
       isPublished: true,
       onlineOrderingEnabled: true,
       onlinePaymentEnabled: true,
+      businessDayStart: true,
+      businessDayEnd: true,
       ...pricingSelect,
     },
   });
@@ -635,13 +638,23 @@ async function placeOrder(
   const menuOwner = venue.parentRestaurantId
     ? await prisma.restaurant.findUnique({
         where: { id: venue.parentRestaurantId },
-        select: { id: true, isActive: true, ...pricingSelect },
+        select: {
+          id: true,
+          isActive: true,
+          businessDayStart: true,
+          businessDayEnd: true,
+          ...pricingSelect,
+        },
       })
     : venue;
 
   if (!menuOwner || ("isActive" in menuOwner && !menuOwner.isActive)) {
     throw new HttpError(404, "Restaurant not found", "RESTAURANT_NOT_FOUND");
   }
+
+  // The branch's own business-day hours, or its chain's when it has none.
+  // Read before the merge below, which lets the menu owner's fields win.
+  const hours = effectiveHours(venue, venue.parentRestaurantId ? menuOwner : null);
 
   // Order ownership and the operational switches stay with the branch; the
   // pricing rules come from whoever owns the menu.
@@ -960,10 +973,16 @@ async function placeOrder(
       name: input.customerName,
     });
 
+    // One reading of the clock for both, so the order's time and the business
+    // day it is filed under cannot disagree.
+    const placedAt = new Date();
+
     const created = await tx.order.create({
       data: {
         customerId,
         restaurantId: restaurant.id,
+        placedAt,
+        businessDate: dbDate(businessDateKey(placedAt, hours)),
         orderNumber,
         publicToken,
         isManual: options.isManual ?? false,

@@ -247,6 +247,22 @@ function timeOfDay(label: string) {
     .transform((value) => parseTimeOfDay(value)!);
 }
 
+/**
+ * A site's business-day hours. Null clears them: the main venue goes back to
+ * the calendar day, a branch goes back to following its chain. "24:00" is
+ * read as midnight. `siteId` names a branch; it is honoured only for that
+ * branch's own chain owner (see the route).
+ */
+export const BusinessDaySchema = z.object({
+  siteId: z.string().min(1).max(40).optional(),
+  hours: z
+    .object({
+      start: timeOfDay("ساعت شروع کار").transform((m) => m % MINUTES_PER_DAY),
+      end: timeOfDay("ساعت پایان کار").transform((m) => m % MINUTES_PER_DAY),
+    })
+    .nullable(),
+});
+
 export const ScheduleWindowSchema = z
   .object({
     dayOfWeek: z.coerce
