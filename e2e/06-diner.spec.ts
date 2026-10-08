@@ -26,7 +26,7 @@ test.describe("diner at the table", () => {
     test.skip(testInfo.project.name !== "mobile", "phone-only measurement");
     await slowNetwork(page);
     const started = Date.now();
-    await page.goto("/menu/cafe-narenj?table=3", { waitUntil: "domcontentloaded" });
+    await page.goto("/menu/cafe-nimkat?table=3", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("اسپرسو").first()).toBeVisible({ timeout: 30_000 });
     const firstContent = Date.now() - started;
     await page.waitForLoadState("load", { timeout: 60_000 });
@@ -40,7 +40,7 @@ test.describe("diner at the table", () => {
 
   test("orders a latte with a required size, then follows it", async ({ page }) => {
     const errors = watchForErrors(page);
-    await page.goto("/menu/cafe-narenj?table=3");
+    await page.goto("/menu/cafe-nimkat?table=3");
     await page.getByText("لاته", { exact: true }).first().click();
     const sheet = page.getByRole("dialog");
     await expect(sheet).toBeVisible();
@@ -64,13 +64,13 @@ test.describe("diner at the table", () => {
   }) => {
     const latte = await one<{ id: string; price: number }>(
       `SELECT p.id, p.price FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
-        WHERE r.slug = 'cafe-narenj' AND p."isAvailable"
+        WHERE r.slug = 'cafe-nimkat' AND p."isAvailable"
           AND NOT EXISTS (SELECT 1 FROM "ProductOptionGroup" g WHERE g."productId" = p.id)
         ORDER BY p.price LIMIT 1`,
     );
     const response = await request.post("/api/public/orders", {
       data: {
-        slug: "cafe-narenj",
+        slug: "cafe-nimkat",
         tableNumber: "2",
         customerName: "آزمون قیمت",
         items: [{ productId: latte.id, quantity: 1, price: 1, total: 1 }],
@@ -92,13 +92,13 @@ test.describe("diner at the table", () => {
   }) => {
     const dish = await one<{ id: string }>(
       `SELECT p.id FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
-        WHERE r.slug = 'cafe-narenj' AND p."isAvailable"
+        WHERE r.slug = 'cafe-nimkat' AND p."isAvailable"
           AND NOT EXISTS (SELECT 1 FROM "ProductOptionGroup" g WHERE g."productId" = p.id)
         ORDER BY p.price LIMIT 1`,
     );
     const clientKey = `e2e-${Date.now()}-retry-key`;
     const order = {
-      slug: "cafe-narenj",
+      slug: "cafe-nimkat",
       tableNumber: "3",
       customerName: "آزمون تکرار",
       clientKey,
@@ -130,7 +130,7 @@ test.describe("diner at the table", () => {
   }) => {
     const errors = watchForErrors(page);
     // No ?table= — the counter's QR, not a table's.
-    await page.goto("/menu/fastfood-tond");
+    await page.goto("/menu/dudi-burger");
     await page.getByText("نوشابه", { exact: true }).first().click();
     await page
       .getByRole("dialog")
@@ -161,12 +161,12 @@ test.describe("diner at the table", () => {
   }) => {
     const dish = await one<{ id: string }>(
       `SELECT p.id FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
-        WHERE r.slug = 'cafe-narenj' AND p."isAvailable"
+        WHERE r.slug = 'cafe-nimkat' AND p."isAvailable"
           AND NOT EXISTS (SELECT 1 FROM "ProductOptionGroup" g WHERE g."productId" = p.id)
         ORDER BY p.price LIMIT 1`,
     );
     const base = {
-      slug: "cafe-narenj",
+      slug: "cafe-nimkat",
       customerName: "آزمون",
       items: [{ productId: dish.id, quantity: 1 }],
     };
@@ -184,11 +184,11 @@ test.describe("diner at the table", () => {
   test("an unavailable dish cannot be ordered", async ({ request }) => {
     const soldOut = await one<{ id: string }>(
       `SELECT p.id FROM "Product" p JOIN "Restaurant" r ON r.id = p."restaurantId"
-        WHERE r.slug = 'cafe-narenj' AND p."isAvailable" = false LIMIT 1`,
+        WHERE r.slug = 'cafe-nimkat' AND p."isAvailable" = false LIMIT 1`,
     );
     const response = await request.post("/api/public/orders", {
       data: {
-        slug: "cafe-narenj",
+        slug: "cafe-nimkat",
         tableNumber: "2",
         customerName: "مهمان",
         items: [{ productId: soldOut.id, quantity: 1 }],
@@ -200,7 +200,7 @@ test.describe("diner at the table", () => {
 
   test("pays online through the test gateway, success and failure", async ({ page }) => {
     for (const outcome of ["OK", "NOK"] as const) {
-      await page.goto("/menu/fastfood-tond?table=5");
+      await page.goto("/menu/dudi-burger?table=5");
       await page.getByText("نوشابه", { exact: true }).first().click();
       const sheet = page.getByRole("dialog");
       await sheet

@@ -4,7 +4,8 @@ import { requireOwner } from "@/lib/auth/guards";
 import { recordAudit } from "@/lib/audit";
 import { clientIp } from "@/lib/rate-limit";
 import { StaffSchema } from "@/lib/validation";
-import { exclusiveConflicts, sanitiseTabs } from "@/lib/staff-tabs";
+import { exclusiveConflicts, tabsForSite } from "@/lib/staff-tabs";
+import { siteOf, staffSites } from "@/lib/staff-sites";
 import { hashPassword } from "@/lib/auth/password";
 
 export const runtime = "nodejs";
@@ -15,24 +16,39 @@ export const runtime = "nodejs";
  * `requireOwner` throughout: handing someone the keys to a section is the
  * owner's decision, and an account that could grant itself access would make
  * every other guard decorative.
+ *
+ * A chain owner manages the staff of every branch here too; each account
+ * belongs to the one site it works at.
  */
 export const GET = route(async () => {
-  const { restaurantId } = await requireOwner();
+  const { user, restaurantId } = await requireOwner();
+  const sites = await staffSites(restaurantId, user.id);
 
   const staff = await prisma.user.findMany({
-    where: { restaurantId, role: "STAFF" },
+    where: { restaurantId: { in: sites.map((site) => site.id) }, role: "STAFF" },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, phone: true, staffTabs: true, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      staffTabs: true,
+      isActive: true,
+      restaurantId: true,
+    },
   });
 
-  return ok(staff);
+  return ok(staff.map(({ restaurantId: siteId, ...row }) => ({ ...row, siteId })));
 });
 
 export const POST = route(async (request: Request) => {
   const { user, restaurantId } = await requireOwner();
   const input = await parseBody(request, StaffSchema);
+  const site = siteOf(
+    await staffSites(restaurantId, user.id),
+    input.siteId || restaurantId,
+  );
 
-  const tabs = sanitiseTabs(input.tabs);
+  const tabs = tabsForSite(input.tabs, site.isBranch);
 
   /*
     Phone uniqueness is global, not per tenant: one number is one account
@@ -62,8 +78,9 @@ export const POST = route(async (request: Request) => {
     describe. The check is where the rule is legible; see also the same check
     on PATCH.
   */
+  // At the same site: each branch has its own order board.
   const others = await prisma.user.findMany({
-    where: { restaurantId, role: "STAFF" },
+    where: { restaurantId: site.id, role: "STAFF" },
     select: { id: true, staffTabs: true },
   });
 
@@ -89,7 +106,7 @@ export const POST = route(async (request: Request) => {
       phone: input.phone,
       passwordHash: input.password ? await hashPassword(input.password) : null,
       role: "STAFF",
-      restaurantId,
+      restaurantId: site.id,
       staffTabs: tabs,
     },
     select: { id: true, name: true, phone: true, staffTabs: true, isActive: true },
@@ -99,12 +116,14 @@ export const POST = route(async (request: Request) => {
     actor: user,
     restaurantId,
     action: "STAFF_CREATED",
-    summary: `حساب کارمند ساخته شد: ${created.name} (${created.phone})`,
+    summary: site.isBranch
+      ? `حساب کارمند ساخته شد: ${created.name} (${created.phone}) در ${site.name}`
+      : `حساب کارمند ساخته شد: ${created.name} (${created.phone})`,
     entityType: "User",
     entityId: created.id,
-    metadata: { tabs },
+    metadata: { tabs, siteId: site.id },
     ip: clientIp(request),
   });
 
-  return ok(created, { status: 201 });
+  return ok({ ...created, siteId: site.id }, { status: 201 });
 });

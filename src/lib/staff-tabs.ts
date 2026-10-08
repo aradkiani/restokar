@@ -110,6 +110,23 @@ export function sanitiseTabs(values: readonly string[]): StaffTab[] {
 }
 
 /**
+ * The sections a staff member can hold at a site.
+ *
+ * At a branch, no more than its manager has: the branch serves the chain's
+ * menu and design, so a grant of either there would open screens that edit
+ * the head office's dishes from a branch account.
+ */
+export function grantableTabs(isBranch: boolean): readonly StaffTab[] {
+  return isBranch ? BRANCH_MANAGER_TABS : STAFF_TABS;
+}
+
+/** `sanitiseTabs`, limited to what the site can grant. */
+export function tabsForSite(values: readonly string[], isBranch: boolean): StaffTab[] {
+  const allowed = grantableTabs(isBranch);
+  return sanitiseTabs(values).filter((tab) => allowed.includes(tab));
+}
+
+/**
  * Which of the requested exclusive tabs somebody else already holds.
  *
  * `editingUserId` is the account being saved, and is excluded from the check:

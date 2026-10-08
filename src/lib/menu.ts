@@ -549,8 +549,12 @@ export async function getPublicMenu(slug: string): Promise<PublicMenu | null> {
   // The period end is the authority here, not `status`: nothing flips a row to
   // EXPIRED on a schedule, so trusting the status alone would mean no
   // subscription ever lapsed. CANCELED is honoured immediately.
+  //
+  // Not for the homepage showcase menus: they are the platform's own pages,
+  // with no bill behind them to lapse. Their seeded period ends like any other,
+  // and the homepage would otherwise link to "paused" menus a month later.
   const subscription = restaurant.subscription;
-  if (subscription) {
+  if (subscription && !venue.isDemo) {
     if (subscription.status === "CANCELED") return null;
 
     // A few days of grace: a failed renewal at 9pm on a Thursday should not

@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import pg from "pg";
-import { devPhone } from "../../prisma/dev-phones";
+import { DEV_ADMIN_PHONE } from "../../prisma/dev-phones";
+import { ADMIN_PASSWORD, DEMO_PASSWORD } from "../../prisma/demo/catalog";
 
 /**
  * Test-only access to the local database.
@@ -37,21 +38,49 @@ export const db = new pg.Pool({ connectionString: url, max: 2 });
 const CODE_LENGTH = Number(process.env.OTP_CODE_LENGTH ?? 5);
 export const KNOWN_CODE = "135792".slice(0, CODE_LENGTH);
 
-/** Fixture accounts from `prisma/seed-launch.ts`. */
+/**
+ * Accounts from `prisma/seed-demo.ts` (see prisma/demo/catalog.ts): one per
+ * plan and state the journeys need. Every one signs in with DEMO_PASSWORD; the
+ * platform admin with ADMIN_PASSWORD.
+ */
 export const PHONES = {
-  admin: "09000000000",
-  narenjOwner: devPhone("owner@cafe-narenj.launch"),
-  narenjBarista: devPhone("barista@cafe-narenj.launch"),
-  narenjMenuStaff: devPhone("menu@cafe-narenj.launch"),
-  diziOwner: devPhone("owner@dizi-sara.launch"),
-  diziKitchen: devPhone("kitchen@dizi-sara.launch"),
-  diziAccountant: devPhone("accountant@dizi-sara.launch"),
-  tondOwner: devPhone("owner@fastfood-tond.launch"),
-  baranOwner: devPhone("owner@cafe-baran.launch"),
-  ghadimiOwner: devPhone("owner@cafe-ghadimi.launch"),
-  pizzaOwner: devPhone("owner@pizza-noon.launch"),
-  vanakManager: devPhone("manager@pizza-noon-vanak.launch"),
+  admin: DEV_ADMIN_PHONE,
+  /** کافه نیمکت — small plan, active, exactly its 10 tables, no staff. */
+  smallOwner: "09120000001",
+  /** کافه کتاب ورق — small plan on trial, menu only. */
+  trialOwner: "09120000002",
+  /** شیرینی و قهوه گلپر — small plan, expired nine days ago. */
+  expiredOwner: "09120000003",
+  /** سفره‌خانه شمشاد — medium plan, yearly. */
+  mediumOwner: "09120000004",
+  /** برگرخانه دودی — large plan, open until 02:00, takeaway and online payment. */
+  largeOwner: "09120000005",
+  largeCashier: "09120000006",
+  largeAccountant: "09120000007",
+  largeMenuStaff: "09120000008",
+  largeStorekeeper: "09120000009",
+  /** پیتزا تنور — chain plan, head office plus three branches. */
+  chainOwner: "09120000013",
+  vanakManager: "09120000015",
+  vanakCashier: "09120000016",
 } as const;
+
+export const SLUGS = {
+  small: "cafe-nimkat",
+  trial: "cafe-varagh",
+  expired: "golpar",
+  medium: "shemshad",
+  large: "dudi-burger",
+  chain: "pizza-tanoor",
+  vanak: "pizza-tanoor-vanak",
+  tajrish: "pizza-tanoor-tajrish",
+} as const;
+
+export { ADMIN_PASSWORD, DEMO_PASSWORD };
+
+/** The password a fixture account signs in with. */
+export const passwordFor = (phone: string) =>
+  phone === DEV_ADMIN_PHONE ? ADMIN_PASSWORD : DEMO_PASSWORD;
 
 /**
  * Forgets earlier codes for `phone`, so the 60-second resend cooldown from a
@@ -65,7 +94,7 @@ export async function forgetCodes(phone: string): Promise<void> {
 export async function clearRateLimits(): Promise<void> {
   await db.query(
     `DELETE FROM "RateLimit" WHERE key LIKE 'otp:%' OR key LIKE 'register:%'
-       OR key LIKE 'order:%' OR key LIKE 'staff-call:%' OR key LIKE 'upload:%'`,
+       OR key LIKE 'order:%' OR key LIKE 'login-fail:%' OR key LIKE 'password-change:%' OR key LIKE 'staff-call:%' OR key LIKE 'upload:%'`,
   );
 }
 

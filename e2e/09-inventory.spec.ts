@@ -35,8 +35,8 @@ test.describe("inventory", () => {
     page,
   }) => {
     const errors = watchForErrors(page);
-    await signInWithApi(page.request, PHONES.narenjOwner);
-    const before = await level("cafe-narenj", "شیر");
+    await signInWithApi(page.request, PHONES.smallOwner);
+    const before = await level("cafe-nimkat", "شیر");
 
     await page.goto("/dashboard/inventory?view=purchases");
     const form = page.getByRole("form", { name: "ثبت خرید جدید" });
@@ -46,7 +46,7 @@ test.describe("inventory", () => {
     await form.getByRole("button", { name: "ثبت خرید جدید" }).click();
     await expect(page.getByText("خرید ثبت شد")).toBeVisible();
 
-    expect(await level("cafe-narenj", "شیر")).toBe(before + 10_000);
+    expect(await level("cafe-nimkat", "شیر")).toBe(before + 10_000);
     const movement = await one<{ unitCost: number }>(
       `SELECT m."unitCost" FROM "StockMovement" m JOIN "InventoryItem" i ON i.id = m."itemId"
         WHERE i.name = 'شیر' AND m.reason = 'PURCHASE' ORDER BY m."createdAt" DESC LIMIT 1`,
@@ -58,8 +58,8 @@ test.describe("inventory", () => {
 
   test("waste comes off the shelf and shows on the profit and loss", async ({ page }) => {
     const errors = watchForErrors(page);
-    await signInWithApi(page.request, PHONES.narenjOwner);
-    const before = await level("cafe-narenj", "دانه قهوه");
+    await signInWithApi(page.request, PHONES.smallOwner);
+    const before = await level("cafe-nimkat", "دانه قهوه");
 
     await page.goto("/dashboard/inventory?view=waste");
     const form = page.getByRole("form", { name: "ثبت ضایعات" });
@@ -69,16 +69,16 @@ test.describe("inventory", () => {
     await form.getByRole("button", { name: "ثبت ضایعات" }).click();
     await expect(page.getByText("ضایعات ثبت شد")).toBeVisible();
 
-    expect(await level("cafe-narenj", "دانه قهوه")).toBe(before - 200);
+    expect(await level("cafe-nimkat", "دانه قهوه")).toBe(before - 200);
     await page.goto("/dashboard/finance");
     await expect(page.getByText("ضایعات انبار")).toBeVisible();
     expect(errors).toEqual([]);
   });
 
   test("a count sets the shelf to what was counted", async ({ page }) => {
-    await signInWithApi(page.request, PHONES.narenjOwner);
+    await signInWithApi(page.request, PHONES.smallOwner);
     page.on("dialog", (dialog) => dialog.accept());
-    const before = await level("cafe-narenj", "شکلات تلخ");
+    const before = await level("cafe-nimkat", "شکلات تلخ");
 
     await page.goto("/dashboard/inventory?view=count");
     await page.getByLabel("شکلات تلخ").fill("۱٫۲۵");
@@ -86,13 +86,13 @@ test.describe("inventory", () => {
     await page.getByRole("button", { name: "ثبت انبارگردانی" }).click();
     await expect(page.getByText("انبارگردانی ثبت شد")).toBeVisible();
 
-    expect(await level("cafe-narenj", "شکلات تلخ")).toBe(1_250);
+    expect(await level("cafe-nimkat", "شکلات تلخ")).toBe(1_250);
     expect(await ledgerMismatches()).toBe(0);
 
     // Counted back to where it was: the owner journey checks this item is low.
     const item = await one<{ id: string }>(
       `SELECT i.id FROM "InventoryItem" i JOIN "Restaurant" r ON r.id = i."restaurantId"
-        WHERE r.slug = 'cafe-narenj' AND i.name = 'شکلات تلخ'`,
+        WHERE r.slug = 'cafe-nimkat' AND i.name = 'شکلات تلخ'`,
     );
     const restored = await page.request.post("/api/inventory/stocktakes", {
       data: { lines: [{ itemId: item.id, counted: before / 1000 }] },
@@ -110,43 +110,43 @@ test.describe("inventory", () => {
          JOIN "ProductIngredient" pi ON pi."productId" = p.id
          JOIN "InventoryItem" i ON i.id = pi."itemId"
          JOIN "Restaurant" r ON r.id = p."restaurantId"
-        WHERE r.slug = 'pizza-noon' AND p."isAvailable"
+        WHERE r.slug = 'pizza-tanoor' AND p."isAvailable"
           AND NOT EXISTS (SELECT 1 FROM "ProductOptionGroup" g
                            WHERE g."productId" = p.id AND g."isRequired")
         LIMIT 1`,
     );
-    const vanakBefore = await level("pizza-noon-vanak", dish.itemName);
-    const ownerBefore = await level("pizza-noon", dish.itemName);
+    const vanakBefore = await level("pizza-tanoor-vanak", dish.itemName);
+    const ownerBefore = await level("pizza-tanoor", dish.itemName);
     const ordered = await request.post("/api/public/orders", {
       data: {
-        slug: "pizza-noon-vanak",
+        slug: "pizza-tanoor-vanak",
         tableNumber: "2",
         customerName: "آزمون انبار",
         items: [{ productId: dish.id, quantity: 1 }],
       },
     });
     expect(ordered.ok(), await ordered.text()).toBeTruthy();
-    expect(await level("pizza-noon-vanak", dish.itemName)).toBeLessThan(vanakBefore);
-    expect(await level("pizza-noon", dish.itemName)).toBe(ownerBefore);
+    expect(await level("pizza-tanoor-vanak", dish.itemName)).toBeLessThan(vanakBefore);
+    expect(await level("pizza-tanoor", dish.itemName)).toBe(ownerBefore);
 
     // The manager may name another branch; the waste still lands on their own.
     await signInWithApi(page.request, PHONES.vanakManager);
     const tajrish = await one<{ id: string }>(
-      `SELECT id FROM "Restaurant" WHERE slug = 'pizza-noon-tajrish'`,
+      `SELECT id FROM "Restaurant" WHERE slug = 'pizza-tanoor-tajrish'`,
     );
     const item = await one<{ id: string }>(
       `SELECT i.id FROM "InventoryItem" i JOIN "Restaurant" r ON r.id = i."restaurantId"
-        WHERE r.slug = 'pizza-noon' AND i.name = $1`,
+        WHERE r.slug = 'pizza-tanoor' AND i.name = $1`,
       [dish.itemName],
     );
-    const tajrishBefore = await level("pizza-noon-tajrish", dish.itemName);
-    const vanakMid = await level("pizza-noon-vanak", dish.itemName);
+    const tajrishBefore = await level("pizza-tanoor-tajrish", dish.itemName);
+    const vanakMid = await level("pizza-tanoor-vanak", dish.itemName);
     const waste = await page.request.post("/api/inventory/waste", {
       data: { siteId: tajrish.id, itemId: item.id, amount: 1, reason: "damaged" },
     });
     expect(waste.ok(), await waste.text()).toBeTruthy();
-    expect(await level("pizza-noon-tajrish", dish.itemName)).toBe(tajrishBefore);
-    expect(await level("pizza-noon-vanak", dish.itemName)).toBeLessThan(vanakMid);
+    expect(await level("pizza-tanoor-tajrish", dish.itemName)).toBe(tajrishBefore);
+    expect(await level("pizza-tanoor-vanak", dish.itemName)).toBeLessThan(vanakMid);
 
     // And sees no site switcher — only a chain owner chooses.
     await page.goto("/dashboard/inventory");
@@ -155,10 +155,10 @@ test.describe("inventory", () => {
   });
 
   test("staff without the inventory grant are refused", async ({ page }) => {
-    await signInWithApi(page.request, PHONES.narenjBarista);
+    await signInWithApi(page.request, PHONES.largeCashier);
     const item = await one<{ id: string }>(
       `SELECT i.id FROM "InventoryItem" i JOIN "Restaurant" r ON r.id = i."restaurantId"
-        WHERE r.slug = 'cafe-narenj' LIMIT 1`,
+        WHERE r.slug = 'dudi-burger' LIMIT 1`,
     );
     const response = await page.request.post("/api/inventory/waste", {
       data: { itemId: item.id, amount: 1, reason: "other" },
@@ -169,7 +169,7 @@ test.describe("inventory", () => {
   test("removing an ingredient with history archives it and keeps the ledger", async ({
     page,
   }, testInfo) => {
-    await signInWithApi(page.request, PHONES.narenjOwner);
+    await signInWithApi(page.request, PHONES.smallOwner);
     const name = `زعفران آزمایشی ${testInfo.project.name}`;
     await db.query(
       `DELETE FROM "StockMovement" WHERE "itemId" IN (SELECT id FROM "InventoryItem" WHERE name = $1)`,

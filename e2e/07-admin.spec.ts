@@ -29,10 +29,10 @@ test.describe("platform admin", () => {
     }
     await page.goto("/admin/restaurants");
     await page
-      .getByRole("link", { name: /کافه نارنج/ })
+      .getByRole("link", { name: /کافه نیمکت/ })
       .first()
       .click();
-    await expect(page.locator("main")).toContainText("کافه نارنج");
+    await expect(page.locator("main")).toContainText("کافه نیمکت");
     expect(errors).toEqual([]);
   });
 
@@ -188,7 +188,7 @@ test.describe("platform admin", () => {
   });
 
   test("a restaurant owner is kept out of every admin page and API", async ({ page }) => {
-    await signInWithApi(page.request, PHONES.narenjOwner);
+    await signInWithApi(page.request, PHONES.smallOwner);
     await page.goto("/admin");
     await expect(page).not.toHaveURL(/\/admin/);
     for (const path of [
@@ -232,7 +232,7 @@ test.describe("platform admin", () => {
       const sent = await request.post("/api/client-errors", {
         data: {
           message: `TypeError: ${marker} for 09121234567`,
-          path: `/menu/cafe-narenj/order/${token}?secret=1`,
+          path: `/menu/cafe-nimkat/order/${token}?secret=1`,
         },
       });
       expect(sent.ok()).toBeTruthy();
@@ -243,7 +243,7 @@ test.describe("platform admin", () => {
     const entry = page.getByRole("listitem").filter({ hasText: marker });
     await expect(entry).toHaveCount(1);
     await expect(entry).toContainText("۲ بار");
-    await expect(entry).toContainText("/menu/cafe-narenj/order/:id");
+    await expect(entry).toContainText("/menu/cafe-nimkat/order/:id");
     await expect(entry).not.toContainText("09121234567");
     await expect(entry).not.toContainText("secret");
 

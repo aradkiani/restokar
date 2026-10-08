@@ -10,7 +10,7 @@ import { signInWithApi } from "./session";
  */
 test("list elements wider than the screen", async ({ page }, testInfo) => {
   test.skip(!process.env.OVERFLOW_PATH, "diagnostic; set OVERFLOW_PATH to run");
-  await signInWithApi(page.request, PHONES.narenjOwner);
+  await signInWithApi(page.request, PHONES.smallOwner);
   // Without a leading slash: Git Bash rewrites "/dashboard" into a Windows path.
   await page.goto(`/${process.env.OVERFLOW_PATH!.replace(/^\/+/, "")}`);
   const offenders = await page.evaluate(() => {

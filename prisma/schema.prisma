@@ -200,7 +200,9 @@ model User {
   /// Unused since sign-in moved to phone + one-time code. Kept, not dropped, so
   /// no account loses data; new accounts leave it null.
   email           String?   @unique
-  /// Unused since sign-in moved to one-time codes; older rows keep their hash.
+  /// scrypt hash (`scrypt$N$r$p$salt$hash`, auth/password.ts). Sign-in is
+  /// phone + password; null for an account someone else created until its
+  /// holder activates it with one SMS code and picks a password.
   passwordHash    String?
   name            String
   /// The sign-in identifier: an Iranian mobile in its one canonical form,

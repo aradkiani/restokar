@@ -84,10 +84,14 @@ export function BusinessHoursCard({
       digits(minuteToClock(effective.start)),
     );
   } else {
-    explanation = copy.explain
-      .replace("{start}", digits(minuteToClock(effective.start)))
-      .replace("{end}", digits(minuteToClock(effective.end)))
-      .replace("{cutoff}", digits(minuteToClock(cutoffMinute(effective))));
+    const cutoff = cutoffMinute(effective);
+    // A cutoff in the small hours files them under the evening before; one
+    // before midnight (a venue that closes early) files late orders forward.
+    const template = cutoff < effective.start ? copy.explain : copy.explainEarlyClose;
+    explanation = template
+      .replaceAll("{start}", digits(minuteToClock(effective.start)))
+      .replaceAll("{end}", digits(minuteToClock(effective.end)))
+      .replaceAll("{cutoff}", digits(minuteToClock(cutoff)));
   }
 
   return (

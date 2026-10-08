@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * End-to-end journeys: a real browser clicking through the running app.
  *
- *   npm run db:seed:launch   # once: the fixture venues the journeys use
+ *   npm run db:seed:demo     # the demo businesses the journeys use
  *   npm run test:e2e         # every journey, phone and desktop
  *
  * Runs against the dev server on :3000 and reuses it when it is already up (a

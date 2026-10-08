@@ -6,8 +6,10 @@ import {
   STAFF_TAB_HREF,
   canAccessTab,
   exclusiveConflicts,
+  grantableTabs,
   landingPathFor,
   sanitiseTabs,
+  tabsForSite,
 } from "./staff-tabs";
 
 /**
@@ -183,5 +185,23 @@ describe("landingPathFor", () => {
     for (const tab of STAFF_TABS) {
       expect(STAFF_TAB_HREF[tab]).toMatch(/^\/dashboard\//);
     }
+  });
+});
+
+describe("staff at a branch", () => {
+  it("can hold what a branch manager has, never the chain's menu or design", () => {
+    expect(grantableTabs(true)).not.toContain("menu");
+    expect(grantableTabs(true)).not.toContain("design");
+    expect(grantableTabs(true)).toContain("orders");
+    expect(grantableTabs(false)).toEqual(STAFF_TABS);
+  });
+
+  it("drops menu and design asked for at a branch, keeps them at the venue", () => {
+    expect(tabsForSite(["menu", "orders", "design", "inventory"], true)).toEqual([
+      "orders",
+      "inventory",
+    ]);
+    expect(tabsForSite(["menu", "orders"], false)).toEqual(["orders", "menu"]);
+    expect(tabsForSite(["nonsense"], true)).toEqual([]);
   });
 });

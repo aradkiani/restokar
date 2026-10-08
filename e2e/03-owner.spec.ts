@@ -30,9 +30,9 @@ const OWNER_PAGES = [
   "/dashboard/options/support",
 ];
 
-test.describe("active owner (cafe-narenj, small plan)", () => {
+test.describe("active owner (cafe-nimkat, small plan)", () => {
   test.beforeEach(async ({ page }) => {
-    await signInWithApi(page.request, PHONES.narenjOwner);
+    await signInWithApi(page.request, PHONES.smallOwner);
   });
 
   test("every dashboard page opens without errors and fits a phone", async ({ page }) => {
@@ -66,7 +66,7 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
       [name],
     );
     expect(saved.price).toBe(125_000);
-    await page.goto("/menu/cafe-narenj");
+    await page.goto("/menu/cafe-nimkat");
     await expect(page.locator("main, body").first()).toContainText(name);
     await db.query(`DELETE FROM "Product" WHERE name = $1`, [name]);
   });
@@ -98,7 +98,7 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
     expect(saved.dietaryTags).toEqual(["spicy"]);
 
     // Guests: the spicy filter exists only because this dish does.
-    await page.goto("/menu/cafe-narenj");
+    await page.goto("/menu/cafe-nimkat");
     const filters = page.getByRole("group", { name: "فیلتر منو" });
     await filters.getByRole("button", { name: "تند", exact: true }).click();
     await expect(page.getByText(name)).toBeVisible();
@@ -133,7 +133,7 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
   }) => {
     const before = await one<{ code: string }>(
       `SELECT p.code FROM "Subscription" s JOIN "Plan" p ON p.id = s."planId"
-         JOIN "Restaurant" r ON r.id = s."restaurantId" WHERE r.slug = 'cafe-narenj'`,
+         JOIN "Restaurant" r ON r.id = s."restaurantId" WHERE r.slug = 'cafe-nimkat'`,
     );
     const start = await page.request.post("/api/subscription/checkout", {
       data: { planCode: "tier-large", interval: "monthly" },
@@ -142,12 +142,12 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
     // The owner closes the gateway tab without paying.
     const after = await one<{ code: string }>(
       `SELECT p.code FROM "Subscription" s JOIN "Plan" p ON p.id = s."planId"
-         JOIN "Restaurant" r ON r.id = s."restaurantId" WHERE r.slug = 'cafe-narenj'`,
+         JOIN "Restaurant" r ON r.id = s."restaurantId" WHERE r.slug = 'cafe-nimkat'`,
     );
     const restore = async () =>
       db.query(
         `UPDATE "Subscription" SET "planId" = (SELECT id FROM "Plan" WHERE code = $1), interval = 'monthly'
-          WHERE "restaurantId" = (SELECT id FROM "Restaurant" WHERE slug = 'cafe-narenj')`,
+          WHERE "restaurantId" = (SELECT id FROM "Restaurant" WHERE slug = 'cafe-nimkat')`,
         [before.code],
       );
     await restore();
@@ -160,7 +160,7 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
     // Renew the plan the venue is already on, through the test gateway.
     const current = await one<{ code: string }>(
       `SELECT p.code FROM "Subscription" s JOIN "Plan" p ON p.id = s."planId"
-         JOIN "Restaurant" r ON r.id = s."restaurantId" WHERE r.slug = 'cafe-narenj'`,
+         JOIN "Restaurant" r ON r.id = s."restaurantId" WHERE r.slug = 'cafe-nimkat'`,
     );
     const start = await page.request.post("/api/subscription/checkout", {
       data: { planCode: current.code, interval: "monthly" },
@@ -173,7 +173,7 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
 
     const paid = await one<{ id: string; amount: number }>(
       `SELECT p.id, p.amount FROM "Payment" p JOIN "Restaurant" r ON r.id = p."restaurantId"
-        WHERE r.slug = 'cafe-narenj' AND p.purpose = 'SUBSCRIPTION' AND p.status = 'PAID'
+        WHERE r.slug = 'cafe-nimkat' AND p.purpose = 'SUBSCRIPTION' AND p.status = 'PAID'
         ORDER BY p."createdAt" DESC LIMIT 1`,
     );
     // Opens in a new tab; follow its address in this one.
@@ -181,11 +181,11 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
     await expect(link).toHaveAttribute("href", `/print/receipt/${paid.id}`);
     await page.goto(`/print/receipt/${paid.id}`);
     await expect(page.getByRole("heading", { name: "رسید پرداخت اشتراک" })).toBeVisible();
-    await expect(page.locator("main")).toContainText("کافه نارنج");
+    await expect(page.locator("main")).toContainText("کافه نیمکت");
     await expect(page.locator("main")).toContainText("درگاه آزمایشی");
 
     // Someone else's receipt is not found, not shown.
-    await signInWithApi(page.request, PHONES.diziOwner);
+    await signInWithApi(page.request, PHONES.mediumOwner);
     const foreign = await page.goto(`/print/receipt/${paid.id}`);
     expect(foreign?.status()).toBe(404);
   });
@@ -196,7 +196,7 @@ test.describe("active owner (cafe-narenj, small plan)", () => {
     });
     await db.query(
       `UPDATE "Subscription" SET "planId" = (SELECT id FROM "Plan" WHERE code = 'tier-small')
-        WHERE "restaurantId" = (SELECT id FROM "Restaurant" WHERE slug = 'cafe-narenj')`,
+        WHERE "restaurantId" = (SELECT id FROM "Restaurant" WHERE slug = 'cafe-nimkat')`,
     );
     expect(response.status()).toBeGreaterThanOrEqual(400);
   });

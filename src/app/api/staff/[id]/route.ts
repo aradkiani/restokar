@@ -4,7 +4,8 @@ import { HttpError, requireOwner } from "@/lib/auth/guards";
 import { recordAudit } from "@/lib/audit";
 import { clientIp } from "@/lib/rate-limit";
 import { StaffAccessSchema } from "@/lib/validation";
-import { exclusiveConflicts, sanitiseTabs } from "@/lib/staff-tabs";
+import { exclusiveConflicts, tabsForSite } from "@/lib/staff-tabs";
+import { staffSites } from "@/lib/staff-sites";
 
 export const runtime = "nodejs";
 
@@ -16,27 +17,30 @@ type Context = { params: Promise<{ id: string }> };
  * `role: "STAFF"` is part of the lookup rather than a check afterwards, so
  * these routes cannot be pointed at the owner's own account or at a branch
  * manager to rewrite their access — an id that is not a staff member of this
- * venue simply does not exist here.
+ * venue simply does not exist here. "This venue" includes a chain's branches,
+ * whose staff the chain owner manages.
  */
-async function findStaff(restaurantId: string, id: string) {
+async function findStaff(restaurantId: string, ownerId: string, id: string) {
+  const sites = await staffSites(restaurantId, ownerId);
   const staff = await prisma.user.findFirst({
-    where: { id, restaurantId, role: "STAFF" },
-    select: { id: true, name: true, phone: true },
+    where: { id, restaurantId: { in: sites.map((site) => site.id) }, role: "STAFF" },
+    select: { id: true, name: true, phone: true, restaurantId: true },
   });
   if (!staff) throw new HttpError(404, "Staff account not found", "NOT_FOUND");
-  return staff;
+  const site = sites.find((candidate) => candidate.id === staff.restaurantId)!;
+  return { ...staff, site };
 }
 
 export const PATCH = route(async (request: Request, context: unknown) => {
   const { user, restaurantId } = await requireOwner();
   const { id } = await (context as Context).params;
-  const staff = await findStaff(restaurantId, id);
+  const staff = await findStaff(restaurantId, user.id, id);
 
   const input = await parseBody(request, StaffAccessSchema);
-  const tabs = sanitiseTabs(input.tabs);
+  const tabs = tabsForSite(input.tabs, staff.site.isBranch);
 
   const others = await prisma.user.findMany({
-    where: { restaurantId, role: "STAFF" },
+    where: { restaurantId: staff.site.id, role: "STAFF" },
     select: { id: true, staffTabs: true },
   });
 
@@ -73,13 +77,13 @@ export const PATCH = route(async (request: Request, context: unknown) => {
     ip: clientIp(request),
   });
 
-  return ok(updated);
+  return ok({ ...updated, siteId: staff.site.id });
 });
 
 export const DELETE = route(async (request: Request, context: unknown) => {
   const { user, restaurantId } = await requireOwner();
   const { id } = await (context as Context).params;
-  const staff = await findStaff(restaurantId, id);
+  const staff = await findStaff(restaurantId, user.id, id);
 
   /*
     Sessions go with the account, in one transaction.

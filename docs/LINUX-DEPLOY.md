@@ -466,8 +466,10 @@ cd /srv/restokar && echo 'ENABLE_PUBLIC_REGISTRATION="true"' >> .env && sudo sys
 ```
 
 Visit `https://yourdomain.com/register` and sign up with your own mobile
-number. Sign-in is by texted code, so SMS must already be working (section on
-SMS: `SMS_PROVIDER=melipayamak`, `SMS_DRY_RUN=false`, `SMS_PATTERN_OTP`).
+number and a password. The number is proved once with a texted code, so SMS must
+already be working (section on SMS: `SMS_PROVIDER=melipayamak`,
+`SMS_DRY_RUN=false`, `SMS_PATTERN_OTP`). From then on you sign in with the
+number and the password; nothing is texted at sign-in.
 
 Promote that account to platform admin:
 

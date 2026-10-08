@@ -633,133 +633,6 @@ async function seedRestaurant(options: {
 }
 
 /**
- * A worked example of the Multi-branch tier: one head office and three sites.
- *
- * The head office owns the menu and nothing else is copied — each branch row
- * carries `parentRestaurantId` and reads the parent's dishes at render time, so
- * changing a price at head office changes it at all four addresses at once.
- *
- * What each branch does own is everything operational: its own slug and QR
- * codes, its own tables, and its own orders and expenses. That is what makes
- * the chain console meaningful — the per-branch revenue it shows is money the
- * branch actually took, not a share of one pooled figure.
- */
-async function seedChain() {
-  const HEAD_SLUG = "karimi";
-
-  const existing = await prisma.restaurant.findUnique({
-    where: { slug: HEAD_SLUG },
-    select: { id: true },
-  });
-  if (existing) {
-    console.log(`• ${HEAD_SLUG} chain already exists — skipped`);
-    return;
-  }
-
-  await seedRestaurant({
-    slug: HEAD_SLUG,
-    name: "رستوران کریمی",
-    nameEn: "Karimi Restaurant",
-    tagline: "غذای ایرانی، چهار شعبه در تهران",
-    taglineEn: "Iranian food, four addresses in Tehran",
-    description: "نمونه‌ی اشتراک چند شعبه‌ای — یک منو، چند آدرس.",
-    ownerName: "رضا کریمی",
-    ownerEmail: "owner@karimi.ir",
-    templateId: "kashi",
-    theme: { primary: "#0e7c72", secondary: "#14345f", surfaceStyle: "flat" },
-    planCode: "tier-chain",
-    onlinePayment: true,
-    menu: PERSIAN_MENU,
-    tableCount: 16,
-  });
-
-  const parent = await prisma.restaurant.findUniqueOrThrow({
-    where: { slug: HEAD_SLUG },
-    select: { id: true, ownerId: true, templateId: true, theme: true },
-  });
-
-  // The branches serve these; they are never copied onto a branch row.
-  const menu = await prisma.product.findMany({
-    where: { restaurantId: parent.id },
-    select: { id: true, name: true, price: true, costPrice: true },
-  });
-  const products = menu.map((p) => ({
-    id: p.id,
-    name: p.name,
-    price: p.price,
-    cost: p.costPrice,
-  }));
-
-  const BRANCHES = [
-    {
-      slug: "karimi-1",
-      name: "رستوران کریمی — شعبه ونک",
-      manager: "سعید احمدی",
-      email: "vanak@karimi.ir",
-      address: "تهران، میدان ونک",
-      tables: 12,
-    },
-    {
-      slug: "karimi-2",
-      name: "رستوران کریمی — شعبه سعادت‌آباد",
-      manager: "مهدی رضایی",
-      email: "saadat@karimi.ir",
-      address: "تهران، سعادت‌آباد، بلوار دریا",
-      tables: 10,
-    },
-    {
-      slug: "karimi-3",
-      name: "رستوران کریمی — شعبه تجریش",
-      manager: "نیما موسوی",
-      email: "tajrish@karimi.ir",
-      address: "تهران، تجریش، خیابان دربند",
-      tables: 8,
-    },
-  ];
-
-  for (const spec of BRANCHES) {
-    const branch = await prisma.restaurant.create({
-      data: {
-        parentRestaurantId: parent.id,
-        // The chain owner owns every site; the manager is a member of one.
-        ownerId: parent.ownerId,
-        slug: spec.slug,
-        name: spec.name,
-        address: spec.address,
-        phone: "021-88776655",
-        templateId: parent.templateId,
-        theme: parent.theme ?? undefined,
-        isPublished: true,
-      },
-      select: { id: true },
-    });
-
-    await prisma.user.create({
-      data: {
-        phone: devPhone(spec.email),
-        name: spec.manager,
-        role: "BRANCH_MANAGER",
-        restaurantId: branch.id,
-      },
-    });
-
-    await prisma.restaurantTable.createMany({
-      data: Array.from({ length: spec.tables }, (_, i) => ({
-        restaurantId: branch.id,
-        number: String(i + 1),
-        seats: i % 3 === 0 ? 2 : 4,
-      })),
-    });
-
-    // Its own trade, so the chain console has four different numbers to show.
-    await seedOrders(branch.id, products, spec.tables);
-    await seedExpenses(branch.id);
-
-    console.log(`✓ ${spec.slug} — branch of ${HEAD_SLUG}`);
-  }
-}
-
-/**
  * Generates ~6 weeks of orders with a realistic shape: busier at lunch and
  * dinner, busier at weekends, so the analytics charts show a believable
  * pattern rather than uniform noise.
@@ -941,56 +814,16 @@ async function main() {
   await seedPlans();
   await seedAdmin();
 
-  await seedRestaurant({
-    slug: "cafe-nabsh",
-    name: "کافه نبش",
-    nameEn: "Nabsh Café",
-    tagline: "قهوه دست‌ساز و دسر خانگی",
-    taglineEn: "Hand-crafted coffee and home-made desserts",
-    description:
-      "کافه نبش از سال ۱۳۹۶ در قلب تهران، با تمرکز روی قهوه تک‌خاستگاه و دسرهای تازه هر روز.",
-    ownerName: "نیما رستگار",
-    ownerEmail: "owner@cafe-nabsh.ir",
-    templateId: "aurora",
-    theme: { primary: "#7c4a1e", secondary: "#0f766e", surfaceStyle: "glass" },
-    planCode: "pro",
-    onlinePayment: true,
-    menu: CAFE_MENU,
-    tableCount: 12,
-  });
-
-  await seedRestaurant({
-    slug: "burger-lab",
-    name: "برگر لَب",
-    nameEn: "Burger Lab",
-    tagline: "برگر دست‌ساز با گوشت تازه روزانه",
-    taglineEn: "Hand-pressed burgers with meat fresh each day",
-    description:
-      "آزمایشگاه برگر — هر هفته یک دستور جدید، با گوشت تازه و نان بریوش خانگی.",
-    ownerName: "سپهر آزاد",
-    ownerEmail: "owner@burger-lab.ir",
-    templateId: "ember",
-    theme: { primary: "#dc2626", secondary: "#f59e0b" },
-    planCode: "enterprise",
-    onlinePayment: true,
-    menu: RESTAURANT_MENU,
-    tableCount: 20,
-  });
-
+  // Restaurant accounts with months of trading come from the demo seed, which
+  // keeps these showcase menus and replaces everything else.
   await seedDemos();
-  await seedChain();
 
   console.log("\nDone.\n");
   console.log(
-    "Sign in with these numbers; the code is printed in the dev server console:",
+    "Restaurant accounts with months of history: npm run db:seed:demo " +
+      "(passwords and numbers are printed there).",
   );
-  console.log(`  chain owner    → ${devPhone("owner@karimi.ir")}`);
-  console.log(`  branch manager → ${devPhone("vanak@karimi.ir")}`);
-  console.log(`  owner   → ${devPhone("owner@cafe-nabsh.ir")}`);
-  console.log(`  owner   → ${devPhone("owner@burger-lab.ir")}`);
-  console.log(`  kitchen → ${devPhone("kitchen@cafe-nabsh.ir")}`);
-  console.log(`  admin   → ${DEV_ADMIN_PHONE}`);
-  console.log("\nTenant menus: /menu/cafe-nabsh · /menu/burger-lab");
+  console.log(`  platform admin → ${DEV_ADMIN_PHONE}`);
   console.log(
     "Homepage demos: /menu/demo-aurora · /menu/demo-ember · /menu/demo-linen · " +
       "/menu/demo-noir · /menu/demo-bazaar · /menu/demo-atlas · " +

@@ -58,6 +58,10 @@ npm run db:seed
 ```
 
 ```bash
+npm run db:seed:demo
+```
+
+```bash
 npm run dev
 ```
 
@@ -65,23 +69,29 @@ Open <http://localhost:3000>.
 
 ### Demo accounts
 
-Sign-in is **phone number + one-time code**; there are no passwords. In
-development no SMS is sent: the code is printed in the dev server console as
-`[otp:dev] LOGIN code for 09…: 12345`. Every seeded account has a stable test
-number (`prisma/dev-phones.ts`); the seed prints them when it finishes.
+Sign-in is **phone number + password**. An SMS code is needed only once, to
+prove a number at sign-up or to activate an account someone else created; in
+development it is printed in the dev server console as `[otp:dev] …`.
 
-| Role           | Number                       | Lands on     |
-| -------------- | ---------------------------- | ------------ |
-| Platform admin | `09000000000`                | `/admin`     |
-| Other accounts | printed by `npm run db:seed` | `/dashboard` |
+`npm run db:seed` creates the plans, the platform admin and the eleven
+**showcase menus** (`demo-*`, one per template, `isDemo: true` — the only
+restaurants the marketing site displays).
 
-The seed generates six weeks of orders with lunch/dinner peaks and busier
-Thursday–Friday weekends, so analytics and finance have something meaningful to
-show immediately.
+`npm run db:seed:demo` (development only) deletes every other restaurant and
+writes seven demo businesses covering every plan — a small café, a café on
+trial, an expired café, a medium-plan Persian restaurant, a large-plan burger
+house open until 02:00, an unlimited-plan rooftop restaurant and a four-site
+pizza chain — with five to six months of consistent history: guests, orders,
+payments, till closes, expenses, purchases, stock, waste and counts. The content
+is in `prisma/demo/catalog.ts`, the generator in `prisma/demo/history.ts`.
 
-It also creates four **showcase venues** — `demo-aurora`, `demo-ember`,
-`demo-linen`, `demo-noir` — one per template. These carry `isDemo: true` and are
-the only restaurants the marketing site is permitted to display.
+| Role           | Number                        | Password    | Lands on     |
+| -------------- | ----------------------------- | ----------- | ------------ |
+| Platform admin | `09000000000`                 | `admin1405` | `/admin`     |
+| Demo accounts  | `09120000001` – `09120000020` | `demo1405`  | `/dashboard` |
+
+The seed prints which number is which account. Guest numbers start at
+`09120010000`; none of these numbers is ever texted.
 
 ---
 
@@ -98,7 +108,8 @@ the only restaurants the marketing site is permitted to display.
 | `npm run format` / `format:check` | Prettier                             |
 | `npm run db:up` / `db:down`       | Start / stop the Postgres container  |
 | `npm run db:migrate`              | Create and apply a migration         |
-| `npm run db:seed`                 | Load demo data (idempotent)          |
+| `npm run db:seed`                 | Plans, admin and showcase menus      |
+| `npm run db:seed:demo`            | Replace other venues with demo data  |
 | `npm run db:reset`                | Drop, re-migrate and re-seed         |
 | `npm run db:studio`               | Prisma Studio                        |
 

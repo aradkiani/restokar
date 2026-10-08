@@ -1359,6 +1359,8 @@ export const StaffSchema = z
     /** The staff member signs in with this number. */
     phone: mobileSchema,
     tabs: z.array(z.string().max(40)).max(20).default([]),
+    /** Which of the owner's sites they work at; the owner's own venue if absent. */
+    siteId: z.string().trim().max(64).optional(),
     /**
      * Optional first password, set by the owner and handed over in person.
      * Empty means the staff member activates the account with one code and

@@ -222,24 +222,44 @@ break it.
 
 ## Authentication
 
-**Sign-in is phone + one-time SMS code. There are no passwords.** The phone is
-the account: `User.phone` is unique, stored as `09XXXXXXXXX` (`normalisePhone`)
-and CHECK-constrained. Codes are issued and checked in `auth/otp-server.ts` on
-top of the pure rules in `sms/otp.ts`:
+**Sign-in is phone + password. An SMS code is sent only to prove a number
+once.** The phone is the account: `User.phone` is unique, stored as
+`09XXXXXXXXX` (`normalisePhone`) and CHECK-constrained.
 
-- Stored as an HMAC keyed with AUTH_SECRET and bound to number and purpose
-  (`SIGNUP`, `LOGIN`, `CHANGE_PHONE`); single use; 3-minute expiry; locked
-  after 5 wrong guesses; a new request deletes the previous unanswered codes.
-- 60 s resend cooldown, plus limits per number and per address (`OTP_LIMITS`).
-- **No answer reveals whether a number is registered.** Sign-in texts only an
-  active account's number and sign-up only an unregistered one, but both store
-  a challenge and answer identically, and the SMS is sent without being awaited
-  so response time says nothing either.
-- In development the code is printed to the console, never sent.
+Passwords (`auth/password.ts`, rules shared with the forms in
+`auth/password-rules.ts`):
 
-Accounts created by someone else (staff, branch managers, admin-created owners)
-start with `phoneVerifiedAt` null; their first sign-in proves the number.
-Changing a number sends the code to the _new_ number (`/api/account/phone`).
+- At least 8 characters with a letter and a digit, not the phone number, not
+  one of the common few. Persian digits count as their ASCII twins.
+- Stored with scrypt from `node:crypto` (N=2^15, r=8, p=1) as
+  `scrypt$N$r$p$salt$hash`, so the cost can be raised without breaking any
+  stored password. An unknown number is checked against a decoy hash, so the
+  response time does not reveal which numbers are registered.
+- Wrong passwords are counted per number (5 in 15 minutes) and per address
+  (20), in the same Postgres counters as every other limit
+  (`auth/login-guard.ts`); a correct password clears that number's count. An
+  unknown number and a wrong password get the same `LOGIN_FAILED`.
+- Changed from `/dashboard/account` (or `/admin/account`) with the current
+  password; every other session of the account is ended.
+- **Forgot password is not built yet** — a decision for the owner (reset by SMS
+  code, or reset by the venue owner / platform staff). Until then the login
+  page tells staff to ask their manager and owners to contact support.
+
+One-time codes (`auth/otp-server.ts` on top of `sms/otp.ts`) are used only
+for `SIGNUP` (prove the number, set the password, create the venue),
+activation (an account someone else created — staff, branch manager,
+admin-created owner — that has no password yet; stored under the `LOGIN`
+purpose and refused once a password exists, so a code can never reset one) and
+`CHANGE_PHONE`. Codes are an HMAC bound to number and purpose; single use;
+3-minute expiry; locked after 5 wrong guesses; 60 s resend cooldown plus limits
+per number and per address. No answer reveals whether a number is registered.
+In development the code is printed to the console, never sent.
+
+Staff and branch-manager accounts can be given a first password by the owner,
+handed over in person; otherwise the holder activates the account with one
+code. A chain owner creates staff for any branch from the staff page; a branch
+account can hold only what a branch has (never menu or design). Changing a
+number sends the code to the _new_ number (`/api/account/phone`).
 
 `src/proxy.ts` (Next 16's renamed middleware) verifies the cookie's _signature_
 at the edge and redirects when it is missing — it cannot check revocation,
@@ -258,6 +278,33 @@ the guards in `auth/guards.ts`:
 | `requireAdmin()`                | The platform console                           |
 
 Every one of them derives the tenant from the session.
+
+---
+
+## Business day
+
+Every site can set its own hours (`Restaurant.businessDayStart/End`, minutes of
+the day, both or neither). A branch with none uses its chain's; a site with
+none uses the plain Tehran calendar day. Hours may cross midnight: a café open
+17:00–03:00 files an order at 01:30 under the evening before.
+
+- `lib/business-day.ts` (pure): the cutoff is the middle of the closed hours,
+  and a business date is named after the calendar date it opens on.
+  `business-day-server.ts` reads a site's hours (`getSiteHours`) and gives its
+  business "today".
+- **Past records never move.** `Order.businessDate` and
+  `StockMovement.businessDate` are written once, at creation, from the hours in
+  force then. Changing the hours affects new records only; existing ones were
+  backfilled with their Tehran calendar date when the column arrived.
+- Every report reads by business date, never by a `placedAt` range: analytics,
+  finance, tables, chain, dashboard insights, sales comparisons, exports and the
+  till close (asserted by `business-day-reports.test.ts`). Rolling windows
+  ("last 7 days") are anchored on the site's business today (`siteRange`).
+- The till close (`/dashboard/orders/close`) closes one business date: opening
+  float + cash taken on that date's orders = what the drawer should hold.
+- Expenses are dated by the day the owner picks, which is its business day.
+- Owners set hours in Settings → «ساعت کاری و روز کاری», and per branch on the
+  branches page (`PUT /api/business-day`, owner only, audited).
 
 ---
 

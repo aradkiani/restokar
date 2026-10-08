@@ -445,6 +445,9 @@ export const en: Dictionary = {
     staffPhone: "Mobile number",
     staffPhoneHint: "They sign in with this number and a password.",
     staffAccess: "Access",
+    staffSite: "Works at",
+    staffSiteHint:
+      "Branch staff see only that branch's orders, till, stock and reports; the menu and design belong to the head office.",
     staffAdd: "Create account",
     noStaff: "No staff accounts yet",
     staffRemoveConfirm: "Remove this account?",
@@ -679,7 +682,9 @@ export const en: Dictionary = {
     start: "Opens at",
     end: "Closes at",
     explain:
-      "The business day runs {start}–{end}. It changes at {cutoff} (the middle of the closed hours); an order before {cutoff} counts in the previous business day.",
+      "The business day runs {start}–{end} and changes at {cutoff} (the middle of the closed hours); an order after midnight and before {cutoff} counts in the previous business day.",
+    explainEarlyClose:
+      "The business day runs {start}–{end} and changes at {cutoff} (the middle of the closed hours); an order after {cutoff} counts in the next business day.",
     allDayExplain: "Open around the clock: the business day changes at {cutoff}.",
     calendarExplain:
       "The business day is the calendar day and changes at 00:00; orders after midnight count in the next day.",

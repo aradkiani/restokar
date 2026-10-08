@@ -1,16 +1,17 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import { KNOWN_CODE, clearRateLimits, forgetCodes, setKnownCode } from "./env";
+import { clearRateLimits, passwordFor } from "./env";
 
 /** Signs in through the login screen, exactly as a person would. */
-export async function signInWithUi(page: Page, phone: string): Promise<void> {
+export async function signInWithUi(
+  page: Page,
+  phone: string,
+  password = passwordFor(phone),
+): Promise<void> {
   await clearRateLimits();
-  await forgetCodes(phone);
   await page.goto("/login");
   await page.getByLabel("شمارهٔ موبایل").fill(phone);
-  await page.getByRole("button", { name: "دریافت کد تأیید" }).click();
-  await expect(page.getByLabel("کد تأیید")).toBeVisible();
-  await setKnownCode(phone);
-  await page.getByLabel("کد تأیید").fill(KNOWN_CODE);
+  await page.getByLabel("رمز عبور", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "ورود", exact: true }).click();
   await page.waitForURL(/\/(dashboard|admin)/);
 }
 
@@ -18,15 +19,10 @@ export async function signInWithUi(page: Page, phone: string): Promise<void> {
 export async function signInWithApi(
   request: APIRequestContext,
   phone: string,
+  password = passwordFor(phone),
 ): Promise<void> {
   await clearRateLimits();
-  await forgetCodes(phone);
-  const sent = await request.post("/api/auth/otp", { data: { phone, purpose: "LOGIN" } });
-  expect(sent.ok(), await sent.text()).toBeTruthy();
-  await setKnownCode(phone);
-  const login = await request.post("/api/auth/login", {
-    data: { phone, code: KNOWN_CODE },
-  });
+  const login = await request.post("/api/auth/login", { data: { phone, password } });
   expect(login.ok(), await login.text()).toBeTruthy();
 }
 
