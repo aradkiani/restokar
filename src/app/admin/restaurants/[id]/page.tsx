@@ -7,6 +7,7 @@ import { getRestaurantForAdmin } from "@/lib/admin";
 import { formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { Badge, Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExtendSubscriptionForm } from "./extend-form";
+import { SetPasswordButton } from "@/components/auth/set-password-button";
 
 export const metadata: Metadata = { title: "جزئیات رستوران", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -130,6 +131,20 @@ export default async function AdminRestaurantDetailPage({
           locale={locale}
         />
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t.team.ownerPasswordTitle}</CardTitle>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-xs leading-6 text-ink-500">{t.team.ownerPasswordHint}</p>
+          <SetPasswordButton
+            endpoint={`/api/admin/restaurants/${restaurant.id}/owner-password`}
+            name={restaurant.owner.name}
+            phone={restaurant.owner.phone}
+          />
+        </CardBody>
+      </Card>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>

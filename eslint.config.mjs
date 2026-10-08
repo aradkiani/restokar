@@ -20,6 +20,9 @@ const config = [
       "src/generated/**",
       "next-env.d.ts",
       "public/**",
+      // Playwright output: a failed run leaves a bundled trace viewer here.
+      "playwright-report/**",
+      "test-results/**",
     ],
   },
 

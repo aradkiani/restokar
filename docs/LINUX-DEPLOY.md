@@ -486,6 +486,14 @@ cd /srv/restokar && sed -i '/ENABLE_PUBLIC_REGISTRATION/d' .env && sudo systemct
 Sign in at `https://yourdomain.com/login`. You should land on `/admin`, where
 `Create customer account` onboards restaurants.
 
+If you ever forget the admin password: the sign-in page's "forgot password"
+deliberately does not work for the platform admin (a stolen SIM must not open
+the console). Set a new one from the server instead:
+
+```bash
+cd /srv/restokar && sudo -u restokar npm run user:set-password -- 09XXXXXXXXX
+```
+
 ---
 
 ## 13. Turn on backups

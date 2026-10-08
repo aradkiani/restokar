@@ -89,9 +89,10 @@ export const OtpRequestSchema = z.object({
   phone: mobileSchema,
   /**
    * SIGNUP proves a new number; ACTIVATE proves the number of an account that
-   * has no password yet. Sign-in itself never uses a code.
+   * has no password yet; RESET lets the holder of a forgotten password choose
+   * a new one. Sign-in itself never uses a code.
    */
-  purpose: z.enum(["SIGNUP", "ACTIVATE"]),
+  purpose: z.enum(["SIGNUP", "ACTIVATE", "RESET"]),
   /**
    * Sign-up only: the menu address the person chose, checked before a code is
    * sent so a taken address is reported now rather than after they have typed
@@ -210,6 +211,16 @@ export const LoginSchema = z.object({
 export const ActivateSchema = z
   .object({ phone: mobileSchema, code: otpCodeSchema, password: passwordInputSchema })
   .superRefine((value, ctx) => checkNewPassword(value.password, value.phone, ctx));
+
+/** A forgotten password: the number, the texted code and the new password. */
+export const ResetPasswordSchema = ActivateSchema;
+
+/**
+ * Someone with authority over an account — the venue owner for their staff and
+ * branch managers, platform staff for an owner — choosing its new password, to
+ * hand over in person. The phone check happens in the route.
+ */
+export const SetPasswordSchema = z.object({ password: passwordInputSchema });
 
 /** Changing one's own password; the phone check happens in the route. */
 export const PasswordChangeSchema = z.object({

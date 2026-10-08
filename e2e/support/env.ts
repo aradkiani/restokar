@@ -104,7 +104,7 @@ export async function clearRateLimits(): Promise<void> {
  */
 export async function setKnownCode(
   phone: string,
-  purpose: "LOGIN" | "SIGNUP" | "CHANGE_PHONE" = "LOGIN",
+  purpose: "LOGIN" | "SIGNUP" | "CHANGE_PHONE" | "RESET_PASSWORD" = "LOGIN",
 ): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt++) {
     const { rows } = await db.query<{ id: string }>(

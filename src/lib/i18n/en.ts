@@ -148,7 +148,13 @@ export const en: Dictionary = {
       "If set, hand it over in person so they can sign in at once and change it under My account. If left empty, they activate the account with one texted code and choose their own.",
     forgotPassword: "Forgot your password?",
     forgotPasswordHint:
-      "Staff and branch managers: ask the venue owner. Owners: contact Restokar support.",
+      "Staff and branch managers can also ask the venue owner to set a new password.",
+    resetTitle: "Reset your password",
+    resetSubtitle:
+      "Enter the account's mobile number and a new password. We confirm the number with one texted code and change the password; every device signed in to this account is signed out.",
+    resetCodeHint: "A code is only sent to a number that has an active Restokar account.",
+    submitReset: "Save the new password and sign in",
+    resetRemembered: "Remembered it?",
     registerPasswordHint:
       "From now on you sign in with your mobile number and this password.",
     loginTitle: "Sign in",
@@ -190,6 +196,21 @@ export const en: Dictionary = {
     savePassword: "Save new password",
     passwordChanged: "Password changed. Your other devices were signed out.",
     signedInAs: "Signed in as",
+  },
+  team: {
+    setPassword: "New password",
+    setPasswordFor: "New password for {name}",
+    generatePassword: "Make one up",
+    savePassword: "Save password",
+    setPasswordHint:
+      "Give it to them in person or by phone. Saving signs this account out everywhere; from now on they use the new password.",
+    passwordSet: "New password saved for {name}.",
+    managersTitle: "Branch managers",
+    managersHint:
+      "If a branch manager forgets their password, set a new one here or have them use “Forgot your password?” on the sign-in page.",
+    ownerPasswordTitle: "Owner's password",
+    ownerPasswordHint:
+      "Only once you are sure it is the owner (for example a call from the registered number). Give the password in person or by phone; all their devices are signed out.",
   },
   dashboard: {
     firstStepsTitle: "First steps",

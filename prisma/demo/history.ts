@@ -236,6 +236,7 @@ export interface RuntimeProduct {
   orderable: boolean;
   groups: { name: string; required: boolean; max: number; choices: RuntimeChoice[] }[];
   recipe: { itemId: string; perUnitMilli: number }[];
+  featured: boolean;
 }
 
 export interface RuntimeItem {
@@ -274,6 +275,8 @@ export interface Business {
   pricing: PricingOptions;
   /** Price rise day: orders before it carry the old prices. */
   priceRiseAt: Date;
+  /** Dish → the dishes suggested under it on the menu. */
+  suggestions: Map<string, string[]>;
   now: Date;
 }
 
@@ -310,6 +313,8 @@ export interface History {
   stocktakeLines: Prisma.StocktakeLineCreateManyInput[];
   movements: Prisma.StockMovementCreateManyInput[];
   levels: Prisma.StockLevelCreateManyInput[];
+  featuredEvents: Prisma.FeaturedProductEventCreateManyInput[];
+  suggestionEvents: Prisma.RecommendationEventCreateManyInput[];
   /** Latest price paid per item, for the catalogue's reference price. */
   referencePrices: Map<string, { price: number; at: Date }>;
   sequences: Map<string, number>;
@@ -356,6 +361,8 @@ export function generateHistory(business: Business): History {
     stocktakeLines: [],
     movements: [],
     levels: [],
+    featuredEvents: [],
+    suggestionEvents: [],
     referencePrices: new Map(),
     sequences: new Map(),
   };
@@ -551,6 +558,10 @@ interface Line {
   choices: { group: string; choice: RuntimeChoice }[];
   quantity: number;
   note: string | null;
+  /** Added from the suggestion shown under this dish. */
+  recommendedFrom?: string;
+  /** Found through the featured strip at the top of the menu. */
+  fromFeatured?: boolean;
 }
 
 function composeBasket(
@@ -564,6 +575,14 @@ function composeBasket(
   const add = (role: Role, quantity = 1) => {
     const product = pickProduct(business, role, minuteOfDay, rand);
     if (!product) return false;
+    addProduct(product, quantity);
+    return true;
+  };
+  function addProduct(
+    product: RuntimeProduct,
+    quantity: number,
+    extra: Pick<Line, "recommendedFrom"> = {},
+  ) {
     const choices: Line["choices"] = [];
     for (const group of product.groups) {
       if (group.required) {
@@ -583,9 +602,10 @@ function composeBasket(
       }
     }
     const note = rand() < 0.04 ? pick(rand, LINE_NOTES[business.spec.profile]) : null;
-    lines.push({ product, choices, quantity, note });
-    return true;
-  };
+    // Some guests reach a featured dish through the strip at the top.
+    const fromFeatured = product.featured && !extra.recommendedFrom && rand() < 0.3;
+    lines.push({ product, choices, quantity, note, fromFeatured, ...extra });
+  }
 
   const breakfastNow =
     basket.breakfast !== undefined &&
@@ -609,10 +629,21 @@ function composeBasket(
   if (basket.retail && rand() < basket.retail) add("retail");
   if (lines.length === 0 && !add(basket.main ? "main" : "drink")) add("drink");
 
+  // Now and then a guest takes the suggestion shown under a dish they chose.
+  for (const line of [...lines]) {
+    const targets = business.suggestions.get(line.product.id);
+    if (!targets || rand() > 0.12) continue;
+    const target = business.products.find(
+      (p) => p.id === pick(rand, targets) && p.orderable,
+    );
+    if (!target || lines.some((l) => l.product.id === target.id)) continue;
+    addProduct(target, 1, { recommendedFrom: line.product.id });
+  }
+
   // Two of the same dish with the same choices are one line of two.
   const merged = new Map<string, Line>();
   for (const line of lines) {
-    const key = `${line.product.id}|${line.choices.map((c) => c.choice.name).join(",")}|${line.note ?? ""}`;
+    const key = `${line.product.id}|${line.choices.map((c) => c.choice.name).join(",")}|${line.note ?? ""}|${line.recommendedFrom ?? ""}|${line.fromFeatured ? 1 : 0}`;
     const existing = merged.get(key);
     if (existing) existing.quantity += line.quantity;
     else merged.set(key, { ...line });
@@ -782,6 +813,8 @@ function buildOrder(
       costSnapshot: oldPrices ? line.product.oldCost : line.product.cost,
       quantity: line.quantity,
       note: line.note,
+      recommendedFromProductId: line.recommendedFrom ?? null,
+      fromFeatured: line.fromFeatured ?? false,
     });
     line.choices.forEach((c, sortOrder) =>
       history.options.push({
@@ -880,6 +913,10 @@ function buildOrder(
     }
   }
 
+  if (!manual && now.getTime() - placedAt.getTime() < 90 * DAY) {
+    recordBrowsing(business, lines, placedAt, rand, history);
+  }
+
   // What the order takes off the shelf: the recipe of every line.
   const consumption = new Map<string, number>();
   for (const line of lines) {
@@ -893,6 +930,109 @@ function buildOrder(
   }
 
   return { row, siteId: site.id, businessKey, consumption };
+}
+
+// ------------------------------------------------------------ browsing
+
+/**
+ * What the menu reported while this guest browsed: the featured strip seen,
+ * suggestions shown under the dishes they opened, and the taps that led to
+ * the basket. Plus, for about half the orders, someone else who browsed the
+ * same menu and left without ordering.
+ */
+function recordBrowsing(
+  business: Business,
+  lines: Line[],
+  placedAt: Date,
+  rand: Rand,
+  history: History,
+) {
+  const restaurantId = business.menuOwnerId;
+  const featured = business.products.filter((p) => p.featured);
+  const at = (minutes: number) => new Date(placedAt.getTime() - minutes * MINUTE);
+
+  const session = hexToken(rand, 32);
+  for (const product of featured) {
+    const bought = lines.some((l) => l.product.id === product.id && l.fromFeatured);
+    history.featuredEvents.push({
+      id: nextId("fe"),
+      restaurantId,
+      productId: product.id,
+      type: "IMPRESSION",
+      sessionKey: session,
+      createdAt: at(7),
+    });
+    if (bought || rand() < 0.06) {
+      history.featuredEvents.push({
+        id: nextId("fe"),
+        restaurantId,
+        productId: product.id,
+        type: "VIEW",
+        sessionKey: session,
+        createdAt: at(6),
+      });
+    }
+    if (bought) {
+      history.featuredEvents.push({
+        id: nextId("fe"),
+        restaurantId,
+        productId: product.id,
+        type: "ADD_TO_CART",
+        sessionKey: session,
+        createdAt: at(5),
+      });
+    }
+  }
+
+  const sources = new Set(lines.map((l) => l.product.id));
+  for (const source of sources) {
+    for (const target of business.suggestions.get(source) ?? []) {
+      const taken = lines.some(
+        (l) => l.product.id === target && l.recommendedFrom === source,
+      );
+      const event = (
+        type: "IMPRESSION" | "INTERACTION" | "ADD_TO_CART",
+        minutes: number,
+      ) =>
+        history.suggestionEvents.push({
+          id: nextId("re"),
+          restaurantId,
+          sourceProductId: source,
+          recommendedProductId: target,
+          type,
+          sessionKey: session,
+          createdAt: at(minutes),
+        });
+      event("IMPRESSION", 4);
+      if (taken || rand() < 0.1) event("INTERACTION", 3);
+      if (taken) event("ADD_TO_CART", 3);
+    }
+  }
+
+  if (rand() < 0.5) {
+    const browser = hexToken(rand, 32);
+    const when = at(int(rand, 20, 240));
+    for (const product of featured) {
+      history.featuredEvents.push({
+        id: nextId("fe"),
+        restaurantId,
+        productId: product.id,
+        type: "IMPRESSION",
+        sessionKey: browser,
+        createdAt: when,
+      });
+      if (rand() < 0.05) {
+        history.featuredEvents.push({
+          id: nextId("fe"),
+          restaurantId,
+          productId: product.id,
+          type: "VIEW",
+          sessionKey: browser,
+          createdAt: new Date(when.getTime() + MINUTE),
+        });
+      }
+    }
+  }
 }
 
 // ----------------------------------------------------------------- stock

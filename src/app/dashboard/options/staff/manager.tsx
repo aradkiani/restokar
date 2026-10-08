@@ -11,6 +11,7 @@ import { api } from "@/lib/client-api";
 import { localizeApiError, localizeFieldErrors } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { EXCLUSIVE_TABS, grantableTabs, type StaffTab } from "@/lib/staff-tabs";
+import { SetPasswordButton } from "@/components/auth/set-password-button";
 
 interface StaffRow {
   id: string;
@@ -42,9 +43,11 @@ interface Site {
 export function StaffManager({
   initialStaff,
   sites,
+  managers = [],
 }: {
   initialStaff: StaffRow[];
   sites: Site[];
+  managers?: { id: string; name: string; phone: string | null; siteId: string }[];
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -337,12 +340,49 @@ export function StaffManager({
                       {t.options.staffNoAccess}
                     </p>
                   )}
+
+                  <SetPasswordButton
+                    endpoint={`/api/staff/${row.id}/password`}
+                    name={row.name}
+                    phone={row.phone}
+                  />
                 </li>
               ))}
             </ul>
           )}
         </CardBody>
       </Card>
+
+      {managers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t.team.managersTitle}</CardTitle>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <p className="text-xs leading-6 text-ink-500">{t.team.managersHint}</p>
+            <ul className="divide-y divide-ink-100">
+              {managers.map((manager) => (
+                <li key={manager.id} className="space-y-2 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-extrabold">{manager.name}</p>
+                    <p dir="ltr" className="truncate text-xs text-ink-500">
+                      {manager.phone}
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] font-bold text-brand-700">
+                      {siteById.get(manager.siteId)?.name}
+                    </p>
+                  </div>
+                  <SetPasswordButton
+                    endpoint={`/api/staff/${manager.id}/password`}
+                    name={manager.name}
+                    phone={manager.phone}
+                  />
+                </li>
+              ))}
+            </ul>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

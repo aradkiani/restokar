@@ -15,7 +15,7 @@ time: how the pieces fit, and where to go to change something.
 | Framework  | Next.js 16, App Router, Turbopack                                                            |
 | UI         | React 19, TypeScript strict, Tailwind CSS 4 (CSS-first, configured in `src/app/globals.css`) |
 | Database   | PostgreSQL 16 via Prisma 7 with the `pg` driver adapter                                      |
-| Auth       | Phone + one-time SMS code; a JWT in an httpOnly cookie, backed by revocable `Session` rows   |
+| Auth       | Phone + password (SMS code only to prove a number); JWT cookie backed by `Session` rows      |
 | Validation | Zod 4, shared between API routes and forms                                                   |
 | Tests      | Vitest                                                                                       |
 
@@ -241,12 +241,25 @@ Passwords (`auth/password.ts`, rules shared with the forms in
   unknown number and a wrong password get the same `LOGIN_FAILED`.
 - Changed from `/dashboard/account` (or `/admin/account`) with the current
   password; every other session of the account is ended.
-- **Forgot password is not built yet** — a decision for the owner (reset by SMS
-  code, or reset by the venue owner / platform staff). Until then the login
-  page tells staff to ask their manager and owners to contact support.
+- **Forgotten password**, three ways back, all through one writer
+  (`auth/set-password.ts`: new hash, every session ended, wrong-password count
+  cleared, audited):
+  - `/login/reset` — the holder proves the number with one texted code
+    (purpose `RESET_PASSWORD`) and chooses a new password. Never for the
+    platform admin: the code route does not text one and the reset route
+    refuses one, so a stolen SIM cannot open the console.
+  - The venue owner sets a new password for a staff member or branch manager
+    from the staff page (`POST /api/staff/[id]/password`, own sites only).
+  - Platform staff set one for an owner from the restaurant's admin page
+    (`POST /api/admin/restaurants/[id]/owner-password`, rate limited), after
+    confirming who is asking.
+  - Anyone, including the admin, from the server's shell:
+    `npm run user:set-password -- 09XXXXXXXXX` (asks for the password on the
+    terminal, so it stays out of the shell history).
 
 One-time codes (`auth/otp-server.ts` on top of `sms/otp.ts`) are used only
 for `SIGNUP` (prove the number, set the password, create the venue),
+`RESET_PASSWORD` (above),
 activation (an account someone else created — staff, branch manager,
 admin-created owner — that has no password yet; stored under the `LOGIN`
 purpose and refused once a password exists, so a code can never reset one) and

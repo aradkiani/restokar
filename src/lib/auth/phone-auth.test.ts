@@ -33,11 +33,14 @@ describe("password sign-in", () => {
     expect(login).toMatch(/decoyHash\(\)/);
   });
 
-  it("asks for a code only to prove a number: sign-up and activation", () => {
+  it("asks for a code only to prove a number: sign-up, activation, reset", () => {
     const otp = read("app/api/auth/otp/route.ts");
     expect(otp).toMatch(/"SIGNUP"/);
     expect(read("lib/validation.ts")).toMatch(
-      /purpose: z\.enum\(\["SIGNUP", "ACTIVATE"\]\)/,
+      /purpose: z\.enum\(\["SIGNUP", "ACTIVATE", "RESET"\]\)/,
+    );
+    expect(read("app/api/auth/reset/route.ts")).toMatch(
+      /verifyOtp\(\{[\s\S]*purpose: "RESET_PASSWORD"/,
     );
     expect(read("app/api/auth/register/route.ts")).toMatch(/verifyOtp\(/);
     expect(read("app/api/auth/activate/route.ts")).toMatch(/verifyOtp\(/);
@@ -46,6 +49,36 @@ describe("password sign-in", () => {
   it("never lets activation replace an existing password", () => {
     const activate = read("app/api/auth/activate/route.ts");
     expect(activate).toMatch(/isPasswordHash\(user\.passwordHash\)/);
+  });
+
+  it("never resets the platform admin by text message", () => {
+    // The code route does not text an admin a reset code, and the reset route
+    // refuses one even with a valid code.
+    expect(read("app/api/auth/otp/route.ts")).toMatch(/holder\?\.role !== "SUPER_ADMIN"/);
+    expect(read("app/api/auth/reset/route.ts")).toMatch(/user\.role === "SUPER_ADMIN"/);
+  });
+
+  it("signs a reset account out everywhere", () => {
+    const writer = read("lib/auth/set-password.ts");
+    expect(writer).toMatch(/hashPassword\(/);
+    expect(writer).toMatch(/session\.deleteMany\(\{ where: \{ userId: user\.id \} \}\)/);
+    for (const path of [
+      "app/api/auth/reset/route.ts",
+      "app/api/staff/[id]/password/route.ts",
+      "app/api/admin/restaurants/[id]/owner-password/route.ts",
+    ]) {
+      expect(read(path), path).toMatch(/replacePassword\(/);
+    }
+  });
+
+  it("lets an owner reset only their own staff and branch managers", () => {
+    const team = read("app/api/staff/[id]/password/route.ts");
+    expect(team).toMatch(/requireOwner\(\)/);
+    expect(team).toMatch(/role: \{ in: \["STAFF", "BRANCH_MANAGER"\] \}/);
+    expect(team).toMatch(/restaurantId: \{ in: sites\.map/);
+    expect(read("app/api/admin/restaurants/[id]/owner-password/route.ts")).toMatch(
+      /requireAdmin\(\)/,
+    );
   });
 
   it("stores passwords only as hashes", () => {

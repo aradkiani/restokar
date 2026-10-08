@@ -97,21 +97,22 @@ The seed prints which number is which account. Guest numbers start at
 
 ## Scripts
 
-| Command                           | Does                                 |
-| --------------------------------- | ------------------------------------ |
-| `npm run dev`                     | Development server                   |
-| `npm run build`                   | `prisma generate` + production build |
-| `npm start`                       | Serve the production build           |
-| `npm run verify`                  | typecheck → lint → format check      |
-| `npm run typecheck`               | `tsc --noEmit`                       |
-| `npm run lint` / `lint:fix`       | ESLint                               |
-| `npm run format` / `format:check` | Prettier                             |
-| `npm run db:up` / `db:down`       | Start / stop the Postgres container  |
-| `npm run db:migrate`              | Create and apply a migration         |
-| `npm run db:seed`                 | Plans, admin and showcase menus      |
-| `npm run db:seed:demo`            | Replace other venues with demo data  |
-| `npm run db:reset`                | Drop, re-migrate and re-seed         |
-| `npm run db:studio`               | Prisma Studio                        |
+| Command                            | Does                                          |
+| ---------------------------------- | --------------------------------------------- |
+| `npm run dev`                      | Development server                            |
+| `npm run build`                    | `prisma generate` + production build          |
+| `npm start`                        | Serve the production build                    |
+| `npm run verify`                   | typecheck → lint → format check               |
+| `npm run typecheck`                | `tsc --noEmit`                                |
+| `npm run lint` / `lint:fix`        | ESLint                                        |
+| `npm run format` / `format:check`  | Prettier                                      |
+| `npm run db:up` / `db:down`        | Start / stop the Postgres container           |
+| `npm run db:migrate`               | Create and apply a migration                  |
+| `npm run db:seed`                  | Plans, admin and showcase menus               |
+| `npm run db:seed:demo`             | Replace other venues with demo data           |
+| `npm run user:set-password -- 09…` | New password for any account, from the server |
+| `npm run db:reset`                 | Drop, re-migrate and re-seed                  |
+| `npm run db:studio`                | Prisma Studio                                 |
 
 Run `npm run verify` before pushing.
 

@@ -22,9 +22,24 @@ export default async function StaffPage() {
     select: { id: true, name: true, phone: true, staffTabs: true, restaurantId: true },
   });
 
+  // Branch managers are not staff — their access comes with the role — but the
+  // owner is who resets their password, so they are listed here too.
+  const managers = await prisma.user.findMany({
+    where: {
+      restaurantId: { in: sites.filter((site) => site.isBranch).map((site) => site.id) },
+      role: "BRANCH_MANAGER",
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, phone: true, restaurantId: true },
+  });
+
   return (
     <StaffManager
       sites={sites}
+      managers={managers.map(({ restaurantId: siteId, ...row }) => ({
+        ...row,
+        siteId: siteId ?? restaurantId,
+      }))}
       initialStaff={staff.map(({ restaurantId: siteId, ...row }) => ({
         ...row,
         siteId: siteId ?? restaurantId,

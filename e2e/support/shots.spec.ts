@@ -19,6 +19,8 @@ const SHOTS: [string, string, string][] = [
   [PHONES.largeOwner, "/dashboard/customers", "large-customers"],
   [PHONES.smallOwner, "/dashboard", "small-dashboard"],
   [PHONES.mediumOwner, "/dashboard/analytics?period=last90", "medium-analytics"],
+  [PHONES.largeOwner, "/dashboard/menu/merchandising", "large-merchandising"],
+  [PHONES.admin, "/admin/restaurants", "admin-restaurants"],
 ];
 
 test("screens fed by the demo data", async ({ page }) => {

@@ -20,7 +20,8 @@ test.describe("attacker mindset", () => {
       customer: string;
     }>(
       `SELECT
-         (SELECT o.id FROM "Order" o WHERE o."restaurantId" = r.id LIMIT 1) AS "order",
+         (SELECT o.id FROM "Order" o WHERE o."restaurantId" = r.id
+            AND o.status = 'DELIVERED' LIMIT 1) AS "order",
          (SELECT p.id FROM "Product" p WHERE p."restaurantId" = r.id LIMIT 1) AS product,
          (SELECT c.id FROM "Category" c WHERE c."restaurantId" = r.id LIMIT 1) AS category,
          (SELECT c.id FROM "Customer" c WHERE c."restaurantId" = r.id LIMIT 1) AS customer
@@ -38,11 +39,19 @@ test.describe("attacker mindset", () => {
     for (const response of await Promise.all(attempts)) {
       expect.soft(response.status(), response.url()).toBeGreaterThanOrEqual(400);
     }
-    const untouched = await one<{ status: string }>(
-      `SELECT status FROM "Order" WHERE id = $1`,
-      [theirs.order],
+    const untouched = await one<{ status: string; price: number }>(
+      `SELECT o.status, p.price FROM "Order" o, "Product" p WHERE o.id = $1 AND p.id = $2`,
+      [theirs.order, theirs.product],
     );
-    expect(untouched.status).not.toBe("CANCELED");
+    expect(untouched.status).toBe("DELIVERED");
+    expect(untouched.price).toBeGreaterThan(1);
+    expect(
+      (
+        await one<{ n: string }>(`SELECT count(*) AS n FROM "Category" WHERE id = $1`, [
+          theirs.category,
+        ])
+      ).n,
+    ).toBe("1");
   });
 
   test("the subscription amount cannot be set by the client", async ({ page }) => {

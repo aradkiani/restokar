@@ -18,13 +18,23 @@ type Step =
   | { kind: "code"; phone: string; codeLength: number; cooldownSeconds: number };
 
 /**
- * Activating an account that has no password yet: the number and the password
- * first — so a weak password is caught before any text is sent — then the one
- * code that proves the number. After this, sign-in is phone and password.
+ * Choosing a password with one texted code: the number and the password first
+ * — so a weak password is caught before any text is sent — then the code that
+ * proves the number. After this, sign-in is phone and password.
+ *
+ * Two doors, one form: activating an account someone else created (it has no
+ * password yet) and resetting a forgotten password. The server keeps them
+ * apart — different code purposes, different rules on who gets a text.
  */
 export function ActivateForm() {
+  return <PasswordByCodeForm mode="activate" />;
+}
+
+export function PasswordByCodeForm({ mode }: { mode: "activate" | "reset" }) {
   const { t } = useI18n();
   const router = useRouter();
+  const purpose = mode === "reset" ? "RESET" : "ACTIVATE";
+  const endpoint = mode === "reset" ? "/api/auth/reset" : "/api/auth/activate";
 
   const [phone, setPhone] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -53,11 +63,7 @@ export function ActivateForm() {
     }
 
     setLoading(true);
-    const result = await requestCode(
-      "/api/auth/otp",
-      { phone: parsed.data, purpose: "ACTIVATE" },
-      t,
-    );
+    const result = await requestCode("/api/auth/otp", { phone: parsed.data, purpose }, t);
     setLoading(false);
 
     if (result.ok) {
@@ -75,7 +81,7 @@ export function ActivateForm() {
   }
 
   async function activate(phoneNumber: string, code: string): Promise<string | null> {
-    const result = await api.post<{ redirectTo: string }>("/api/auth/activate", {
+    const result = await api.post<{ redirectTo: string }>(endpoint, {
       phone: phoneNumber,
       code,
       password,
@@ -95,11 +101,7 @@ export function ActivateForm() {
   }
 
   async function resend(phoneNumber: string): Promise<ResendResult> {
-    const result = await requestCode(
-      "/api/auth/otp",
-      { phone: phoneNumber, purpose: "ACTIVATE" },
-      t,
-    );
+    const result = await requestCode("/api/auth/otp", { phone: phoneNumber, purpose }, t);
     return result.ok
       ? { cooldownSeconds: result.cooldownSeconds }
       : { error: result.error, retryAfterSeconds: result.retryAfterSeconds };
@@ -111,8 +113,8 @@ export function ActivateForm() {
         phone={step.phone}
         codeLength={step.codeLength}
         cooldownSeconds={step.cooldownSeconds}
-        hint={t.auth.activateCodeHint}
-        submitLabel={t.auth.submitActivate}
+        hint={mode === "reset" ? t.auth.resetCodeHint : t.auth.activateCodeHint}
+        submitLabel={mode === "reset" ? t.auth.submitReset : t.auth.submitActivate}
         onSubmit={(code) => activate(step.phone, code)}
         onResend={() => resend(step.phone)}
         onEditPhone={() => setStep({ kind: "details" })}

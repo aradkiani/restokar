@@ -177,9 +177,10 @@ test.describe("an account someone else created activates once with a code", () =
       await page.context().clearCookies();
       await signInWithApi(page.request, phone, password);
 
-      // A second activation is refused — a code can never reset a password,
-      // even a correct one. The request itself is answered like any other, so
-      // it reveals nothing, and no SMS goes out.
+      // A second activation is refused: an activation code cannot replace a
+      // password, even a correct one — forgetting it is the reset flow's job,
+      // with its own code. The request is answered like any other, so it
+      // reveals nothing, and no SMS goes out.
       await page.context().clearCookies();
       await clearRateLimits();
       await forgetCodes(phone);
@@ -290,5 +291,138 @@ test.describe("new owner signs up alone", () => {
     await page.getByLabel("آدرس منو").fill(SLUGS.small);
     await page.getByRole("button", { name: "دریافت کد تأیید" }).click();
     await expect(page.locator("body")).toContainText("این آدرس قبلاً انتخاب شده است");
+  });
+});
+
+test.describe("a forgotten password", () => {
+  test.beforeEach(async () => {
+    await clearRateLimits();
+  });
+
+  test("is reset with one texted code, and every other device is signed out", async ({
+    page,
+    request,
+  }, testInfo) => {
+    const phone = PHONES.mediumOwner;
+    const fresh = `yadam${testInfo.project.name.length}${Date.now() % 10_000}`;
+    // A device that stayed signed in with the old password.
+    await signInWithApi(request, phone);
+    expect((await request.get("/api/staff")).ok()).toBeTruthy();
+
+    try {
+      await forgetCodes(phone);
+      await page.goto("/login");
+      await page.getByRole("link", { name: "رمز عبور را فراموش کرده‌اید؟" }).click();
+      await page.waitForURL(/\/login\/reset/);
+      await page.getByLabel("شمارهٔ موبایل").fill(phone);
+      await page.getByRole("textbox", { name: /^رمز عبور تازه/ }).fill(fresh);
+      await page.getByRole("textbox", { name: "تکرار رمز عبور" }).fill(fresh);
+      await page.getByRole("button", { name: "دریافت کد تأیید" }).click();
+      await expect(page.getByLabel("کد تأیید")).toBeVisible();
+      await setKnownCode(phone, "RESET_PASSWORD");
+      await page.getByLabel("کد تأیید").fill(KNOWN_CODE);
+      await page.waitForURL(/\/dashboard/);
+
+      // The old device is out; the old password no longer opens the account.
+      expect((await request.get("/api/staff")).status()).toBe(401);
+      const old = await page.request.post("/api/auth/login", {
+        data: { phone, password: DEMO_PASSWORD },
+      });
+      expect(old.status()).toBe(401);
+    } finally {
+      await clearRateLimits();
+      await signInWithApi(page.request, phone, fresh).catch(() => undefined);
+      await page.request.post("/api/account/password", {
+        data: { currentPassword: fresh, newPassword: DEMO_PASSWORD },
+      });
+    }
+    await signInWithApi(page.request, phone);
+  });
+
+  test("is never reset by text for the platform admin", async ({ request }) => {
+    await forgetCodes(PHONES.admin);
+    // Answered like any other number, so the request reveals nothing…
+    const asked = await request.post("/api/auth/otp", {
+      data: { phone: PHONES.admin, purpose: "RESET" },
+    });
+    expect(asked.ok()).toBeTruthy();
+    // …but even a correct code does not replace the admin's password.
+    await setKnownCode(PHONES.admin, "RESET_PASSWORD");
+    const reset = await request.post("/api/auth/reset", {
+      data: { phone: PHONES.admin, code: KNOWN_CODE, password: "takeover123" },
+    });
+    expect(reset.ok()).toBeFalsy();
+    await signInWithApi(request, PHONES.admin);
+  });
+
+  test("of a branch manager is replaced by the chain owner from the staff page", async ({
+    page,
+    request,
+  }) => {
+    const fresh = `shobe${Date.now() % 100_000}`;
+    await signInWithApi(page.request, PHONES.chainOwner);
+    await page.goto("/dashboard/options/staff");
+    const row = page.locator("li", { hasText: PHONES.vanakManager });
+    try {
+      await row.getByRole("button", { name: "رمز تازه" }).click();
+      await row.getByRole("textbox").fill(fresh);
+      await row.getByRole("button", { name: "ذخیرهٔ رمز" }).click();
+      await expect(page.getByText("رمز تازهٔ آرش زمانی ذخیره شد.")).toBeVisible();
+      await signInWithApi(request, PHONES.vanakManager, fresh);
+
+      // Another chain's owner cannot reach this account.
+      const manager = await one<{ id: string }>(
+        `SELECT id FROM "User" WHERE phone = $1`,
+        [PHONES.vanakManager],
+      );
+      await signInWithApi(request, PHONES.largeOwner);
+      const foreign = await request.post(`/api/staff/${manager.id}/password`, {
+        data: { password: "notmine123" },
+      });
+      expect(foreign.status()).toBe(404);
+    } finally {
+      const manager = await one<{ id: string }>(
+        `SELECT id FROM "User" WHERE phone = $1`,
+        [PHONES.vanakManager],
+      );
+      await page.request.post(`/api/staff/${manager.id}/password`, {
+        data: { password: DEMO_PASSWORD },
+      });
+    }
+    await signInWithApi(request, PHONES.vanakManager);
+  });
+
+  test("of an owner is replaced by platform staff, never by another owner", async ({
+    page,
+    request,
+  }) => {
+    const venue = await one<{ id: string }>(
+      `SELECT id FROM "Restaurant" WHERE slug = $1`,
+      [SLUGS.expired],
+    );
+    const fresh = `poshtiban${Date.now() % 10_000}`;
+    await signInWithApi(request, PHONES.smallOwner);
+    const refused = await request.post(
+      `/api/admin/restaurants/${venue.id}/owner-password`,
+      {
+        data: { password: fresh },
+      },
+    );
+    expect(refused.status()).toBe(403);
+
+    await signInWithApi(page.request, PHONES.admin);
+    try {
+      const set = await page.request.post(
+        `/api/admin/restaurants/${venue.id}/owner-password`,
+        { data: { password: fresh } },
+      );
+      expect(set.ok(), await set.text()).toBeTruthy();
+      await signInWithApi(request, PHONES.expiredOwner, fresh);
+    } finally {
+      await page.request.post(`/api/admin/restaurants/${venue.id}/owner-password`, {
+        data: { password: DEMO_PASSWORD },
+      });
+    }
+    await signInWithApi(request, PHONES.expiredOwner);
   });
 });

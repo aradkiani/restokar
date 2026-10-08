@@ -13,7 +13,10 @@ export const runtime = "nodejs";
  *
  *  - SIGNUP, for a number with no account;
  *  - ACTIVATE, for an active account that has no password yet (created by an
- *    owner or by platform staff, or from before passwords existed).
+ *    owner or by platform staff, or from before passwords existed);
+ *  - RESET, for an active account whose holder forgot the password. Not for
+ *    the platform admin: that account is reset on the server
+ *    (`scripts/set-password.ts`), so a stolen SIM cannot take over the console.
  *
  * Sign-in never asks for a code; it is phone and password.
  *
@@ -42,19 +45,28 @@ export const POST = route(async (request: Request) => {
 
   const holder = await prisma.user.findUnique({
     where: { phone: input.phone },
-    select: { isActive: true, passwordHash: true },
+    select: { isActive: true, passwordHash: true, role: true },
   });
 
   // Activation is stored under the LOGIN purpose the challenge table already
   // has; it is the same proof — this number belongs to this account.
+  const purpose =
+    input.purpose === "SIGNUP"
+      ? "SIGNUP"
+      : input.purpose === "RESET"
+        ? "RESET_PASSWORD"
+        : "LOGIN";
+  const send =
+    input.purpose === "SIGNUP"
+      ? !holder
+      : input.purpose === "RESET"
+        ? Boolean(holder?.isActive) && holder?.role !== "SUPER_ADMIN"
+        : Boolean(holder?.isActive) && !isPasswordHash(holder?.passwordHash);
   const result = await requestOtp({
     phone: input.phone,
-    purpose: input.purpose === "SIGNUP" ? "SIGNUP" : "LOGIN",
+    purpose,
     ip: clientIp(request),
-    send:
-      input.purpose === "SIGNUP"
-        ? !holder
-        : Boolean(holder?.isActive) && !isPasswordHash(holder?.passwordHash),
+    send,
   });
 
   if (!result.ok) return otpRequestFailure(result);

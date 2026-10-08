@@ -727,15 +727,56 @@ async function createBusiness(
           })),
         })),
         recipe,
+        featured: product.featured ?? false,
       });
     }
   }
+
+  // Suggestions under a dish, the way an owner would set them: a side and a
+  // drink under each main, tea under breakfast, a cake under each coffee in a
+  // café that has no mains.
+  const topOf = (role: string, count: number) =>
+    products
+      .filter((p) => p.role === role && p.orderable)
+      .sort((a, b) => b.pop - a.pop)
+      .slice(0, count)
+      .map((p) => p.id);
+  const hasMains = products.some((p) => p.role === "main");
+  const suggestions = new Map<string, string[]>();
+  for (const product of products) {
+    const targets =
+      product.role === "main"
+        ? [...topOf("side", 1), ...topOf("drink", 1)]
+        : product.role === "breakfast"
+          ? topOf("drink", 1)
+          : product.role === "drink" && !hasMains
+            ? topOf("dessert", 2)
+            : [];
+    if (targets.length > 0) suggestions.set(product.id, targets);
+  }
+  const suggestionRows: Prisma.ProductRecommendationCreateManyInput[] = [];
+  for (const [source, targets] of suggestions) {
+    targets.forEach((target, sortOrder) =>
+      suggestionRows.push({
+        id: nextId("sg"),
+        restaurantId: headId,
+        sourceProductId: source,
+        recommendedProductId: target,
+        sortOrder,
+        createdAt: signupAt,
+      }),
+    );
+  }
+
   await prisma.category.createMany({ data: categories });
   await prisma.product.createMany({ data: productRows });
   if (groups.length) await prisma.productOptionGroup.createMany({ data: groups });
   if (choices.length) await prisma.productOptionChoice.createMany({ data: choices });
   if (infos.length) await prisma.productInfoSection.createMany({ data: infos });
   if (windows.length) await prisma.availabilityWindow.createMany({ data: windows });
+  if (suggestionRows.length) {
+    await prisma.productRecommendation.createMany({ data: suggestionRows });
+  }
 
   // ---- months of trading
   const actorFor = (phoneNumber: string): Actor =>
@@ -796,6 +837,7 @@ async function createBusiness(
       roundingDirection: "nearest",
     },
     priceRiseAt: morningDaysAgo(77),
+    suggestions,
     now: NOW,
   };
   const history = generateHistory(business);
@@ -887,6 +929,18 @@ async function createBusiness(
   );
   await insert("expenses", history.expenses, (data) =>
     prisma.expense.createMany({ data }),
+  );
+  await insert(
+    "featured-dish events",
+    history.featuredEvents,
+    (data) => prisma.featuredProductEvent.createMany({ data }),
+    5_000,
+  );
+  await insert(
+    "suggestion events",
+    history.suggestionEvents,
+    (data) => prisma.recommendationEvent.createMany({ data }),
+    5_000,
   );
   await insert("activity log", [...audits, ...history.audits], (data) =>
     prisma.auditLog.createMany({ data }),
@@ -1043,6 +1097,20 @@ async function main() {
     name: adminRow.name,
     role: "SUPER_ADMIN",
   };
+
+  // The showcase menus are the platform's own pages: on the current unlimited
+  // plan (not the retired starter/pro/enterprise ones) and never running out.
+  const unlimited = plans.get("tier-unlimited");
+  const moved = await prisma.subscription.updateMany({
+    where: { restaurant: { isDemo: true } },
+    data: {
+      planId: unlimited.id,
+      status: "ACTIVE",
+      currentPeriodEnd: new Date(NOW.getTime() + 10 * 365 * DAY),
+      limitsSnapshot: snapshotLimits(unlimited) as unknown as Prisma.InputJsonValue,
+    },
+  });
+  console.log(`  ${moved.count} showcase menus on the unlimited plan`);
 
   // The showcase menus' own accounts get the demo password, so they can be
   // opened from the admin panel and signed into like any other.

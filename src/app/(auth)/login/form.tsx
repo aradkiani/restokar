@@ -29,7 +29,6 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
   const [error, setError] = React.useState<string | null>(null);
   const [phoneError, setPhoneError] = React.useState<string | undefined>();
   const [loading, setLoading] = React.useState(false);
-  const [showForgot, setShowForgot] = React.useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -130,17 +129,15 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
             {t.auth.activateLink}
           </Link>
         </p>
-        <button
-          type="button"
-          onClick={() => setShowForgot((v) => !v)}
-          aria-expanded={showForgot}
-          className="font-semibold text-ink-500 hover:text-ink-800"
-        >
-          {t.auth.forgotPassword}
-        </button>
-        {showForgot && (
-          <p className="text-xs leading-6 text-ink-500">{t.auth.forgotPasswordHint}</p>
-        )}
+        <p>
+          <Link
+            href="/login/reset"
+            className="font-semibold text-ink-600 hover:text-ink-900 hover:underline"
+          >
+            {t.auth.forgotPassword}
+          </Link>
+        </p>
+        <p className="text-xs leading-6 text-ink-500">{t.auth.forgotPasswordHint}</p>
       </div>
     </form>
   );

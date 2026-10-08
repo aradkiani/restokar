@@ -255,6 +255,8 @@ enum OtpPurpose {
   SIGNUP
   LOGIN
   CHANGE_PHONE
+  /// Forgotten password: a texted code lets the holder choose a new one.
+  RESET_PASSWORD
 }
 
 /// One outstanding SMS code. Rules in src/lib/sms/otp.ts, storage and sending
