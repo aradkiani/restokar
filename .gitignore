@@ -98,3 +98,16 @@ dump.sql
 /uploads/
 /coverage/
 npm-debug.log*
+
+# ---------------------------------------------------------------------------
+# Platform screenshots
+#
+# screenshots/scripts/ is committed; what it produces is not: ~70 MB of PNGs
+# and the PDF bound from them, regenerated with capture.mjs + build-pdf.mjs
+# whenever they are needed. Binaries in history cannot be taken back out
+# without rewriting it.
+# ---------------------------------------------------------------------------
+/screenshots/desktop/
+/screenshots/mobile/
+/screenshots/manifest.json
+/screenshots/platform-screenshots.pdf

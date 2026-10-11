@@ -67,7 +67,7 @@ const config = [
   {
     // Seed and maintenance scripts are operator tools: their console output is
     // the interface, and they are never bundled into the app.
-    files: ["prisma/**/*.ts", "scripts/**/*.ts"],
+    files: ["prisma/**/*.ts", "scripts/**/*.ts", "screenshots/scripts/**/*.mjs"],
     rules: { "no-console": "off" },
   },
 
